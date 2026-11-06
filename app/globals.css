@@ -1,1 +1,12 @@
 :root{color-scheme:light;--green:#0f5e4c;--purple:#7b61b0;--bg:#f6f3ed}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:#173b34;font-family:Tahoma,Arial,sans-serif}a{color:inherit;text-decoration:none}.shell{max-width:1160px;margin:auto;padding:32px 20px}.top{display:flex;justify-content:space-between;align-items:center}.logo{font-size:38px;font-weight:900;color:var(--green)}.tag{color:var(--purple);font-weight:700}.hero{padding:64px 0 40px}.hero h1{font-size:clamp(32px,5vw,56px);margin:0 0 16px}.hero p{color:#63736e;line-height:1.9}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}.card{padding:25px;background:white;border:1px solid #e9e5de;border-radius:22px;box-shadow:0 8px 30px #163c2b08}.card h2{font-size:19px;margin:0 0 12px}.card p{color:#697a74;line-height:1.8}.foot{padding:40px 0;color:#79867f;font-size:13px}
+/* Responsive foundations: phone, tablet and desktop */
+button,input{font:inherit}button{cursor:pointer}button:disabled{cursor:wait;opacity:.7}
+:focus-visible{outline:3px solid #7b61b0;outline-offset:3px}
+.pill{display:inline-block;font-size:12px;padding:4px 10px;border-radius:20px;background:#eee8f6;color:#684e91}
+.messages{min-height:250px;max-height:55vh;overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding:16px 0}
+.bubble{align-self:flex-start;max-width:90%;background:#f3f0e9;border-radius:16px;padding:14px;line-height:1.8;margin:0}
+.bubble.user{align-self:flex-end;background:#e4f0e9}
+.assistant-form{display:flex;gap:8px}.assistant-form input{flex:1;min-width:0;border:1px solid #d4dcd7;border-radius:12px;padding:13px;background:white}.assistant-form button{background:#0f5e4c;color:white;border:0;border-radius:12px;padding:12px 18px}
+@media(max-width:767px){.shell{padding:18px 14px}.hero{padding:38px 0 24px}.hero h1{font-size:34px}.grid{grid-template-columns:1fr}.card{padding:20px}.logo{font-size:32px}.assistant-form{position:sticky;bottom:0;background:white;padding:8px 0}}
+@media(min-width:768px) and (max-width:1100px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.shell{padding:28px}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}}
