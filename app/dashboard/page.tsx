@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import SignOutButton from "../../components/sign-out-button";
 import { createSupabaseServerClient } from "../../lib/supabase/server";
 export const dynamic = "force-dynamic";
 export default async function Dashboard() {
@@ -7,5 +8,5 @@ export default async function Dashboard() {
   const {data:{user},error}=await supabase.auth.getUser();
   if(error||!user)redirect("/login");
   const {data:memberships}=await supabase.from("memberships").select("organization_id,role,organizations(name,type)").eq("user_id",user.id);
-  return <main className="shell"><header className="top"><a className="logo" href="/">سِير.</a><span className="tag">لوحة التحكم</span></header><section className="hero"><h1>مرحبًا بك في سِير</h1><p>المنشآت المصرح لك بإدارتها فقط</p></section><section className="grid">{memberships?.map((m,i)=><article className="card" key={m.organization_id+"-"+i}><h2>{(m.organizations as unknown as {name:string}|null)?.name??"منشأة"}</h2><p>الصلاحية: {m.role}</p></article>)}{!memberships?.length&&<article className="card"><h2>لا توجد منشآت مرتبطة</h2><p>يحتاج مسؤول المنصة إلى إسناد حسابك إلى منشأة.</p></article>}</section></main>;
+  return <main className="shell"><header className="top"><a className="logo" href="/">سِير.</a><div style={{display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}><a href="/dashboard/assistant">المساعد الذكي</a><SignOutButton /></div></header><section className="hero"><h1>مرحبًا بك في سِير</h1><p>المنشآت المصرح لك بإدارتها فقط</p></section><section className="grid">{memberships?.map((m,i)=><article className="card" key={m.organization_id+"-"+i}><h2>{(m.organizations as unknown as {name:string}|null)?.name??"منشأة"}</h2><p>الصلاحية: {m.role}</p></article>)}{!memberships?.length&&<article className="card"><h2>لا توجد منشآت مرتبطة</h2><p>يحتاج مسؤول المنصة إلى إسناد حسابك إلى منشأة.</p></article>}</section></main>;
 }
