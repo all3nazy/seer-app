@@ -13,8 +13,8 @@ const childA = "30000000-0000-0000-0000-000000000001";
 const childB = "30000000-0000-0000-0000-000000000002";
 const guardianB = "40000000-0000-0000-0000-000000000002";
 const branchB = "50000000-0000-0000-0000-000000000002";
-const reconcile = readFileSync("supabase/migrations/20261106104740_reconcile_tenant_boundaries.sql", "utf8");
-const operations = readFileSync("supabase/migrations/20261106104832_school_operations.sql", "utf8");
+const reconcile = readFileSync("supabase/migrations/20261106122846_reconcile_tenant_boundaries.sql", "utf8");
+const operations = readFileSync("supabase/migrations/20261106123009_school_operations.sql", "utf8");
 async function as(role: "authenticated" | "anon" | "service_role", user = "") {
   await db.exec("reset role");
   await db.query("select set_config('request.jwt.claim.sub',$1,false)", [user]);
