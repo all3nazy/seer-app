@@ -48,3 +48,20 @@ test("an invalid admin invitation cannot display the password setup form", async
   await expect(page.locator('p[role="alert"]')).toContainText("رابط الدعوة غير صالح");
   await expect(page.locator('input[type="password"]')).toHaveCount(0);
 });
+
+test("an invitation callback establishes a verified session before password setup", async ({ page }) => {
+  // Synthetic Auth response: this tests the browser callback, not live JWT validation.
+  const id = "70000000-0000-0000-0000-000000000001";
+  const now = Math.floor(Date.now() / 1000);
+  const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const token = `${encode({ alg: "HS256", typ: "JWT" })}.${encode({ sub: id, aud: "authenticated", role: "authenticated", iat: now, exp: now + 3600 })}.c3ludGhldGlj`;
+  await page.route("**/auth/v1/user", route => route.fulfill({ json: {
+    id, aud: "authenticated", role: "authenticated", email: "synthetic@example.test",
+    email_confirmed_at: new Date().toISOString(), created_at: new Date().toISOString(),
+    app_metadata: { provider: "email", providers: ["email"] }, user_metadata: {}, identities: [],
+  } }));
+  await page.goto(`/auth/setup#access_token=${token}&refresh_token=synthetic-refresh&type=invite`);
+  await expect(page.locator('input[type="password"]')).toHaveCount(2);
+  await expect(page.getByRole("button", { name: "حفظ كلمة المرور" })).toBeVisible();
+  expect(new URL(page.url()).hash).toBe("");
+});

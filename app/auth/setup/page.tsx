@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { getSupabaseBrowserClient } from "../../../lib/supabase";
+import { verifySetupSession } from "../../../lib/auth-setup";
 
 export default function AccountSetup() {
   const [ready, setReady] = useState(false);
@@ -13,9 +14,9 @@ export default function AccountSetup() {
     let active = true;
     void (async () => {
       try {
-        const { data: { user }, error } = await getSupabaseBrowserClient().auth.getUser();
+        const verified = await verifySetupSession(getSupabaseBrowserClient, new URL(window.location.href), path => window.history.replaceState(null, "", path));
         if (!active) return;
-        if (error || !user) setMessage("رابط الدعوة غير صالح أو انتهت صلاحيته. اطلب دعوة جديدة من مسؤول المنصة.");
+        if (!verified) setMessage("رابط الدعوة غير صالح أو انتهت صلاحيته. اطلب دعوة جديدة من مسؤول المنصة.");
         else setReady(true);
       } catch { if (active) setMessage("تعذر التحقق من الدعوة. حاول مجددًا لاحقًا."); }
     })();
