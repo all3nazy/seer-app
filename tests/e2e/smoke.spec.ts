@@ -78,7 +78,7 @@ test("activation requests a verification email and rejects unrelated links", asy
   await page.getByRole("button", { name: "إرسال رسالة التفعيل" }).click();
   await expect(page.getByRole("status")).toContainText("رسالة تفعيل");
   await expect(page.getByRole("button", { name: /يمكن إعادة الطلب/ })).toBeDisabled();
-  const field = page.getByLabel("رابط التفعيل من بريدك");
+  const field = page.getByLabel("رابط التفعيل أو عنوان صفحة خطأ الاتصال");
   await field.fill("https://unrelated.example/auth/v1/verify?token=synthetic-confirmation-hash&type=signup");
   await page.getByRole("button", { name: "تأكيد الرابط وإعداد كلمة المرور" }).click();
   await expect(page.locator('p[role="alert"]')).toContainText("ليس رابط تأكيد صالحًا");
@@ -100,8 +100,35 @@ test("pasted email confirmation is verified before continuing account setup", as
   // Isolate this browser flow from a real Auth server; the setup page is tested separately.
   await page.route("**/auth/setup", route => route.fulfill({ contentType: "text/html", body: '<html lang="ar" dir="rtl"><h1>متابعة إعداد الحساب</h1></html>' }));
   await page.goto("/auth/activate");
-  await page.getByLabel("رابط التفعيل من بريدك").fill("https://supabase.example.test/auth/v1/verify?token=synthetic-confirmation-hash&type=signup&redirect_to=https://unrelated.example");
+  await page.getByLabel("رابط التفعيل أو عنوان صفحة خطأ الاتصال").fill("https://supabase.example.test/auth/v1/verify?token=synthetic-confirmation-hash&type=signup&redirect_to=https://unrelated.example");
   await page.getByRole("button", { name: "تأكيد الرابط وإعداد كلمة المرور" }).click();
   await expect(page).toHaveURL("http://127.0.0.1:3100/auth/setup");
   expect(verificationBody).toMatchObject({ token_hash: "synthetic-confirmation-hash", type: "signup" });
 });
+
+for (const expired of [false, true]) {
+  test(`a saved localhost callback restores the verified session${expired ? " after access token expiry" : ""}`, async ({ page }) => {
+    const user = { id: "70000000-0000-0000-0000-000000000003", aud: "authenticated", role: "authenticated", email: "synthetic@example.test", email_confirmed_at: new Date().toISOString(), created_at: new Date().toISOString(), app_metadata: {}, user_metadata: {}, identities: [] };
+    const now = Math.floor(Date.now() / 1000);
+    const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64url");
+    const token = (expiry: number) => `${encode({ alg: "HS256", typ: "JWT" })}.${encode({ sub: user.id, aud: "authenticated", role: "authenticated", iat: now - 120, exp: expiry })}.c3ludGhldGlj`;
+    let localRequests = 0;
+    let otpRequests = 0;
+    let refreshRequests = 0;
+    await page.route("http://localhost:3000/**", route => { localRequests++; return route.abort(); });
+    await page.route("**/auth/v1/verify", route => { otpRequests++; return route.abort(); });
+    await page.route("**/auth/v1/token?grant_type=refresh_token", route => {
+      refreshRequests++;
+      return route.fulfill({ json: { access_token: token(now + 3600), refresh_token: "synthetic-refresh-next", expires_in: 3600, token_type: "bearer", user } });
+    });
+    await page.route("**/auth/v1/user", route => route.fulfill({ json: user }));
+    await page.route("**/auth/setup", route => route.fulfill({ contentType: "text/html", body: '<html lang="ar" dir="rtl"><h1>متابعة إعداد الحساب</h1></html>' }));
+    await page.goto("/auth/activate");
+    await page.locator("#activation-link").fill(`http://localhost:3000/#access_token=${token(expired ? now - 60 : now + 3600)}&refresh_token=synthetic-refresh&type=magiclink`);
+    await page.getByRole("button", { name: "تأكيد الرابط وإعداد كلمة المرور" }).click();
+    await expect(page).toHaveURL("http://127.0.0.1:3100/auth/setup");
+    expect(localRequests).toBe(0);
+    expect(otpRequests).toBe(0);
+    expect(refreshRequests).toBe(expired ? 1 : 0);
+  });
+}
