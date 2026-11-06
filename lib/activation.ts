@@ -4,10 +4,14 @@ export const activationTypes = ["signup", "invite", "magiclink", "email", "recov
 export type ActivationType = (typeof activationTypes)[number];
 export type ActivationCredentials = { token_hash: string; type: ActivationType };
 export class ActivationError extends Error {
-  constructor(public readonly code: "invalid-link" | "configuration" | "verification" | "session" | "email-request") {
+  constructor(public readonly code: "invalid-link" | "configuration" | "verification" | "session" | "email-request" | "expired-link") {
     super(code);
     this.name = "ActivationError";
   }
+}
+function activationVerificationError(error: unknown): ActivationError {
+  const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
+  return new ActivationError(typeof code === "string" && ["otp_expired", "refresh_token_not_found", "refresh_token_already_used", "session_expired", "session_not_found"].includes(code) ? "expired-link" : "verification");
 }
 export function parseActivationLink(input: string, projectUrl: string | undefined): ActivationCredentials {
   let expected: URL;
@@ -67,7 +71,7 @@ export async function verifyActivationLink(createClient: () => ActivationClient,
   try {
     const client = createClient();
     const { error } = await client.auth.verifyOtp(credentials);
-    if (error) throw new ActivationError("verification");
+    if (error) throw activationVerificationError(error);
     const { data, error: userError } = await client.auth.getUser();
     if (userError || !data.user?.email_confirmed_at) throw new ActivationError("session");
   } catch (error) {
@@ -123,7 +127,7 @@ export async function verifyActivationInput(createClient: () => CallbackClient, 
   try {
     const client = createClient();
     const { error } = await client.auth.setSession({ access_token: callback.access_token, refresh_token: callback.refresh_token });
-    if (error) throw new ActivationError("verification");
+    if (error) throw activationVerificationError(error);
     const { data, error: userError } = await client.auth.getUser();
     if (userError || !data.user?.email_confirmed_at) throw new ActivationError("session");
   } catch (error) {

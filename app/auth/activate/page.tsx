@@ -44,9 +44,11 @@ export default function ActivateAccount() {
       await verifyActivationInput(getSupabaseBrowserClient, submittedLink, process.env.NEXT_PUBLIC_SUPABASE_URL, window.location.origin);
       window.location.replace("/auth/setup");
     } catch (failure) {
-      setError(failure instanceof ActivationError && failure.code === "invalid-link"
-        ? "هذا ليس رابط تفعيل صالحًا لخدمة سِير. انسخ رابط الرسالة الأصلي أو العنوان الكامل من شريط عنوان صفحة خطأ الاتصال."
-        : "تعذر التحقق من رابط التفعيل. قد تكون صلاحيته انتهت؛ انسخ العنوان الكامل من صفحة خطأ الاتصال، أو اطلب رسالة جديدة وحاول مجددًا.");
+      setError(failure instanceof ActivationError && failure.code === "expired-link"
+        ? "انتهت صلاحية هذا الرابط أو سبق استخدامه. اطلب رسالة جديدة، ثم انسخ رابط التفعيل منها دون فتحه والصقه هنا."
+        : failure instanceof ActivationError && failure.code === "invalid-link"
+          ? "هذا ليس رابط تأكيد صالحًا لخدمة سِير. انسخ رابط التفعيل الأصلي من رسالتك البريدية."
+          : "تعذر التحقق من الجلسة. تأكد من نسخ العنوان كاملًا، ثم حاول مجددًا.");
       inFlight.current = false; setBusy(null);
     }
   }
