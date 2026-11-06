@@ -6,7 +6,7 @@ export async function middleware(request:NextRequest){
   if(!url||!key)return response;
   const supabase=createServerClient(url,key,{cookies:{
     getAll(){return request.cookies.getAll();},
-    setAll(items){items.forEach(({name,value})=>request.cookies.set(name,value));response=NextResponse.next({request});items.forEach(({name,value,options})=>response.cookies.set(name,value,options));}
+    setAll(items: {name:string;value:string;options?:Parameters<typeof response.cookies.set>[2]}[]){items.forEach(({name,value})=>request.cookies.set(name,value));response=NextResponse.next({request});items.forEach(({name,value,options})=>response.cookies.set(name,value,options));}
   }});
   const {data:{user}}=await supabase.auth.getUser();
   if(request.nextUrl.pathname.startsWith("/dashboard")&&!user){const target=request.nextUrl.clone();target.pathname="/login";return NextResponse.redirect(target);}
