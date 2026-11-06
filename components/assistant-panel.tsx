@@ -12,9 +12,12 @@ const topics: {id:Topic;label:string;description:string}[] = [
  {id:"children",label:"ملفات الأطفال",description:"عدد الملفات المسجلة"}
 ];
 const names:Record<Exclude<Topic,"help">,string>={branches:"الفروع",enrollments:"طلبات التسجيل",invoices:"الفواتير",children:"ملفات الأطفال"};
-export function AssistantPanel({organizations}:{organizations:{id:string;name:string}[]}){
+export function AssistantPanel({organizations,supportPhone}:{organizations:{id:string;name:string}[];supportPhone:string}){
  const [org,setOrg]=useState(organizations[0]?.id??"");
  const [busy,setBusy]=useState(false);
+ const [issue,setIssue]=useState("");
+ const normalizedPhone=supportPhone.replace(/[^0-9]/g,"");
+ const supportUrl=normalizedPhone?("https://wa.me/"+normalizedPhone+"?text="+encodeURIComponent("مرحبًا دعم سِير، أحتاج مساعدة.\nالمنشأة: "+(organizations.find(o=>o.id===org)?.name??"غير محددة")+"\nالمشكلة: "+(issue.trim()||"أحتاج مساعدة في استخدام المنصة"))):"";
  const [messages,setMessages]=useState<Message[]>([{role:"assistant",text:"أهلًا! أنا مساعد سِير التشغيلي. اختر المنشأة ثم الخدمة المطلوبة. أعرض فقط البيانات التي يسمح حسابك بالاطلاع عليها."}]);
  const say=(text:string)=>setMessages(m=>[...m,{role:"assistant",text}]);
  async function run(topic:Topic){
@@ -53,5 +56,6 @@ export function AssistantPanel({organizations}:{organizations:{id:string;name:st
   </select>
   <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:16}}>{topics.map(t=><button key={t.id} type="button" disabled={busy} onClick={()=>void run(t.id)} title={t.description} style={{padding:"9px 12px",borderRadius:12,border:"1px solid #0f5e4c",background:"transparent",color:"inherit",cursor:"pointer"}}>{t.label}</button>)}</div>
   <div className="messages" aria-live="polite" aria-busy={busy}>{messages.map((m,i)=><p key={i} className={m.role==="user"?"bubble user":"bubble"}>{m.text}</p>)}{busy&&<p className="bubble">جارٍ الاستعلام...</p>}</div>
+  <div style={{marginTop:20,borderTop:"1px solid #ddd",paddingTop:16}}><h3>تحتاج مساعدة إضافية؟</h3><label htmlFor="support-issue">وصف المشكلة (اختياري)</label><textarea id="support-issue" value={issue} onChange={e=>setIssue(e.target.value)} placeholder="اكتب المشكلة باختصار" rows={3} style={{width:"100%",padding:12,borderRadius:10,display:"block",margin:"8px 0 12px"}}/>{supportUrl?<a href={supportUrl} target="_blank" rel="noopener noreferrer" style={{display:"inline-block",padding:"12px 16px",borderRadius:12,background:"#0f5e4c",color:"#fff",textDecoration:"none"}}>التواصل مع الدعم عبر واتساب</a>:<p>قناة الدعم عبر واتساب قيد الإعداد.</p>}</div>
  </section>;
 }
