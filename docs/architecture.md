@@ -1,18 +1,39 @@
-# SEER architecture
+# معمارية سِير
 
-## Boundaries
-- Next.js App Router: UI and authenticated server handlers.
-- Supabase Auth: identity; membership records are the source of authorization.
-- Postgres: multi-tenant records, enforced by RLS and scoped foreign keys.
-- AI assistant: separate server-only adapter with scoped retrieval, allowlisted tools, audit logs, and explicit confirmation for writes. Never place model keys in NEXT_PUBLIC variables.
-- Billing and WhatsApp: server-side providers with verified webhook signatures and idempotency.
+## حدود النظام
 
-## Release gates
-1. Fix organization-scoped foreign keys for child/guardian/branch references before enabling writes.
-2. Add owner/admin provisioning and role-specific RLS; verify cross-tenant denial.
-3. Create a real AI provider adapter and data minimization policy before allowing live assistant answers.
-4. Accessibility and responsive checks at 375, 768, 1024 and 1440px.
-5. CI typecheck, tests, dependency review and production smoke tests.
+| الطبقة | المسؤولية | حد الثقة |
+| --- | --- | --- |
+| Next.js App Router | الصفحات العربية ومسارات لوحة التشغيل | المدخلات القادمة من المتصفح غير موثوقة |
+| Supabase Auth وSSR | التحقق من المستخدم وتجديد الجلسة عبر ملفات الارتباط | لا يعتمد الخادم على جلسة غير متحقق منها |
+| عضويات المنشآت | مصدر الدور داخل كل منشأة | لا تمنح بيانات المستخدم القابلة للتعديل صلاحيات |
+| إجراءات الخادم | التحقق من الدور والمدخلات والمنشأة وتأكيد الحفظ | تمر العمليات بحساب المستخدم، دون تجاوز RLS بمفتاح خدمة |
+| PostgreSQL وRLS | عزل الصفوف حسب المنشأة والدور | المفاتيح الأجنبية المركبة تمنع الروابط العابرة للمنشآت |
+| سجل التدقيق | تسجيل المنفّذ ونوع السجل ومعرّفه والعملية والتوقيت | لا تخزن نسخة من الأسماء أو الهواتف أو بيانات الأطفال |
+| المساعد التشغيلي | نوايا عربية محددة واستعلامات وتنقل ودعم | لا نموذج مدفوع، ولا تنفيذ مزعوم أو اطلاع خارج العضوية |
+| رابط واتساب | فتح رسالة مساعدة عامة باختيار المستخدم | رقم اختياري؛ لا بيانات سجلات في الرابط |
 
-## Current scope
-The assistant UI is an explicit non-AI placeholder. No payment, AI, messaging or external action is enabled.
+## المصادقة والعمليات
+
+يحافظ `middleware.ts` على ملفات ارتباط الجلسة وترويسات عدم التخزين، بما فيها استجابة التحويل إلى تسجيل الدخول. تتحقق صفحات لوحة التشغيل وإجراءات الكتابة من هوية المستخدم على الخادم أيضًا. لا تمنح حماية المسار وحدها صلاحية للسجلات.
+
+تُقرأ العضوية من جدول `memberships`. صلاحيات `owner` و`admin` تتيح الكتابة في السجلات التشغيلية التابعة للمنشأة، بينما يبقى إنشاء المنشآت والعضويات بيد مشغّل مخوّل. لا يسمح بتغيير `organization_id` لسجل قائم. تحفظ قاعدة البيانات أثر العمليات تلقائيًا، وتمنع المفاتيح المركبة اختيار طفل أو فرع أو ولي أمر من منشأة أخرى.
+
+تستخدم دوال التحقق الداخلية `SECURITY DEFINER` بصورة محدودة لقراءة العضوية دون تدوير سياسات RLS، مع `search_path` فارغ وصلاحيات تنفيذ صريحة. هذه ليست مسارًا عامًا لتجاوز العزل. دالة `bootstrap_organization` استثناء تشغيلي مقيد بـ `service_role` لإنشاء المنشأة الأولى ومديرها الموثق. يستدعيها سكربت `scripts/onboard-admin.ts` من بيئة مشغّل موثوقة، بعد إرسال الدعوة والتحقق من البريد. يرفض السكربت عناوين قاعدة غير SEER والمستخدم صاحب العضوية القائمة. يعيّن المستخدم الموثق كلمة مروره الخاصة عبر صفحة `/auth/setup`؛ لا تحفظ كلمة مرور إدارية ثابتة.
+
+## البيانات والخصوصية
+
+تعرض الواجهات الحقول اللازمة للمهمة. أرقام لوحة التشغيل لا تتطلب تحميل أسماء الأطفال أو ملفاتهم. الفواتير وسجل التدقيق للمديرين. لا تُرسل تفاصيل السجلات إلى واتساب، ولا تحفظ المحادثات أسرارًا في المستودع. أي توسعة إلى مزود رسائل أو دفع أو نموذج ذكاء اصطناعي تحتاج نطاقًا ومراجعة مستقلين.
+
+## النشر والتحقق
+
+النطاق محصور في مستودع `all3nazy/seer-app` ومشروع Vercel المسمى `seer-app` ضمن SEGNO-SA ومشروع Supabase `vhcdzonkgalpcozbhmmj`. لا نقل للمشروع ولا تعديل لـ IQDA أو خدمات أخرى.
+
+تمر التغييرات عبر فرع وطلب دمج. تسبق ترحيلات الإنتاج مقارنة المخطط وأخذ نسخة قابلة للاستعادة. يلزم فحص الأنواع والاختبارات والبناء واختبار متصفح ثم اختبار حي بحسابات منشأتين قبل وصف الإصدار بأنه جاهز. تفاصيل التنفيذ والقيود في [سجل التنفيذ](implementation-status.md).
+
+
+## التفعيل بدعوة منشأة معتمدة
+
+لا يحتاج مسار التطبيق إلى service_role: يحتفظ المشغّل بالدعوة في جدول خاص تحت RLS ودون صلاحيات لأدوار API. يمر المستخدم عبر `/auth/activate` للتحقق من رابط بريده عبر API الرسمي، ثم يختار كلمة مروره. دالة RPC العامة للمطالبة تعمل بصلاحية المستدعي وتستدعي تنفيذًا محدودًا داخل `private`؛ التنفيذ الخاص يتطلب auth.uid وبريد Auth فعليًا موثقًا ودعوة سارية، ويقفل الدعوة أثناء إنشاء المنشأة وعضوية المالك والتدقيق. لا تُوثق user_metadata ولا يُقبل بريد أو دور يحددهما العميل.
+
+يعالج التفعيل روابط التأكيد في ذاكرة الصفحة دون فتح الرابط أو حفظه أو تسجيله. الـorigin والمسار والنوع وتفرّد token/type مقيدة؛ redirect_to لا يُستخدم. تظل إعدادات عنوان Auth الصحيح مهمة لفتح الروابط مباشرة. الاشتراك في Auth وحده لا ينشئ منشأة ولا يتيح بيانات.

@@ -1,39 +1,52 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "../../lib/supabase/server";
+import { canManage } from "../../lib/operations";
 import SignOutButton from "../../components/sign-out-button";
 export const dynamic = "force-dynamic";
 
-export default async function Dashboard(){
- if(!process.env.NEXT_PUBLIC_SUPABASE_URL||!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
-  return <main className="shell"><h1>الإعداد غير مكتمل</h1><p>يجب ربط Supabase قبل تشغيل لوحة التحكم.</p></main>;
- const supabase=await createSupabaseServerClient();
- const {data:{user},error:authError}=await supabase.auth.getUser();
- if(authError||!user)redirect("/login");
- const {data:memberships,error:membershipError}=await supabase.from("memberships").select("organization_id,role,organizations(name,type)").eq("user_id",user.id);
- const orgs=await Promise.all((memberships??[]).map(async m=>{
-  const orgId=m.organization_id;
-  const [children,enrollments,pending,invoices,unpaid,branches]=await Promise.all([
-   supabase.from("children").select("*",{count:"exact",head:true}).eq("organization_id",orgId),
-   supabase.from("enrollments").select("*",{count:"exact",head:true}).eq("organization_id",orgId),
-   supabase.from("enrollments").select("*",{count:"exact",head:true}).eq("organization_id",orgId).eq("status","pending"),
-   supabase.from("invoices").select("*",{count:"exact",head:true}).eq("organization_id",orgId),
-   supabase.from("invoices").select("*",{count:"exact",head:true}).eq("organization_id",orgId).eq("status","issued"),
-   supabase.from("branches").select("*",{count:"exact",head:true}).eq("organization_id",orgId)
-  ]);
-  const metrics=[children,enrollments,pending,invoices,unpaid,branches];
-  return {id:orgId,name:(m.organizations as unknown as {name:string}|null)?.name??"منشأة",role:m.role,failed:metrics.some(v=>v.error),values:metrics.map(v=>v.count??0)};
- }));
- return <main className="shell">
-  <header className="top"><a className="logo" href="/">سِير.</a><div style={{display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}><a href="/dashboard/assistant">المساعد التشغيلي</a><SignOutButton/></div></header>
-  <section className="hero"><h1>لوحة التشغيل</h1><p>ملخص المنشآت التي تملك صلاحية الاطلاع عليها.</p></section>
-  {membershipError&&<p role="alert">تعذر تحميل عضويات المنشآت. حاول مرة أخرى.</p>}
-  <div className="grid">{orgs.map(o=><section className="card" key={o.id}>
-   <h2>{o.name}</h2><p>الصلاحية: {o.role}</p>
-   {o.failed?<p role="alert">تعذر تحميل بعض المؤشرات.</p>:<dl style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:12}}>
-    {["الأطفال","طلبات التسجيل","طلبات بانتظار الموافقة","الفواتير","فواتير صادرة غير مسددة","الفروع"].map((label,i)=><div key={label}><dt style={{fontSize:13,color:"#697a74"}}>{label}</dt><dd style={{fontSize:24,fontWeight:700,margin:0}}>{o.values[i]}</dd></div>)}
-   </dl>}
-  </section>)}
-  {!membershipError&&!orgs.length&&<section className="card"><h2>لا توجد منشآت مرتبطة</h2><p>يلزم إسناد حسابك إلى منشأة من مسؤول المنصة.</p></section>}
-  </div>
- </main>;
+export default async function Dashboard() {
+  const supabase = await createSupabaseServerClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) redirect("/login");
+  const loadMemberships = () => supabase.from("memberships")
+    .select("organization_id,role,organizations(name,type)").eq("user_id", user.id);
+  let { data: memberships, error: membershipError } = await loadMemberships();
+  if (!membershipError && memberships?.length === 0) {
+    // This RPC accepts no client-provided email, tenant or role. PostgreSQL checks
+    // the verified Auth email against an operator-approved invitation atomically.
+    const { error: claimError } = await supabase.rpc("claim_organization_invitation");
+    if (!claimError) ({ data: memberships, error: membershipError } = await loadMemberships());
+  }
+  const organizations = await Promise.all((memberships ?? []).map(async membership => {
+    const org = membership.organization_id;
+    const manager = canManage(membership.role);
+    const queries = [
+      { label: "الأطفال", query: supabase.from("children").select("id", { count: "exact", head: true }).eq("organization_id", org) },
+      { label: "طلبات التسجيل", query: supabase.from("enrollments").select("id", { count: "exact", head: true }).eq("organization_id", org) },
+      { label: "طلبات بانتظار الموافقة", query: supabase.from("enrollments").select("id", { count: "exact", head: true }).eq("organization_id", org).eq("status", "pending") },
+      { label: "الفروع", query: supabase.from("branches").select("id", { count: "exact", head: true }).eq("organization_id", org) },
+      ...(manager ? [
+        { label: "الفواتير", query: supabase.from("invoices").select("id", { count: "exact", head: true }).eq("organization_id", org) },
+        { label: "فواتير صادرة غير مسددة", query: supabase.from("invoices").select("id", { count: "exact", head: true }).eq("organization_id", org).eq("status", "issued") },
+      ] : []),
+    ];
+    const results = await Promise.all(queries.map(item => item.query));
+    return {
+      id: org, name: (membership.organizations as unknown as { name: string } | null)?.name ?? "منشأة",
+      role: membership.role, failed: results.some(result => result.error),
+      metrics: queries.map((query, index) => ({ label: query.label, count: results[index].count })),
+    };
+  }));
+  return <main className="shell" id="main-content">
+    <header className="top"><Link className="logo" href="/">سِير.</Link><nav aria-label="التنقل الرئيسي" style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}><Link href="/dashboard/operations">إدارة العمليات</Link><Link href="/dashboard/assistant">المساعد التشغيلي</Link><SignOutButton /></nav></header>
+    <section className="hero"><h1>لوحة التشغيل</h1><p>ملخص المنشآت التي تملك صلاحية الاطلاع عليها.</p></section>
+    {membershipError ? <p role="alert">تعذر تحميل عضويات المنشآت. حاول مرة أخرى.</p> : null}
+    <div className="grid">{organizations.map(org => <section className="card" key={org.id}>
+      <h2>{org.name}</h2><p>الصلاحية: {org.role === "owner" ? "مالك" : org.role === "admin" ? "مدير" : "موظف"}</p>
+      {org.failed ? <p role="alert">تعذر تحميل بعض المؤشرات. أعد تحميل الصفحة أو حاول لاحقًا.</p> : <dl style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 12 }}>{org.metrics.map(metric => <div key={metric.label}><dt style={{ fontSize: 13, color: "#4e655c" }}>{metric.label}</dt><dd style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>{(metric.count ?? 0).toLocaleString("ar-SA")}</dd></div>)}</dl>}
+      <Link href={`/dashboard/operations?${new URLSearchParams({ org: org.id })}`}>إدارة عمليات المنشأة</Link>
+    </section>)}</div>
+    {!membershipError && !organizations.length ? <section className="card"><h2>لا توجد منشآت مرتبطة</h2><p>يلزم إسناد حسابك إلى منشأة من مسؤول المنصة.</p></section> : null}
+  </main>;
 }
