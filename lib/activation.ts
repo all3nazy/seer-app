@@ -75,3 +75,59 @@ export async function verifyActivationLink(createClient: () => ActivationClient,
     throw new ActivationError("verification");
   }
 }
+
+export type ActivationCallback = { access_token: string; refresh_token: string; type: ActivationType };
+export function parseActivationCallback(input: string, siteOrigin: string): ActivationCallback {
+  let expected: URL;
+  try {
+    expected = new URL(siteOrigin);
+    if (expected.origin !== siteOrigin || !["https:", "http:"].includes(expected.protocol) || expected.username || expected.password) throw new Error();
+  } catch { throw new ActivationError("configuration"); }
+  let callback: URL;
+  try {
+    if (!input.trim() || input.length > 8192) throw new Error();
+    callback = new URL(input.trim());
+  } catch { throw new ActivationError("invalid-link"); }
+  // The localhost destination is the known legacy SiteURL, not an arbitrary
+  // localhost address. We never contact either destination or decode JWT claims.
+  if (![expected.origin, "http://localhost:3000"].includes(callback.origin)
+    || !["/", "/auth/setup"].includes(callback.pathname)
+    || callback.username || callback.password) throw new ActivationError("invalid-link");
+  const fragment = new URLSearchParams(callback.hash.slice(1));
+  const forbidden = ["error", "error_code", "error_description", "error_uri"];
+  if (forbidden.some(key => callback.searchParams.has(key) || fragment.has(key))
+    || ["access_token", "refresh_token", "type", "token", "token_hash"].some(key => callback.searchParams.has(key))) {
+    throw new ActivationError("invalid-link");
+  }
+  const access = fragment.getAll("access_token");
+  const refresh = fragment.getAll("refresh_token");
+  const types = fragment.getAll("type");
+  if (access.length !== 1 || refresh.length !== 1 || types.length !== 1
+    || !/^[^\s]{8,6144}$/.test(access[0]) || !/^[^\s]{8,6144}$/.test(refresh[0])
+    || !activationTypes.some(value => value === types[0])) throw new ActivationError("invalid-link");
+  return { access_token: access[0], refresh_token: refresh[0], type: types[0] as ActivationType };
+}
+
+type CallbackClient = ActivationClient & { auth: ActivationAuth & {
+  setSession: (params: { access_token: string; refresh_token: string }) => PromiseLike<{ error: unknown }>;
+} };
+export async function verifyActivationInput(createClient: () => CallbackClient, input: string, projectUrl: string | undefined, siteOrigin: string): Promise<void> {
+  let callback: ActivationCallback;
+  try {
+    callback = parseActivationCallback(input, siteOrigin);
+  } catch (error) {
+    if (!(error instanceof ActivationError) || error.code !== "invalid-link") throw error;
+    // Original, unconsumed Supabase confirmation links keep their existing flow.
+    return verifyActivationLink(createClient, input, projectUrl);
+  }
+  try {
+    const client = createClient();
+    const { error } = await client.auth.setSession({ access_token: callback.access_token, refresh_token: callback.refresh_token });
+    if (error) throw new ActivationError("verification");
+    const { data, error: userError } = await client.auth.getUser();
+    if (userError || !data.user?.email_confirmed_at) throw new ActivationError("session");
+  } catch (error) {
+    if (error instanceof ActivationError) throw error;
+    throw new ActivationError("verification");
+  }
+}
