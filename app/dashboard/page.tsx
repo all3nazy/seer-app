@@ -9,8 +9,15 @@ export default async function Dashboard() {
   const supabase = await createSupabaseServerClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) redirect("/login");
-  const { data: memberships, error: membershipError } = await supabase.from("memberships")
+  const loadMemberships = () => supabase.from("memberships")
     .select("organization_id,role,organizations(name,type)").eq("user_id", user.id);
+  let { data: memberships, error: membershipError } = await loadMemberships();
+  if (!membershipError && memberships?.length === 0) {
+    // This RPC accepts no client-provided email, tenant or role. PostgreSQL checks
+    // the verified Auth email against an operator-approved invitation atomically.
+    const { error: claimError } = await supabase.rpc("claim_organization_invitation");
+    if (!claimError) ({ data: memberships, error: membershipError } = await loadMemberships());
+  }
   const organizations = await Promise.all((memberships ?? []).map(async membership => {
     const org = membership.organization_id;
     const manager = canManage(membership.role);

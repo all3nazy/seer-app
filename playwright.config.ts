@@ -18,7 +18,7 @@ export default defineConfig({
     reuseExistingServer: false,
     timeout: 120_000,
     env: {
-      NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:54329",
+      NEXT_PUBLIC_SUPABASE_URL: "https://supabase.example.test",
       NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-publishable-key",
     },
   },

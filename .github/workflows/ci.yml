@@ -14,7 +14,7 @@ jobs:
     timeout-minutes: 15
     env:
       NEXT_TELEMETRY_DISABLED: "1"
-      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54329
+      NEXT_PUBLIC_SUPABASE_URL: https://supabase.example.test
       NEXT_PUBLIC_SUPABASE_ANON_KEY: test-publishable-key
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2

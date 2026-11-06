@@ -43,7 +43,7 @@ export default function Login() {
         <button type="submit" disabled={busy} className="primary-button">{busy ? "جارٍ التحقق…" : "دخول"}</button>
         <span role="status" className="sr-only">{busy ? "جارٍ تسجيل الدخول. يرجى الانتظار." : ""}</span>
       </form>
-      <p className="login-help">إذا لم يكن لديك حساب، تواصل مع مسؤول منشأتك لإضافتك.</p>
+      <p className="login-help"><a href="/auth/activate">تفعيل حساب جديد</a> — يلزم موافقة مسؤول المنصة للوصول إلى المنشأة.</p>
     </section>
   </main></>;
 }

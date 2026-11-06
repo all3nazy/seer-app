@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 
 const db = new PGlite();
 const owner = "10000000-0000-0000-0000-000000000001";
@@ -26,7 +26,7 @@ beforeAll(async () => {
   await db.exec(`
     create role anon nologin; create role authenticated nologin; create role service_role nologin bypassrls;
     create schema auth;
-    create table auth.users(id uuid primary key, email_confirmed_at timestamptz);
+    create table auth.users(id uuid primary key, email_confirmed_at timestamptz, email text);
     create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
     grant usage on schema public,auth to anon,authenticated,service_role;
     grant execute on function auth.uid() to anon,authenticated,service_role;
@@ -39,8 +39,14 @@ beforeAll(async () => {
   // The production database already has composite FKs/private helpers. Reconciliation must be safe there.
   await db.exec(reconcile);
   await db.exec(operations);
+  const onboarding = readdirSync("supabase/migrations").filter(name => name.endsWith("_approved_org_onboarding.sql"));
+  if (onboarding.length !== 1) throw new Error("Expected exactly one approved onboarding migration");
+  await db.exec(readFileSync(`supabase/migrations/${onboarding[0]}`, "utf8"));
+  const isolation = readdirSync("supabase/migrations").filter(name => name.endsWith("_isolate_onboarding_privileges.sql"));
+  if (isolation.length !== 1) throw new Error("Expected exactly one onboarding isolation migration");
+  await db.exec(readFileSync(`supabase/migrations/${isolation[0]}`, "utf8"));
   await db.exec(`
-    insert into auth.users values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
+    insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
     insert into public.memberships values ('${orgA}','${owner}','owner'),('${orgA}','${staff}','staff'),('${orgB}','${outsider}','admin');
     insert into public.children(id,organization_id,full_name) values ('${childA}','${orgA}','Private Child A'),('${childB}','${orgB}','Private Child B');
@@ -137,5 +143,83 @@ describe("Postgres tenant isolation and operational authorization", () => {
     await db.exec("reset role");
     expect(await rows(`select role from public.memberships where organization_id='${result[0].id}' and user_id='${owner}'`)).toEqual([{role:"owner"}]);
     expect(await rows(`select action from public.audit_events where organization_id='${result[0].id}' and entity='organizations'`)).toEqual([{action:"INSERT"}]);
+  });
+});
+
+
+describe("approved organization invitations", () => {
+  const approved="60000000-0000-0000-0000-000000000001";
+  const expired="60000000-0000-0000-0000-000000000002";
+  const duplicate="60000000-0000-0000-0000-000000000003";
+  const invalid="60000000-0000-0000-0000-000000000004";
+  beforeAll(async () => {
+    await db.exec("reset role");
+    await db.exec(`insert into auth.users(id,email_confirmed_at,email) values
+     ('${approved}',now(),'Approved@Example.com'),
+     ('${expired}',now(),'expired@example.com'),
+     ('${duplicate}',now(),'approved@example.com'),
+     ('${invalid}',null,'unverified@example.com');
+     insert into private.organization_invitations(email,org_name,org_type,expires_at) values
+     ('approved@example.com','Approved nursery','nursery',now()+interval '1 day'),
+     ('expired@example.com','Expired school','school',now()-interval '1 day'),
+     ('unverified@example.com','Unverified school','school',now()+interval '1 day');`);
+  });
+  it("denies anonymous invocation and authenticated callers without a verified user",async()=>{
+    await as("anon");
+    await expect(db.exec("select public.claim_organization_invitation()")).rejects.toMatchObject({code:"42501"});
+    await as("authenticated");
+    await expect(db.exec("select public.claim_organization_invitation()")).rejects.toMatchObject({code:"42501"});
+    await as("authenticated",invalid);
+    await expect(db.exec("select public.claim_organization_invitation()")).rejects.toMatchObject({code:"42501"});
+  });
+  it("does not trust an approval or email supplied through JWT metadata",async()=>{
+    await db.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({email:"approved@example.com",user_metadata:{email:"approved@example.com"}})]);
+    await as("authenticated",staff);
+    await expect(db.exec("select public.claim_organization_invitation()")).rejects.toMatchObject({code:"42501"});
+  });
+  it("denies expired approval without creating an organization",async()=>{
+    const before=await rows("select count(*)::int as count from public.organizations");
+    await as("authenticated",expired);
+    await expect(db.exec("select public.claim_organization_invitation()")).rejects.toMatchObject({code:"42501"});
+    await db.exec("reset role");
+    expect(await rows("select count(*)::int as count from public.organizations")).toEqual(before);
+  });
+  it("keeps approval records invisible and unwritable to all API roles",async()=>{
+    for(const role of ["anon","authenticated","service_role"] as const){
+      await as(role,approved);
+      await expect(db.exec("select * from private.organization_invitations")).rejects.toMatchObject({code:"42501"});
+      await expect(db.exec("insert into private.organization_invitations(email,org_name,org_type,expires_at) values ('attack@example.com','Attack','school',now())")).rejects.toMatchObject({code:"42501"});
+    }
+  });
+  it("claims one approved email atomically and returns the same owned organization on retry",async()=>{
+    await as("authenticated",approved);
+    const result=await rows("select public.claim_organization_invitation() as id");
+    expect(await rows("select public.claim_organization_invitation() as id")).toEqual(result);
+    expect(await rows(`select role from public.memberships where organization_id='${result[0].id}' and user_id='${approved}'`)).toEqual([{role:"owner"}]);
+    expect(await rows(`select name,type from public.organizations where id='${result[0].id}'`)).toEqual([{name:"Approved nursery",type:"nursery"}]);
+    expect(await rows(`select entity,action from public.audit_events where organization_id='${result[0].id}'`)).toEqual([{entity:"organizations",action:"INSERT"}]);
+    await db.exec("reset role");
+    const claim=await rows("select claimed_by,organization_id,claimed_at is not null as claimed from private.organization_invitations where email='approved@example.com'");
+    expect(claim).toEqual([{claimed_by:approved,organization_id:result[0].id,claimed:true}]);
+  });
+  it("does not allow a different verified user with the same email to reuse a consumed approval",async()=>{
+    await as("authenticated",duplicate);
+    await expect(db.exec("select public.claim_organization_invitation()")).rejects.toMatchObject({code:"42501"});
+  });
+  it("does not silently restore revoked ownership on an idempotent retry",async()=>{
+    await db.exec(`update public.memberships set role='staff' where user_id='${approved}'`);
+    await as("authenticated",approved);
+    await expect(db.exec("select public.claim_organization_invitation()")).rejects.toMatchObject({code:"42501"});
+  });
+});
+
+
+describe("onboarding privilege boundary", () => {
+  it("keeps the exposed RPC as an invoker and the guarded privileged code private", async () => {
+    const result = await rows("select n.nspname,p.prosecdef,has_function_privilege('anon',p.oid,'EXECUTE') as anonymous,has_function_privilege('authenticated',p.oid,'EXECUTE') as authenticated from pg_proc p join pg_namespace n on n.oid=p.pronamespace where p.proname='claim_organization_invitation' order by n.nspname");
+    expect(result).toEqual([
+      {nspname:"private",prosecdef:true,anonymous:false,authenticated:true},
+      {nspname:"public",prosecdef:false,anonymous:false,authenticated:true}
+    ]);
   });
 });
