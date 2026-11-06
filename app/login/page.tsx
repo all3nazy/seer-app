@@ -1,12 +1,49 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { getSupabaseBrowserClient } from "../../lib/supabase";
+
 export default function Login() {
-  const [email,setEmail]=useState(""); const [password,setPassword]=useState("");
-  const [error,setError]=useState(""); const [busy,setBusy]=useState(false);
-  async function signIn(e:React.FormEvent){e.preventDefault();setBusy(true);setError("");
-    try {const {error}=await getSupabaseBrowserClient().auth.signInWithPassword({email,password});if(error)throw error;window.location.assign("/dashboard");}
-    catch(e){setError(e instanceof Error?e.message:"تعذر تسجيل الدخول");}finally{setBusy(false);}
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const errorRef = useRef<HTMLParagraphElement>(null);
+
+  async function signIn(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const { error: authError } = await getSupabaseBrowserClient().auth.signInWithPassword({ email: email.trim(), password });
+      if (authError) throw authError;
+      window.location.assign("/dashboard");
+    } catch {
+      setError("تعذر تسجيل الدخول. تحقق من البريد الإلكتروني وكلمة المرور، أو حاول لاحقًا.");
+      setBusy(false);
+      requestAnimationFrame(() => errorRef.current?.focus());
+    }
   }
-  return <main className="shell"><header className="top"><a className="logo" href="/">سِير.</a><span className="tag">SEER</span></header><section className="card" style={{maxWidth:420,margin:"64px auto"}}><h1>تسجيل الدخول</h1><p>حساب موظفي وإداريي المنشآت</p><form onSubmit={signIn} style={{display:"grid",gap:16}}><label>البريد الإلكتروني<input type="email" required autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} style={{display:"block",width:"100%",padding:12,marginTop:8}}/></label><label>كلمة المرور<input type="password" required autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} style={{display:"block",width:"100%",padding:12,marginTop:8}}/></label>{error&&<p role="alert">{error}</p>}<button disabled={busy} style={{background:"#0f5e4c",color:"white",padding:14,border:0,borderRadius:12}}>{busy?"جارٍ التحقق...":"دخول"}</button></form></section></main>;
+
+  return <><a className="skip-link" href="#main-content">تجاوز إلى المحتوى</a><main className="shell">
+    <header className="top"><a className="logo" href="/" aria-label="سِير — الصفحة الرئيسية">سِير.</a><span className="tag" lang="en" dir="ltr">SEER</span></header>
+    <section className="card login-card" id="main-content" tabIndex={-1} aria-labelledby="login-title">
+      <h1 id="login-title">تسجيل الدخول</h1>
+      <p id="login-description">لحسابات موظفي وإداريي المنشآت المرتبطة بسِير.</p>
+      <form onSubmit={signIn} className="login-form" aria-describedby="login-description" aria-busy={busy}>
+        <label htmlFor="email">البريد الإلكتروني</label>
+        <input id="email" name="email" type="email" dir="ltr" inputMode="email" required autoComplete="username" autoCapitalize="none" spellCheck={false} maxLength={254} value={email} onChange={event => setEmail(event.target.value)} readOnly={busy}/>
+        <label htmlFor="password">كلمة المرور</label>
+        <div className="password-control">
+          <input id="password" name="password" type={showPassword ? "text" : "password"} dir="ltr" required autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} readOnly={busy}/>
+          <button type="button" className="password-toggle" aria-controls="password" aria-pressed={showPassword} onClick={() => setShowPassword(value => !value)}>{showPassword ? "إخفاء" : "إظهار"}</button>
+        </div>
+        {error && <p ref={errorRef} tabIndex={-1} role="alert" className="form-error">{error}</p>}
+        <button type="submit" disabled={busy} className="primary-button">{busy ? "جارٍ التحقق…" : "دخول"}</button>
+        <span role="status" className="sr-only">{busy ? "جارٍ تسجيل الدخول. يرجى الانتظار." : ""}</span>
+      </form>
+      <p className="login-help">إذا لم يكن لديك حساب، تواصل مع مسؤول منشأتك لإضافتك.</p>
+    </section>
+  </main></>;
 }
