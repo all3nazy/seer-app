@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { topicNames, type AssistantTopic } from "./assistant-intents";
+import { riyadhToday } from "./tasks";
 
 const managerRoles=new Set(["owner","admin"]);
 const number=new Intl.NumberFormat("ar-SA");
@@ -19,10 +20,33 @@ export async function assistantStatus(client:SupabaseClient, organizationId:stri
   if(result.error || result.count===null) throw new Error("تعذر قراءة البيانات. تحقق من الصلاحيات وحاول مجددًا.");
   return number.format(result.count);
  };
+ const tasks=async(filter:"open"|"overdue"|"today"|"doing")=>{
+  const today=riyadhToday();
+  let query=client.from("tasks").select("id",{count:"exact",head:true}).eq("organization_id",organizationId);
+  if(filter==="doing") query=query.eq("status","doing");
+  else {
+   query=query.neq("status","done");
+   if(filter==="overdue") query=query.lt("due_date",today);
+   if(filter==="today") query=query.eq("due_date",today);
+  }
+  const result=await query;
+  if(result.error || result.count===null) throw new Error("تعذر قراءة المهام. تحقق من الصلاحيات وحاول مجددًا.");
+  return result.count;
+ };
+ if(topic==="tasks") {
+  const [open,doing,overdue,today]=await Promise.all([tasks("open"),tasks("doing"),tasks("overdue"),tasks("today")]);
+  if(!open) return "ما عندك مهام مفتوحة الآن. كل شيء منجز.";
+  const parts=[`عندك ${number.format(open)} مهام مفتوحة، منها ${number.format(doing)} قيد التنفيذ.`];
+  if(overdue) parts.push(`انتبه: ${number.format(overdue)} متأخرة عن موعدها.`);
+  if(today) parts.push(`و${number.format(today)} موعد تسليمها اليوم.`);
+  if(!overdue && !today) parts.push("لا شيء متأخر ولا مستحق اليوم.");
+  return parts.join(" ");
+ }
  if(topic==="notifications") {
   const pending=await count("enrollments","pending");
   const unpaid=manager?await count("invoices","issued"):null;
-  return `متابعات الآن: ${pending} طلبات تسجيل بانتظار الموافقة.${unpaid!==null?` و${unpaid} فواتير صادرة غير مسددة.`:""} هذه متابعة للحالات الحالية؛ لم تُرسل أي إشعارات.`;
+  const late=await tasks("overdue");
+  return `متابعات الآن: ${pending} طلبات تسجيل بانتظار الموافقة.${unpaid!==null?` و${unpaid} فواتير صادرة غير مسددة.`:""}${late?` و${number.format(late)} مهام متأخرة.`:""} هذه متابعة للحالات الحالية؛ لم تُرسل أي إشعارات.`;
  }
  const total=await count(topic);
  if(topic==="invoices") return `إجمالي الفواتير: ${total}، الفواتير الصادرة غير المسددة: ${await count("invoices","issued")}.`;

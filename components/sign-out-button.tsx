@@ -2,21 +2,24 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "../lib/supabase";
+import { Icon } from "./icons";
+import { notify } from "./feedback";
 
-export default function SignOutButton() {
-  const [busy,setBusy]=useState(false);
-  const router=useRouter();
-  async function signOut(){
+export default function SignOutButton({ compact = false }: { compact?: boolean }) {
+  const [busy, setBusy] = useState(false);
+  const router = useRouter();
+  async function signOut() {
     setBusy(true);
     try {
-      const {error}=await getSupabaseBrowserClient().auth.signOut();
-      if(error) throw error;
+      const { error } = await getSupabaseBrowserClient().auth.signOut();
+      if (error) throw error;
       router.replace("/login");
       router.refresh();
     } catch {
       setBusy(false);
-      alert("تعذر تسجيل الخروج. حاول مرة أخرى.");
+      notify("تعذر تسجيل الخروج. حاول مرة أخرى.", "error");
     }
   }
-  return <button type="button" disabled={busy} onClick={signOut} style={{border:"1px solid #0f5e4c",borderRadius:12,padding:"10px 14px",background:"transparent",color:"inherit",cursor:"pointer"}}>{busy?"جارٍ الخروج...":"تسجيل الخروج"}</button>;
+  if (compact) return <button type="button" className="icon-btn" disabled={busy} onClick={signOut} aria-label="تسجيل الخروج" title="تسجيل الخروج"><Icon name="logout" /></button>;
+  return <button type="button" className="btn btn-sm" disabled={busy} onClick={signOut}><Icon name="logout" />{busy ? "جارٍ الخروج…" : "تسجيل الخروج"}</button>;
 }

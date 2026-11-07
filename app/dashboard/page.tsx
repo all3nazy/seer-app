@@ -2,8 +2,16 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "../../lib/supabase/server";
 import { canManage } from "../../lib/operations";
-import SignOutButton from "../../components/sign-out-button";
+import { riyadhToday } from "../../lib/tasks";
+import { Icon } from "../../components/icons";
 export const dynamic = "force-dynamic";
+export const metadata = { title: "لوحة التشغيل" };
+
+const roleNames: Record<string, string> = { owner: "مالك", admin: "مدير", staff: "موظف" };
+function greeting() {
+  const hour = Number(new Intl.DateTimeFormat("en-US", { hour: "numeric", hourCycle: "h23", timeZone: "Asia/Riyadh" }).format(new Date()));
+  return hour < 12 ? "صباح الخير" : "مساء الخير";
+}
 
 export default async function Dashboard() {
   const supabase = await createSupabaseServerClient();
@@ -18,35 +26,42 @@ export default async function Dashboard() {
     const { error: claimError } = await supabase.rpc("claim_organization_invitation");
     if (!claimError) ({ data: memberships, error: membershipError } = await loadMemberships());
   }
+  const today = riyadhToday();
   const organizations = await Promise.all((memberships ?? []).map(async membership => {
     const org = membership.organization_id;
     const manager = canManage(membership.role);
+    const count = (table: string) => supabase.from(table).select("id", { count: "exact", head: true }).eq("organization_id", org);
     const queries = [
-      { label: "الأطفال", query: supabase.from("children").select("id", { count: "exact", head: true }).eq("organization_id", org) },
-      { label: "طلبات التسجيل", query: supabase.from("enrollments").select("id", { count: "exact", head: true }).eq("organization_id", org) },
-      { label: "طلبات بانتظار الموافقة", query: supabase.from("enrollments").select("id", { count: "exact", head: true }).eq("organization_id", org).eq("status", "pending") },
-      { label: "الفروع", query: supabase.from("branches").select("id", { count: "exact", head: true }).eq("organization_id", org) },
-      ...(manager ? [
-        { label: "الفواتير", query: supabase.from("invoices").select("id", { count: "exact", head: true }).eq("organization_id", org) },
-        { label: "فواتير صادرة غير مسددة", query: supabase.from("invoices").select("id", { count: "exact", head: true }).eq("organization_id", org).eq("status", "issued") },
-      ] : []),
+      { label: "مهام مفتوحة", query: count("tasks").neq("status", "done"), optional: true },
+      { label: "مهام متأخرة", query: count("tasks").neq("status", "done").lt("due_date", today), alert: true, optional: true },
+      { label: "الأطفال", query: count("children") },
+      { label: "طلبات بانتظار الموافقة", query: count("enrollments").eq("status", "pending"), alert: true },
+      { label: "الفروع", query: count("branches") },
+      ...(manager ? [{ label: "فواتير غير مسددة", query: count("invoices").eq("status", "issued"), alert: true }] : []),
     ];
     const results = await Promise.all(queries.map(item => item.query));
     return {
       id: org, name: (membership.organizations as unknown as { name: string } | null)?.name ?? "منشأة",
-      role: membership.role, failed: results.some(result => result.error),
-      metrics: queries.map((query, index) => ({ label: query.label, count: results[index].count })),
+      role: membership.role,
+      // Task counts are optional until the task migration is applied; other failures are surfaced.
+      failed: results.some((result, index) => result.error && !queries[index].optional),
+      metrics: queries.map((query, index) => ({ label: query.label, alert: query.alert ?? false, count: results[index].error ? null : results[index].count })).filter(metric => metric.count !== null),
     };
   }));
-  return <main className="shell" id="main-content">
-    <header className="top"><Link className="logo" href="/">سِير.</Link><nav aria-label="التنقل الرئيسي" style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}><Link href="/dashboard/operations">إدارة العمليات</Link><Link href="/dashboard/assistant">المساعد التشغيلي</Link><SignOutButton /></nav></header>
-    <section className="hero"><h1>لوحة التشغيل</h1><p>ملخص المنشآت التي تملك صلاحية الاطلاع عليها.</p></section>
+  return <>
+    <header className="page-head"><div><h1>{greeting()}</h1><p>هذا ملخص منشآتك اليوم.</p></div>
+      <Link className="primary-button" href="/dashboard/tasks"><Icon name="board" />لوحة المهام</Link>
+    </header>
     {membershipError ? <p role="alert">تعذر تحميل عضويات المنشآت. حاول مرة أخرى.</p> : null}
-    <div className="grid">{organizations.map(org => <section className="card" key={org.id}>
-      <h2>{org.name}</h2><p>الصلاحية: {org.role === "owner" ? "مالك" : org.role === "admin" ? "مدير" : "موظف"}</p>
-      {org.failed ? <p role="alert">تعذر تحميل بعض المؤشرات. أعد تحميل الصفحة أو حاول لاحقًا.</p> : <dl style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 12 }}>{org.metrics.map(metric => <div key={metric.label}><dt style={{ fontSize: 13, color: "#4e655c" }}>{metric.label}</dt><dd style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>{(metric.count ?? 0).toLocaleString("ar-SA")}</dd></div>)}</dl>}
-      <Link href={`/dashboard/operations?${new URLSearchParams({ org: org.id })}`}>إدارة عمليات المنشأة</Link>
+    <div className="stack">{organizations.map(org => <section className="card org-card" key={org.id} aria-labelledby={`org-${org.id}`}>
+      <header><h2 id={`org-${org.id}`}>{org.name}</h2><span className="pill">{roleNames[org.role] ?? "عضو"}</span></header>
+      {org.failed ? <p role="alert">تعذر تحميل بعض المؤشرات. أعد تحميل الصفحة أو حاول لاحقًا.</p> : <dl className="metrics">{org.metrics.map(metric => <div key={metric.label} className={`metric${metric.alert && metric.count ? " alert" : ""}`}><dt>{metric.label}</dt><dd>{(metric.count ?? 0).toLocaleString("ar-SA")}</dd></div>)}</dl>}
+      <div className="link-row">
+        <Link className="btn btn-sm" href={`/dashboard/tasks?${new URLSearchParams({ org: org.id })}`}><Icon name="board" />المهام</Link>
+        <Link className="btn btn-sm" href={`/dashboard/operations?${new URLSearchParams({ org: org.id })}`}><Icon name="folder" />السجلات</Link>
+        <Link className="btn btn-sm" href="/dashboard/assistant"><Icon name="spark" />اسأل المساعد</Link>
+      </div>
     </section>)}</div>
-    {!membershipError && !organizations.length ? <section className="card"><h2>لا توجد منشآت مرتبطة</h2><p>يلزم إسناد حسابك إلى منشأة من مسؤول المنصة.</p></section> : null}
-  </main>;
+    {!membershipError && !organizations.length ? <section className="card"><h2>حسابك غير مرتبط بمنشأة بعد</h2><p>اطلب من مسؤول المنصة إسناد حسابك إلى منشأة، ثم أعد تحميل الصفحة.</p></section> : null}
+  </>;
 }

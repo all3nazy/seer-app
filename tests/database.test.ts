@@ -45,6 +45,9 @@ beforeAll(async () => {
   const isolation = readdirSync("supabase/migrations").filter(name => name.endsWith("_isolate_onboarding_privileges.sql"));
   if (isolation.length !== 1) throw new Error("Expected exactly one onboarding isolation migration");
   await db.exec(readFileSync(`supabase/migrations/${isolation[0]}`, "utf8"));
+  const tasks = readdirSync("supabase/migrations").filter(name => name.endsWith("_task_workflow.sql"));
+  if (tasks.length !== 1) throw new Error("Expected exactly one task workflow migration");
+  await db.exec(readFileSync(`supabase/migrations/${tasks[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -221,5 +224,55 @@ describe("onboarding privilege boundary", () => {
       {nspname:"private",prosecdef:true,anonymous:false,authenticated:true},
       {nspname:"public",prosecdef:false,anonymous:false,authenticated:true}
     ]);
+  });
+});
+
+
+describe("task workflow board", () => {
+  let taskA = "";
+  it("managers create tasks and the author and timestamps come from the database", async () => {
+    await as("authenticated", owner);
+    const created = await rows(`insert into public.tasks(organization_id,title,priority,due_date) values ('${orgA}','Prepare term calendar','high','2026-11-10') returning id,created_by,status,completed_at`);
+    taskA = String(created[0].id);
+    expect(created[0]).toMatchObject({ created_by: owner, status: "todo", completed_at: null });
+    expect(await rows(`select entity,action from public.audit_events where record_id='${taskA}'`)).toEqual([{ entity: "tasks", action: "INSERT" }]);
+  });
+  it("the browser cannot choose a task id, author or creation time", async () => {
+    await as("authenticated", owner);
+    await expect(db.exec(`insert into public.tasks(id,organization_id,title) values ('90000000-0000-0000-0000-000000000001','${orgA}','Forged')`)).rejects.toMatchObject({ code: "42501" });
+    await expect(db.exec(`insert into public.tasks(organization_id,title,created_by) values ('${orgA}','Forged','${staff}')`)).rejects.toMatchObject({ code: "42501" });
+    await expect(db.exec(`update public.tasks set created_at=now() where id='${taskA}'`)).rejects.toMatchObject({ code: "42501" });
+  });
+  it("staff can read and move tasks but cannot create, edit details or delete", async () => {
+    await as("authenticated", staff);
+    expect(await rows("select id from public.tasks")).toEqual([{ id: taskA }]);
+    await expect(db.exec(`insert into public.tasks(organization_id,title) values ('${orgA}','Staff task')`)).rejects.toMatchObject({ code: "42501" });
+    const moved = await rows(`update public.tasks set status='done' where id='${taskA}' returning status,completed_at is not null as completed`);
+    expect(moved).toEqual([{ status: "done", completed: true }]);
+    await expect(db.exec(`update public.tasks set title='Changed by staff' where id='${taskA}'`)).rejects.toMatchObject({ code: "42501" });
+    expect(await rows(`delete from public.tasks where id='${taskA}' returning id`)).toEqual([]);
+  });
+  it("reopening a finished task clears its completion time", async () => {
+    await as("authenticated", owner);
+    expect(await rows(`update public.tasks set status='doing' where id='${taskA}' returning completed_at`)).toEqual([{ completed_at: null }]);
+  });
+  it("other tenants and anonymous callers cannot see or touch tasks", async () => {
+    await as("authenticated", outsider);
+    expect(await rows("select id from public.tasks")).toEqual([]);
+    expect(await rows(`update public.tasks set status='done' where id='${taskA}' returning id`)).toEqual([]);
+    await expect(db.exec(`insert into public.tasks(organization_id,title) values ('${orgA}','Cross tenant')`)).rejects.toMatchObject({ code: "42501" });
+    await as("anon");
+    await expect(db.exec("select id from public.tasks")).rejects.toMatchObject({ code: "42501" });
+  });
+  it("rejects empty titles and unknown stages", async () => {
+    await as("authenticated", owner);
+    await expect(db.exec(`insert into public.tasks(organization_id,title) values ('${orgA}','   ')`)).rejects.toMatchObject({ code: "23514" });
+    await expect(db.exec(`update public.tasks set status='archived' where id='${taskA}'`)).rejects.toMatchObject({ code: "23514" });
+  });
+  it("managers delete tasks and the deletion is audited", async () => {
+    await as("authenticated", owner);
+    expect(await rows(`delete from public.tasks where id='${taskA}' returning id`)).toEqual([{ id: taskA }]);
+    await db.exec("reset role");
+    expect(await rows(`select action from public.audit_events where record_id='${taskA}' order by id`)).toEqual([{ action: "INSERT" }, { action: "UPDATE" }, { action: "UPDATE" }, { action: "DELETE" }]);
   });
 });

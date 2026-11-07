@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getSupabaseBrowserClient } from "../../../lib/supabase";
 import { verifySetupSession } from "../../../lib/auth-setup";
+import { Logo } from "../../../components/icons";
 
 export default function AccountSetup() {
   const [ready, setReady] = useState(false);
@@ -36,7 +37,7 @@ export default function AccountSetup() {
     } catch { setMessage("تعذر الاتصال بالخدمة. حاول مجددًا."); }
     finally { setBusy(false); }
   }
-  return <main className="shell" id="main-content"><a href="/" className="logo">سِير.</a><section className="card" style={{maxWidth:480,margin:"40px auto"}}><h1>إعداد حسابك</h1><p>عيّن كلمة مرور خاصة بك. ربط الحساب بالمنشأة يتم بواسطة مسؤول المنصة.</p>
+  return <main className="shell" id="main-content"><Logo /><section className="card" style={{maxWidth:480,margin:"40px auto"}}><h1>إعداد حسابك</h1><p>عيّن كلمة مرور خاصة بك. ربط الحساب بالمنشأة يتم بواسطة مسؤول المنصة.</p>
     {message&&<p ref={notice} tabIndex={-1} role="alert">{message}</p>}
     {!ready&&!message&&<p role="status">جارٍ التحقق من الدعوة…</p>}
     {ready&&<form onSubmit={save} aria-busy={busy} className="operation-form"><label>كلمة المرور الجديدة<input dir="ltr" type="password" autoComplete="new-password" minLength={12} required value={password} onChange={e=>setPassword(e.target.value)} disabled={busy}/></label><label>تأكيد كلمة المرور<input dir="ltr" type="password" autoComplete="new-password" minLength={12} required value={confirmation} onChange={e=>setConfirmation(e.target.value)} disabled={busy}/></label><button disabled={busy}>{busy?"جارٍ الحفظ…":"حفظ كلمة المرور"}</button></form>}

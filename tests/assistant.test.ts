@@ -23,6 +23,11 @@ describe("Arabic assistant intents",()=>{
   ["التواصل مع الدعم",{kind:"support"}],
   ["help",{kind:"help"}],
   ["طقس اليوم",{kind:"unknown"}],
+  ["كم مهمة متأخرة؟",{kind:"status",topic:"tasks"}],
+  ["وش عندي اليوم",{kind:"status",topic:"tasks"}],
+  ["افتح المهام",{kind:"navigate",topic:"tasks"}],
+  ["أضف مهمة جديدة",{kind:"mutation",topic:"tasks"}],
+  ["الفواتير المتأخرة",{kind:"status",topic:"invoices"}],
  ])("classifies %s safely",(question,intent)=>expect(classifyIntent(question)).toEqual(intent));
  it("normalizes Arabic diacritics without changing the original question",()=>{
   expect(normalizeArabic("أَطْفَالٌ")).toBe("اطفال");
@@ -57,6 +62,8 @@ function fakeClient({role="owner",authenticated=true,member=true,fail=false}:{ro
    const builder={
     select(columns:string,options:unknown){call.columns=columns;call.options=options;return builder;},
     eq(key:string,value:unknown){call.filters[key]=value;return builder;},
+    neq(key:string,value:unknown){call.filters[`${key}!=`]=value;return builder;},
+    lt(key:string,value:unknown){call.filters[`${key}<`]=value;return builder;},
     maybeSingle:async()=>({data:member?{role}:null,error:null}),
     then<TResult1 = {count:number|null;error:unknown}, TResult2 = never>(resolve?:(value:{count:number|null;error:unknown})=>TResult1|PromiseLike<TResult1>,reject?:(reason:unknown)=>TResult2|PromiseLike<TResult2>){return Promise.resolve({count:fail?null:3,error:fail?new Error("private failure detail"):null}).then(resolve,reject);}
    };return builder;
@@ -86,8 +93,9 @@ describe("assistant authorization and aggregate queries",()=>{
   const {client,calls}=fakeClient({role:"staff"});
   const text=await assistantStatus(client,"org-a","notifications");
   expect(text).toContain("لم تُرسل أي إشعارات");
-  expect(calls.map(call=>call.table)).toEqual(["memberships","enrollments"]);
+  expect(calls.map(call=>call.table)).toEqual(["memberships","enrollments","tasks"]);
   expect(calls[1].filters).toEqual({organization_id:"org-a",status:"pending"});
+  expect(calls[2].filters).toMatchObject({organization_id:"org-a","status!=":"done"});
  });
  it("loads aggregate financial states for managers and scopes every query",async()=>{
   const {client,calls}=fakeClient({role:"admin"});
@@ -96,6 +104,15 @@ describe("assistant authorization and aggregate queries",()=>{
   for(const call of calls) expect(call.filters.organization_id).toBe("org-a");
   for(const call of calls.slice(1)) {expect(call.columns).toBe("id");expect(call.options).toEqual({head:true,count:"exact"});}
   expect(calls[2].filters.status).toBe("issued");
+ });
+ it("summarizes tasks for any member with tenant-scoped aggregate counts only",async()=>{
+  const {client,calls}=fakeClient({role:"staff"});
+  await expect(assistantStatus(client,"org-a","tasks")).resolves.toContain("مهام مفتوحة");
+  expect(calls.map(call=>call.table)).toEqual(["memberships","tasks","tasks","tasks","tasks"]);
+  for(const call of calls.slice(1)) {expect(call.filters.organization_id).toBe("org-a");expect(call.options).toEqual({head:true,count:"exact"});}
+ });
+ it("links task questions to the board, not the records page",()=>{
+  expect(operationsLink("org-a","tasks")).toBe("/dashboard/tasks?org=org-a");
  });
  it("returns a safe failure rather than treating a failed count as zero",async()=>{
   const {client}=fakeClient({fail:true});
