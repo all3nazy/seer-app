@@ -11,6 +11,7 @@ export const attendanceTone: Record<AttendanceStatus, string> = { present: "ok",
 export type ChildProfile = {
   id: string; full_name: string; date_of_birth: string | null; gender: string | null;
   national_id: string | null; branch_id: string | null; notes: string | null; created_at: string;
+  section_id: string | null; photo_consent: boolean; photo_consent_at: string | null;
 };
 export type ChildHealth = {
   blood_type: string | null; allergies: string | null; conditions: string | null; medications: string | null;
@@ -65,12 +66,15 @@ export function profileValues(data: FormData) {
   const date = data.get("date_of_birth");
   if (date && (!isIsoDate(date) || date > riyadhToday())) throw new ValidationError("أدخل تاريخ ميلاد صحيحًا لا يتجاوز اليوم.");
   const branch = data.get("branch_id");
+  const section = data.get("section_id");
   return {
     full_name: name.trim(),
     date_of_birth: typeof date === "string" && date ? date : null,
     gender: optionalChoice(data, "gender", genders),
     national_id: nationalId(data, "national_id"),
     branch_id: branch ? uuid(branch) : null,
+    section_id: section ? uuid(section) : null,
+    photo_consent: data.get("photo_consent") === "on",
     notes: optionalText(data, "notes", 1000, "الملاحظات لا تتجاوز ١٠٠٠ حرف."),
   };
 }

@@ -13,7 +13,7 @@ function useToast(state: ActionResult) {
   useEffect(() => { if (state.success) notify(state.success); }, [state]);
 }
 
-export function StudentProfileForm({ organizationId, branches, child }: { organizationId: string; branches: RecordOption[]; child?: ChildProfile }) {
+export function StudentProfileForm({ organizationId, branches, sections = [], child }: { organizationId: string; branches: RecordOption[]; sections?: RecordOption[]; child?: ChildProfile }) {
   const [state, action, pending] = useActionState(saveStudentProfile, {});
   const router = useRouter();
   useToast(state);
@@ -31,7 +31,12 @@ export function StudentProfileForm({ organizationId, branches, child }: { organi
         <label>الجنس<select name="gender" defaultValue={child?.gender ?? ""}><option value="">غير محدد</option>{genders.map(item => <option key={item} value={item}>{genderLabels[item]}</option>)}</select></label>
         <label>رقم الهوية أو الإقامة<input name="national_id" inputMode="numeric" pattern="[0-9]{10}" maxLength={10} dir="ltr" defaultValue={child?.national_id ?? ""} /></label>
       </div>
-      <label>الفرع<select name="branch_id" defaultValue={child?.branch_id ?? ""}><option value="">غير محدد</option>{branches.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+      <div className="field-row" style={{ gridTemplateColumns: "repeat(2,minmax(0,1fr))" }}>
+        <label>الفرع<select name="branch_id" defaultValue={child?.branch_id ?? ""}><option value="">غير محدد</option>{branches.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        <label>الشعبة<select name="section_id" defaultValue={child?.section_id ?? ""}><option value="">بدون شعبة</option>{sections.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+      </div>
+      <label style={{ display: "flex", gap: 10, alignItems: "flex-start", fontWeight: 400 }}><input type="checkbox" name="photo_consent" defaultChecked={child?.photo_consent ?? false} style={{ width: 20, minHeight: 20, marginTop: 3 }} />
+        <span>ولي الأمر وافق كتابيًا على تصوير الطفل ومشاركة صوره معه داخل سِير. <span className="hint">احفظ نسخة الموافقة الموقّعة في ملف الطالب الورقي.</span></span></label>
       <label>ملاحظات<textarea name="notes" maxLength={1000} defaultValue={child?.notes ?? ""} /></label>
       <button type="submit">{pending ? "جارٍ الحفظ…" : child ? "حفظ البيانات" : "إضافة الطالب"}</button>
     </fieldset>

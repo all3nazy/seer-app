@@ -7,6 +7,7 @@ import { FamilyLinks, type FamilyLink } from "../../../../components/family-link
 import { statusLabels, uuid } from "../../../../lib/operations";
 import { age, attendanceLabels, attendanceStatuses, attendanceTone, genderLabels, isAttendanceStatus, riyadhToday, type ChildHealth, type ChildProfile } from "../../../../lib/students";
 import { relationshipLabels, type Relationship } from "../../../../lib/team";
+import { sectionLabel } from "../../../../lib/academics";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "ملف الطالب" };
@@ -22,19 +23,24 @@ export default async function StudentFile({ params, searchParams }: { params: Pr
   const context = await loadOrgContext(requestedOrg);
   if ("error" in context) return <OrgUnavailable reason={context.error} />;
   const { client, org, manager } = context;
-  const { data: child, error } = await client.from("children").select("id,full_name,date_of_birth,gender,national_id,branch_id,notes,created_at").eq("organization_id", org).eq("id", id).maybeSingle();
+  const { data: child, error } = await client.from("children").select("id,full_name,date_of_birth,gender,national_id,branch_id,notes,created_at,section_id,photo_consent,photo_consent_at").eq("organization_id", org).eq("id", id).maybeSingle();
   if (error) return <section className="card"><h1>تعذر تحميل ملف الطالب</h1><p role="alert">أعد تحميل الصفحة أو حاول لاحقًا.</p></section>;
   if (!child) notFound();
   const profile = child as ChildProfile;
   const since = new Date(Date.parse(riyadhToday()) - 29 * 86400_000).toISOString().slice(0, 10);
-  const [branchesResult, healthResult, linksResult, guardiansResult, enrollmentsResult, attendanceResult] = await Promise.all([
+  const [branchesResult, healthResult, linksResult, guardiansResult, enrollmentsResult, attendanceResult, sectionsResult, gradesResult] = await Promise.all([
     client.from("branches").select("id,name").eq("organization_id", org).order("name").limit(200),
     client.from("child_health").select("blood_type,allergies,conditions,medications,emergency_name,emergency_phone,notes,updated_at").eq("organization_id", org).eq("child_id", id).maybeSingle(),
     client.from("child_guardians").select("child_id,guardian_id,relationship").eq("organization_id", org).eq("child_id", id),
     client.from("guardians").select("id,full_name,phone").eq("organization_id", org).order("full_name").limit(500),
     client.from("enrollments").select("id,branch_id,status,created_at").eq("organization_id", org).eq("child_id", id).order("created_at", { ascending: false }),
     client.from("attendance").select("attendance_date,status,note").eq("organization_id", org).eq("child_id", id).gte("attendance_date", since).order("attendance_date", { ascending: false }),
+    client.from("sections").select("id,name,grade_level_id").eq("organization_id", org).order("name"),
+    client.from("grade_levels").select("id,name").eq("organization_id", org).order("sort_order"),
   ]);
+  const grades = (gradesResult.data ?? []) as { id: string; name: string }[];
+  const sections = ((sectionsResult.data ?? []) as { id: string; name: string; grade_level_id: string }[]).map(item => ({ id: item.id, name: sectionLabel(item, grades) }));
+  const sectionName = sections.find(item => item.id === profile.section_id)?.name ?? null;
   const branches = (branchesResult.data ?? []) as { id: string; name: string }[];
   const branchName = (value: string | null) => branches.find(item => item.id === value)?.name ?? null;
   const health = (healthResult.data ?? null) as ChildHealth | null;
@@ -49,7 +55,7 @@ export default async function StudentFile({ params, searchParams }: { params: Pr
       <div>
         <p className="hint"><Link href={`/dashboard/children${orgQuery}`}>الطلاب</Link> / ملف الطالب</p>
         <h1>{profile.full_name}</h1>
-        <p>{[age(profile.date_of_birth), profile.gender === "male" || profile.gender === "female" ? genderLabels[profile.gender] : null, branchName(profile.branch_id)].filter(Boolean).join(" · ") || "أكمل بيانات الطالب من الأسفل."}</p>
+        <p>{[age(profile.date_of_birth), profile.gender === "male" || profile.gender === "female" ? genderLabels[profile.gender] : null, sectionName, branchName(profile.branch_id)].filter(Boolean).join(" · ") || "أكمل بيانات الطالب من الأسفل."}</p>
       </div>
     </header>
 
@@ -61,9 +67,11 @@ export default async function StudentFile({ params, searchParams }: { params: Pr
         <Field label="تاريخ الميلاد" value={profile.date_of_birth ? new Date(profile.date_of_birth).toLocaleDateString("ar-SA", { timeZone: "UTC" }) : null} />
         <Field label="رقم الهوية أو الإقامة" value={profile.national_id} ltr />
         <Field label="الفرع" value={branchName(profile.branch_id)} />
+        <Field label="الشعبة" value={sectionName} />
+        <Field label="الموافقة على التصوير" value={profile.photo_consent ? `موافق${profile.photo_consent_at ? ` منذ ${new Date(profile.photo_consent_at).toLocaleDateString("ar-SA", { timeZone: "Asia/Riyadh" })}` : ""}` : "غير موافق"} />
       </dl>
       {profile.notes ? <p style={{ marginTop: 12, whiteSpace: "pre-wrap" }}>{profile.notes}</p> : null}
-      {manager ? <details style={{ marginTop: 16 }}><summary>تعديل البيانات</summary><div style={{ marginTop: 12 }}><StudentProfileForm organizationId={org} branches={branches} child={profile} /></div></details> : null}
+      {manager ? <details style={{ marginTop: 16 }}><summary>تعديل البيانات</summary><div style={{ marginTop: 12 }}><StudentProfileForm organizationId={org} branches={branches} sections={sections} child={profile} /></div></details> : null}
     </section>
 
     <section className="card" aria-labelledby="guardians-title">

@@ -54,6 +54,9 @@ beforeAll(async () => {
   const studentFiles = readdirSync("supabase/migrations").filter(name => name.endsWith("_student_files_attendance.sql"));
   if (studentFiles.length !== 1) throw new Error("Expected exactly one student files and attendance migration");
   await db.exec(readFileSync(`supabase/migrations/${studentFiles[0]}`, "utf8"));
+  const academic = readdirSync("supabase/migrations").filter(name => name.endsWith("_academic_structure.sql"));
+  if (academic.length !== 1) throw new Error("Expected exactly one academic structure migration");
+  await db.exec(readFileSync(`supabase/migrations/${academic[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -469,5 +472,58 @@ describe("student files, health and attendance", () => {
     expect(await rows("select * from public.attendance")).toEqual([]);
     await as("anon");
     await expect(db.exec("select * from public.attendance")).rejects.toBeDefined();
+  });
+});
+
+describe("academic structure", () => {
+  beforeEach(async () => {
+    await db.exec("reset role");
+    await db.exec(`update public.children set section_id=null; delete from public.section_staff; delete from public.sections; delete from public.grade_levels; delete from public.academic_terms; delete from public.academic_years; insert into public.memberships(organization_id,user_id,role) values ('${orgA}','${staff}','staff') on conflict do nothing`);
+  });
+  async function setup() {
+    await as("authenticated", owner);
+    const grade = await rows(`insert into public.grade_levels(organization_id,name,stage,sort_order) values ('${orgA}','KG1','kindergarten',1) returning id`);
+    const section = await rows(`insert into public.sections(organization_id,grade_level_id,name,gender,homeroom_teacher_id) values ('${orgA}','${grade[0].id}','A','girls','${staff}') returning id`);
+    return { grade: grade[0].id as string, section: section[0].id as string };
+  }
+  it("managers build grades and sections; staff read but cannot write", async () => {
+    const { section } = await setup();
+    await db.exec(`update public.children set section_id='${section}' where id='${childA}'`);
+    await as("authenticated", staff);
+    expect(await rows("select name,gender from public.sections")).toEqual([{ name: "A", gender: "girls" }]);
+    await expect(db.exec(`insert into public.grade_levels(organization_id,name,stage) values ('${orgA}','KG2','kindergarten')`)).rejects.toBeDefined();
+    await db.exec(`update public.sections set name='Hacked' where id='${section}'`);
+    expect(await rows("select name from public.sections")).toEqual([{ name: "A" }]);
+    await db.exec("reset role");
+    expect(await rows(`select action from public.audit_events where entity='sections' and record_id='${section}'`)).toContainEqual({ action: "INSERT" });
+  });
+  it("sections, teachers and children cannot cross tenants", async () => {
+    const { grade, section } = await setup();
+    await expect(db.exec(`insert into public.sections(organization_id,grade_level_id,name,homeroom_teacher_id) values ('${orgA}','${grade}','B','${outsider}')`)).rejects.toMatchObject({ code: "23503" });
+    await expect(db.exec(`insert into public.section_staff(organization_id,section_id,user_id) values ('${orgA}','${section}','${outsider}')`)).rejects.toMatchObject({ code: "23503" });
+    await as("authenticated", outsider);
+    expect(await rows("select * from public.sections")).toEqual([]);
+    await expect(db.exec(`update public.children set section_id='${section}' where id='${childB}'`)).rejects.toMatchObject({ code: "23503" });
+  });
+  it("only one current academic year, and dates must be ordered", async () => {
+    await as("authenticated", owner);
+    await db.exec(`insert into public.academic_years(organization_id,name,starts_on,ends_on,is_current) values ('${orgA}','1447','2025-08-24','2026-06-20',true)`);
+    await expect(db.exec(`insert into public.academic_years(organization_id,name,starts_on,ends_on,is_current) values ('${orgA}','1448','2026-08-23','2027-06-20',true)`)).rejects.toMatchObject({ code: "23505" });
+    await expect(db.exec(`insert into public.academic_years(organization_id,name,starts_on,ends_on) values ('${orgA}','Bad','2026-08-23','2026-01-01')`)).rejects.toMatchObject({ code: "23514" });
+  });
+  it("photo consent time comes from the database and clears when consent is withdrawn", async () => {
+    await as("authenticated", owner);
+    await db.exec(`update public.children set photo_consent=true, photo_consent_at='2000-01-01' where id='${childA}'`);
+    const given = await rows(`select photo_consent_at > now() - interval '1 minute' as fresh from public.children where id='${childA}'`);
+    expect(given).toEqual([{ fresh: true }]);
+    await db.exec(`update public.children set photo_consent=false where id='${childA}'`);
+    expect(await rows(`select photo_consent_at from public.children where id='${childA}'`)).toEqual([{ photo_consent_at: null }]);
+  });
+  it("deleting a grade with sections is blocked; deleting a section frees its students", async () => {
+    const { grade, section } = await setup();
+    await db.exec(`update public.children set section_id='${section}' where id='${childA}'`);
+    await expect(db.exec(`delete from public.grade_levels where id='${grade}'`)).rejects.toMatchObject({ code: "23503" });
+    await db.exec(`delete from public.sections where id='${section}'`);
+    expect(await rows(`select section_id from public.children where id='${childA}'`)).toEqual([{ section_id: null }]);
   });
 });
