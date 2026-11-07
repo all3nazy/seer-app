@@ -79,3 +79,22 @@ describe("admissions validation", async () => {
     expect(() => reviewValues(form({ status: "enrolled" }))).toThrow();
   });
 });
+
+describe("finance validation", async () => {
+  const { financeValues, lineValues, paymentValues, lineNet, balance, sar } = await import("../lib/finance");
+  it("validates catalogue, plans and discounts", () => {
+    expect(financeValues("fee_items", form({ name: "رسوم", kind: "tuition", default_amount: "12000", vat_rate: "15" }), false)).toEqual({ name: "رسوم", kind: "tuition", default_amount: 12000, vat_rate: 15, is_active: true });
+    expect(() => financeValues("fee_items", form({ name: "رسوم", kind: "tuition", default_amount: "12,000", vat_rate: "15" }), false)).toThrow();
+    expect(() => financeValues("fee_plans", form({ name: "x", installments: "13" }), false)).toThrow("الأقساط");
+    expect(() => financeValues("discounts", form({ name: "x", reason: "sibling", kind: "percent", value: "120" }), false)).toThrow("١٠٠");
+  });
+  it("validates lines and payments", () => {
+    expect(lineValues(form({ description: "كتب", kind: "books", quantity: "2", unit_price: "250", discount: "50", vat_rate: "15" }))).toMatchObject({ quantity: 2, unit_price: 250, discount: 50 });
+    expect(() => lineValues(form({ description: "كتب", kind: "books", quantity: "1", unit_price: "10", discount: "20", vat_rate: "15" }))).toThrow("الخصم");
+    expect(() => paymentValues(form({ amount: "0", method: "cash", paid_on: "2026-01-01" }))).toThrow();
+    expect(() => paymentValues(form({ amount: "10", method: "bitcoin", paid_on: "2026-01-01" }))).toThrow();
+    expect(lineNet({ quantity: 2, unit_price: 250, discount: 50 })).toBe(450);
+    expect(balance({ amount_sar: 100.1, paid_total: 50.05 })).toBe(50.05);
+    expect(sar(1234.5)).toContain("ر.س");
+  });
+});

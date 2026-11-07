@@ -11,6 +11,7 @@ const links: { href: string; label: string; short: string; icon: IconName; deskt
   { href: "/dashboard/tasks", label: "المهام", short: "المهام", icon: "board" },
   { href: "/dashboard/attendance", label: "الحضور", short: "الحضور", icon: "clock" },
   { href: "/dashboard/children", label: "الطلاب", short: "الطلاب", icon: "child" },
+  { href: "/dashboard/finance", label: "المالية", short: "المالية", icon: "wallet", desktopOnly: true },
   { href: "/dashboard/admissions", label: "القبول والتسجيل", short: "القبول", icon: "flag", desktopOnly: true },
   { href: "/dashboard/academics", label: "الهيكل الدراسي", short: "الصفوف", icon: "list", desktopOnly: true },
   { href: "/dashboard/operations", label: "السجلات", short: "السجلات", icon: "folder", desktopOnly: true },

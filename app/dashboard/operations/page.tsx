@@ -69,6 +69,7 @@ export default async function Operations({ searchParams }: { searchParams: Promi
     </nav>
     <section className="card" aria-labelledby="records-title">
       <h2 id="records-title">{entityLabels[entity]}</h2>
+      {entity === "invoices" ? <p className="info-banner" style={{ marginBottom: 12 }}>للفواتير بالبنود والضريبة والمدفوعات والإيصالات، استخدم <Link href={`/dashboard/finance?org=${encodeURIComponent(org)}&tab=invoices`}>صفحة المالية</Link>.</p> : null}
       {recordsResult.error ? <p role="alert">تعذر تحميل السجلات. أعد تحميل الصفحة أو حاول لاحقًا.</p> : <>
         <p className="pill muted" style={{ width: "fit-content" }}>إجمالي السجلات: {total.toLocaleString("ar-SA")}، الصفحة {page.toLocaleString("ar-SA")}</p>
         {records.length ? <ul className="records">{records.map(record => <li key={record.id}><span>{recordLabel(record, entity === "enrollments" ? childrenResult.options : guardiansResult.options)}</span>{record.status ? <span className="pill">{statusLabels[record.status] ?? record.status}</span> : null}</li>)}</ul> : <p>{page > 1 ? "لا توجد سجلات في هذه الصفحة." : "لا توجد سجلات بعد. يمكنك البدء بإضافة سجل جديد إذا كانت لديك صلاحية الإدارة."}</p>}

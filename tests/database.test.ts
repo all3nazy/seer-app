@@ -60,6 +60,9 @@ beforeAll(async () => {
   const admissions = readdirSync("supabase/migrations").filter(name => name.endsWith("_admissions.sql"));
   if (admissions.length !== 1) throw new Error("Expected exactly one admissions migration");
   await db.exec(readFileSync(`supabase/migrations/${admissions[0]}`, "utf8"));
+  const finance = readdirSync("supabase/migrations").filter(name => name.endsWith("_finance.sql"));
+  if (finance.length !== 1) throw new Error("Expected exactly one finance migration");
+  await db.exec(readFileSync(`supabase/migrations/${finance[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -600,5 +603,101 @@ describe("admissions", () => {
     await expect(db.exec(`select public.convert_application('${app}')`)).rejects.toMatchObject({ code: "23505" });
     await as("authenticated", outsider);
     await expect(db.exec(`select public.convert_application('${app}')`)).rejects.toMatchObject({ code: "P0002" });
+  });
+});
+
+describe("finance", () => {
+  beforeEach(async () => {
+    await db.exec("reset role");
+    await db.exec(`delete from public.payments; delete from public.invoice_lines; delete from public.invoices; delete from public.fee_plan_items; delete from public.fee_plans; delete from public.fee_items; delete from public.discounts; insert into public.memberships(organization_id,user_id,role) values ('${orgA}','${staff}','staff') on conflict do nothing`);
+  });
+  async function draft(relief = false) {
+    await as("authenticated", owner);
+    const inv = (await rows(`insert into public.invoices(organization_id,amount_sar,title,vat_borne_by_state) values ('${orgA}',0,'Term 1',${relief}) returning id`))[0].id as string;
+    await db.exec(`insert into public.invoice_lines(organization_id,invoice_id,description,kind,quantity,unit_price,discount,vat_rate) values
+      ('${orgA}','${inv}','Tuition','tuition',1,10000,1000,15),('${orgA}','${inv}','Books','books',2,250,0,15)`);
+    return inv;
+  }
+  it("totals, VAT and relief are computed by the database", async () => {
+    const inv = await draft();
+    expect(await rows(`select subtotal,discount_total,vat_total,vat_relief,amount_sar from public.invoices where id='${inv}'`))
+      .toEqual([{ subtotal: "10500.00", discount_total: "1000.00", vat_total: "1425.00", vat_relief: "0.00", amount_sar: "10925.00" }]);
+    await db.exec(`update public.invoices set vat_borne_by_state=true where id='${inv}'`);
+    expect(await rows(`select vat_total,vat_relief,amount_sar from public.invoices where id='${inv}'`))
+      .toEqual([{ vat_total: "1425.00", vat_relief: "1350.00", amount_sar: "9575.00" }]);
+    await expect(db.exec(`update public.invoices set subtotal=1, paid_total=99999 where id='${inv}'`)).rejects.toThrow("permission denied");
+    await db.exec(`update public.invoices set amount_sar=1 where id='${inv}'`);
+    expect(await rows(`select amount_sar,subtotal,paid_total from public.invoices where id='${inv}'`)).toEqual([{ amount_sar: "9575.00", subtotal: "10500.00", paid_total: "0.00" }]);
+  });
+  it("issuing numbers invoices in sequence and freezes them", async () => {
+    const a = await draft(), b = await draft();
+    await db.exec(`update public.invoices set status='issued' where id='${a}'`);
+    await db.exec(`update public.invoices set status='issued' where id='${b}'`);
+    const numbers = await rows(`select number from public.invoices where id in ('${a}','${b}') order by number`);
+    expect(numbers.map(row => row.number)).toEqual([(numbers[0].number as number), (numbers[0].number as number) + 1]);
+    await expect(db.exec(`insert into public.invoice_lines(organization_id,invoice_id,description,unit_price) values ('${orgA}','${a}','Extra',10)`)).rejects.toMatchObject({ code: "42501" });
+    await expect(db.exec(`update public.invoices set title='Changed' where id='${a}'`)).rejects.toMatchObject({ code: "42501" });
+    await expect(db.exec(`update public.invoices set status='draft' where id='${a}'`)).rejects.toMatchObject({ code: "42501" });
+    await expect(db.exec(`update public.invoices set status='paid' where id='${a}'`)).rejects.toMatchObject({ code: "23514" });
+  });
+  it("payments: issued only, never above balance, full payment marks paid, removal reopens", async () => {
+    const inv = await draft();
+    await expect(db.exec(`insert into public.payments(organization_id,invoice_id,amount,method,paid_on) values ('${orgA}','${inv}',100,'cash',current_date)`)).rejects.toMatchObject({ code: "23514" });
+    await db.exec(`update public.invoices set status='issued' where id='${inv}'`);
+    await db.exec(`insert into public.payments(organization_id,invoice_id,amount,method,paid_on) values ('${orgA}','${inv}',5000,'mada',current_date)`);
+    expect(await rows(`select status,paid_total from public.invoices where id='${inv}'`)).toEqual([{ status: "issued", paid_total: "5000.00" }]);
+    await expect(db.exec(`insert into public.payments(organization_id,invoice_id,amount,method,paid_on) values ('${orgA}','${inv}',99999,'cash',current_date)`)).rejects.toMatchObject({ code: "23514" });
+    await expect(db.exec(`update public.invoices set status='void' where id='${inv}'`)).rejects.toMatchObject({ code: "23514" });
+    const last = (await rows(`insert into public.payments(organization_id,invoice_id,amount,method,paid_on) values ('${orgA}','${inv}',5925,'bank_transfer',current_date) returning id,receipt_number,recorded_by`))[0];
+    expect(last.recorded_by).toBe(owner);
+    expect(await rows(`select status,paid_total from public.invoices where id='${inv}'`)).toEqual([{ status: "paid", paid_total: "10925.00" }]);
+    await expect(db.exec(`update public.payments set amount=1 where id='${last.id}'`)).rejects.toBeDefined();
+    await db.exec(`delete from public.payments where id='${last.id}'`);
+    expect(await rows(`select status,paid_total from public.invoices where id='${inv}'`)).toEqual([{ status: "issued", paid_total: "5000.00" }]);
+  });
+  it("staff and other tenants cannot see or touch finance", async () => {
+    const inv = await draft();
+    await db.exec(`insert into public.fee_items(organization_id,name,kind,default_amount) values ('${orgA}','Tuition','tuition',10000)`);
+    for (const user of [staff, outsider]) {
+      await as("authenticated", user);
+      expect(await rows("select * from public.invoice_lines")).toEqual([]);
+      expect(await rows("select * from public.fee_items")).toEqual([]);
+      expect(await rows("select * from public.payments")).toEqual([]);
+      await expect(db.exec(`insert into public.payments(organization_id,invoice_id,amount,method,paid_on) values ('${orgA}','${inv}',1,'cash',current_date)`)).rejects.toBeDefined();
+    }
+    await as("anon");
+    await expect(db.exec("select * from public.payments")).rejects.toBeDefined();
+  });
+  it("plans reference only the organization's own items and grades", async () => {
+    await as("authenticated", owner);
+    const item = (await rows(`insert into public.fee_items(organization_id,name,kind,default_amount) values ('${orgA}','Tuition','tuition',10000) returning id`))[0].id;
+    const plan = (await rows(`insert into public.fee_plans(organization_id,name,installments) values ('${orgA}','KG plan',3) returning id`))[0].id;
+    await db.exec(`insert into public.fee_plan_items(organization_id,fee_plan_id,fee_item_id,amount) values ('${orgA}','${plan}','${item}',9000)`);
+    await as("authenticated", outsider);
+    await expect(db.exec(`insert into public.fee_plan_items(organization_id,fee_plan_id,fee_item_id,amount) values ('${orgB}','${plan}','${item}',1)`)).rejects.toBeDefined();
+    await as("authenticated", owner);
+    await expect(db.exec(`insert into public.discounts(organization_id,name,kind,value) values ('${orgA}','Too much','percent',150)`)).rejects.toMatchObject({ code: "23514" });
+  });
+});
+
+describe("finance plan invoices", () => {
+  it("splits a plan into installments per student and applies discounts", async () => {
+    await db.exec("reset role");
+    await db.exec(`delete from public.payments; delete from public.invoice_lines; delete from public.invoices; delete from public.fee_plan_items; delete from public.fee_plans; delete from public.fee_items; delete from public.discounts; update public.children set section_id=null; delete from public.sections; delete from public.grade_levels`);
+    await as("authenticated", owner);
+    const grade = (await rows(`insert into public.grade_levels(organization_id,name,stage) values ('${orgA}','G1','primary') returning id`))[0].id;
+    const section = (await rows(`insert into public.sections(organization_id,grade_level_id,name) values ('${orgA}','${grade}','A') returning id`))[0].id;
+    await db.exec(`update public.children set section_id='${section}' where id='${childA}'`);
+    const item = (await rows(`insert into public.fee_items(organization_id,name,kind,default_amount,vat_rate) values ('${orgA}','Tuition','tuition',1000,15) returning id`))[0].id;
+    const plan = (await rows(`insert into public.fee_plans(organization_id,name,installments) values ('${orgA}','Plan',3) returning id`))[0].id;
+    await db.exec(`insert into public.fee_plan_items(organization_id,fee_plan_id,fee_item_id,amount) values ('${orgA}','${plan}','${item}',1000)`);
+    const discount = (await rows(`insert into public.discounts(organization_id,name,reason,kind,value) values ('${orgA}','Sibling','sibling','percent',10) returning id`))[0].id;
+    expect(await rows(`select public.generate_plan_invoices('${plan}','${section}',null,'2026-09-01',1,'${discount}',true) as n`)).toEqual([{ n: 3 }]);
+    const invoices = await rows(`select due_date::text as due, subtotal, discount_total, status from public.invoices where child_id='${childA}' order by due_date`);
+    expect(invoices.map(row => row.due)).toEqual(["2026-09-01", "2026-10-01", "2026-11-01"]);
+    expect(invoices.map(row => row.subtotal)).toEqual(["333.33", "333.33", "333.34"]);
+    expect(invoices.every(row => row.status === "issued")).toBe(true);
+    await as("authenticated", outsider);
+    await expect(db.exec(`select public.generate_plan_invoices('${plan}','${section}',null,'2026-09-01')`)).rejects.toMatchObject({ code: "P0002" });
   });
 });
