@@ -57,6 +57,9 @@ beforeAll(async () => {
   const academic = readdirSync("supabase/migrations").filter(name => name.endsWith("_academic_structure.sql"));
   if (academic.length !== 1) throw new Error("Expected exactly one academic structure migration");
   await db.exec(readFileSync(`supabase/migrations/${academic[0]}`, "utf8"));
+  const admissions = readdirSync("supabase/migrations").filter(name => name.endsWith("_admissions.sql"));
+  if (admissions.length !== 1) throw new Error("Expected exactly one admissions migration");
+  await db.exec(readFileSync(`supabase/migrations/${admissions[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -525,5 +528,77 @@ describe("academic structure", () => {
     await expect(db.exec(`delete from public.grade_levels where id='${grade}'`)).rejects.toMatchObject({ code: "23503" });
     await db.exec(`delete from public.sections where id='${section}'`);
     expect(await rows(`select section_id from public.children where id='${childA}'`)).toEqual([{ section_id: null }]);
+  });
+});
+
+describe("admissions", () => {
+  const payload = (extra: Record<string, string> = {}) => JSON.stringify({ child_name: "Applicant Child", guardian_name: "Parent", guardian_phone: "+966500000001", relationship: "mother", ...extra }).replace(/'/g, "''");
+  beforeEach(async () => {
+    await db.exec("reset role");
+    await db.exec(`delete from public.applications; delete from public.admission_settings`);
+  });
+  async function open(limit = 100) {
+    await db.exec("reset role");
+    await db.exec(`insert into public.admission_settings(organization_id,is_open,intro,daily_limit) values ('${orgA}',true,'Welcome',${limit})`);
+  }
+  it("the public can submit only while admissions are open, and cannot read applications", async () => {
+    await as("anon");
+    expect(await rows(`select public.admission_form('${orgA}') as form`)).toEqual([{ form: null }]);
+    await expect(db.exec(`select public.submit_application('${orgA}','${payload()}'::jsonb)`)).rejects.toMatchObject({ code: "42501" });
+    await open();
+    await as("anon");
+    const form = await rows(`select public.admission_form('${orgA}') as form`);
+    expect(form[0].form).toMatchObject({ intro: "Welcome" });
+    const ref = await rows(`select public.submit_application('${orgA}','${payload()}'::jsonb) as ref`);
+    expect(ref[0].ref).toMatch(/^[A-HJ-NP-Z2-9]{8}$/);
+    await expect(db.exec("select * from public.applications")).rejects.toBeDefined();
+    await expect(db.exec(`insert into public.applications(organization_id,reference,child_name,guardian_name,guardian_phone) values ('${orgA}','ABCDEFGH','x','y','+966500000000')`)).rejects.toBeDefined();
+  });
+  it("families see only status with the right reference and phone", async () => {
+    await open();
+    await as("anon");
+    const ref = (await rows(`select public.submit_application('${orgA}','${payload()}'::jsonb) as ref`))[0].ref as string;
+    expect(await rows(`select status,organization_name from public.application_status('${ref.toLowerCase()}','+966500000001')`)).toMatchObject([{ status: "new" }]);
+    expect(await rows(`select * from public.application_status('${ref}','+966500000009')`)).toEqual([]);
+  });
+  it("the daily limit stops floods, and grades must belong to the organization", async () => {
+    await open(1);
+    await as("anon");
+    await db.exec(`select public.submit_application('${orgA}','${payload()}'::jsonb)`);
+    await expect(db.exec(`select public.submit_application('${orgA}','${payload()}'::jsonb)`)).rejects.toMatchObject({ code: "54000" });
+    await db.exec("reset role");
+    await db.exec(`update public.admission_settings set daily_limit=100`);
+    await as("anon");
+    await expect(db.exec(`select public.submit_application('${orgA}','${payload({ grade_level_id: branchB })}'::jsonb)`)).rejects.toMatchObject({ code: "23503" });
+    await expect(db.exec(`select public.submit_application('${orgA}','${payload({ guardian_phone: "bad" })}'::jsonb)`)).rejects.toBeDefined();
+  });
+  it("only managers of the same organization review applications", async () => {
+    await open();
+    await as("anon");
+    await db.exec(`select public.submit_application('${orgA}','${payload()}'::jsonb)`);
+    await as("authenticated", staff);
+    expect(await rows("select * from public.applications")).toEqual([]);
+    await as("authenticated", outsider);
+    expect(await rows("select * from public.applications")).toEqual([]);
+    await as("authenticated", owner);
+    await db.exec(`update public.applications set status='interview', staff_notes='Call Sunday'`);
+    expect(await rows("select status from public.applications")).toEqual([{ status: "interview" }]);
+    await expect(db.exec(`update public.applications set status='enrolled'`)).rejects.toMatchObject({ code: "23514" });
+    await expect(db.exec(`update public.applications set guardian_phone='+966511111111'`)).rejects.toBeDefined();
+  });
+  it("conversion creates the child, guardian, link and enrolment once", async () => {
+    await open();
+    await as("anon");
+    await db.exec(`select public.submit_application('${orgA}','${payload()}'::jsonb)`);
+    await as("authenticated", owner);
+    const app = (await rows("select id from public.applications"))[0].id as string;
+    const child = (await rows(`select public.convert_application('${app}') as id`))[0].id as string;
+    expect(await rows(`select full_name from public.children where id='${child}'`)).toEqual([{ full_name: "Applicant Child" }]);
+    expect(await rows(`select relationship from public.child_guardians where child_id='${child}'`)).toEqual([{ relationship: "mother" }]);
+    expect(await rows(`select status from public.enrollments where child_id='${child}'`)).toEqual([{ status: "approved" }]);
+    expect(await rows(`select status,child_id from public.applications where id='${app}'`)).toEqual([{ status: "enrolled", child_id: child }]);
+    await expect(db.exec(`select public.convert_application('${app}')`)).rejects.toMatchObject({ code: "23505" });
+    await as("authenticated", outsider);
+    await expect(db.exec(`select public.convert_application('${app}')`)).rejects.toMatchObject({ code: "P0002" });
   });
 });

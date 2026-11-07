@@ -63,3 +63,19 @@ describe("academic structure validation", async () => {
     expect(sectionLabel({ name: "أ", grade_level_id: "g" }, [{ id: "g", name: "الأول" }])).toBe("الأول — أ");
   });
 });
+
+describe("admissions validation", async () => {
+  const { applicationPayload, reviewValues, riyadhLocalInput } = await import("../lib/admissions");
+  const base = { child_name: "ريم", guardian_name: "أم ريم", guardian_phone: "050 000 0001", relationship: "mother", consent: "on" };
+  it("normalises the public form and requires consent", () => {
+    expect(applicationPayload(form(base))).toMatchObject({ child_name: "ريم", guardian_phone: "0500000001", relationship: "mother", grade_level_id: "" });
+    expect(() => applicationPayload(form({ ...base, consent: "" }))).toThrow("وافق");
+    expect(() => applicationPayload(form({ ...base, guardian_phone: "12" }))).toThrow();
+    expect(() => applicationPayload(form({ ...base, relationship: "boss" }))).toThrow();
+  });
+  it("reads interview times as Riyadh time and refuses manual enrolment", () => {
+    expect(reviewValues(form({ status: "interview", interview_at: "2026-11-10T09:30" }))).toMatchObject({ status: "interview", interview_at: "2026-11-10T06:30:00.000Z" });
+    expect(riyadhLocalInput("2026-11-10T06:30:00.000Z")).toBe("2026-11-10T09:30");
+    expect(() => reviewValues(form({ status: "enrolled" }))).toThrow();
+  });
+});
