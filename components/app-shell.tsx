@@ -6,10 +6,11 @@ import { SoundToggle, ThemeToggle } from "./preferences";
 import { FeedbackLayer } from "./feedback";
 import SignOutButton from "./sign-out-button";
 
-const links: { href: string; label: string; short: string; icon: IconName }[] = [
+const links: { href: string; label: string; short: string; icon: IconName; desktopOnly?: boolean }[] = [
   { href: "/dashboard", label: "لوحة التشغيل", short: "الرئيسية", icon: "home" },
   { href: "/dashboard/tasks", label: "المهام", short: "المهام", icon: "board" },
   { href: "/dashboard/operations", label: "السجلات", short: "السجلات", icon: "folder" },
+  { href: "/dashboard/team", label: "الفريق", short: "الفريق", icon: "users", desktopOnly: true },
   { href: "/dashboard/assistant", label: "المساعد", short: "المساعد", icon: "spark" },
   { href: "/dashboard/settings", label: "الإعدادات", short: "الإعدادات", icon: "settings" },
 ];
@@ -31,7 +32,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <main className={`main${path === "/dashboard" || path.startsWith("/dashboard/tasks") ? " wide" : ""}`} id="main-content" tabIndex={-1}>{children}</main>
     </div>
     <nav className="tabbar" aria-label="التنقل السفلي">
-      {links.map(link => <Link key={link.href} href={link.href} aria-current={current(link.href)}><Icon name={link.icon} />{link.short}</Link>)}
+      {links.filter(link => !link.desktopOnly).map(link => <Link key={link.href} href={link.href} aria-current={current(link.href)}><Icon name={link.icon} />{link.short}</Link>)}
     </nav>
     <FeedbackLayer />
   </div>;

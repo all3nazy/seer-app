@@ -14,8 +14,9 @@ export type Task = {
   priority: TaskPriority;
   due_date: string | null;
   completed_at?: string | null;
+  assignee_id?: string | null;
 };
-export type TaskValues = { title: string; notes: string | null; priority: TaskPriority; due_date: string | null; status?: TaskStatus };
+export type TaskValues = { title: string; notes: string | null; priority: TaskPriority; due_date: string | null; status?: TaskStatus; assignee_id?: string | null };
 
 export function isTaskStatus(value: unknown): value is TaskStatus { return typeof value === "string" && taskStatuses.some(status => status === value); }
 function isTaskPriority(value: unknown): value is TaskPriority { return typeof value === "string" && taskPriorities.some(priority => priority === value); }
@@ -38,7 +39,13 @@ export function taskValues(data: FormData): TaskValues {
     due_date = due;
   }
   const status = data.get("status");
-  return { title: title.trim(), notes: typeof notes === "string" && notes.trim() ? notes.trim() : null, priority, due_date, ...(status ? { status: taskStatus(status) } : {}) };
+  // The assignee is only changed when the form includes the field; empty means unassigned.
+  const assignee = data.has("assignee_id") ? data.get("assignee_id") : undefined;
+  return {
+    title: title.trim(), notes: typeof notes === "string" && notes.trim() ? notes.trim() : null, priority, due_date,
+    ...(status ? { status: taskStatus(status) } : {}),
+    ...(assignee !== undefined ? { assignee_id: assignee ? uuid(assignee) : null } : {}),
+  };
 }
 export function taskId(value: unknown): string { return uuid(value); }
 

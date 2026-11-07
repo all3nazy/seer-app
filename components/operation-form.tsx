@@ -1,6 +1,6 @@
 "use client";
 import { useActionState, useState } from "react";
-import { saveOperation, saveOrganization } from "../app/dashboard/operations/actions";
+import { deleteOperation, saveOperation, saveOrganization } from "../app/dashboard/operations/actions";
 import { statusLabels, type Entity, type OperationRecord, type RecordOption } from "../lib/operations";
 
 type FormProps = {
@@ -58,6 +58,7 @@ export function OperationForm(props: FormProps) {
       {props.records.map((row, index) => <option key={row.id} value={row.id}>تعديل: {row.name ?? row.full_name ?? `${statusLabels[row.status ?? ""] ?? "سجل"} — ${index + 1}`}</option>)}
     </select></label>
     <RecordEditor key={`${props.organizationId}:${props.entity}:${recordId}`} {...props} record={record} />
+    {record ? <DeleteRecord key={`delete:${record.id}`} organizationId={props.organizationId} entity={props.entity} record={record} /> : null}
   </div>;
 }
 export function OrganizationForm({ organizationId, name, type }: { organizationId: string; name: string; type: string }) {
@@ -71,6 +72,22 @@ export function OrganizationForm({ organizationId, name, type }: { organizationI
       <label><input type="checkbox" name="confirmed" value="yes" required style={{ width: 24, display: "inline", verticalAlign: "middle" }} /> أؤكد حفظ إعدادات المنشأة</label>
       <button disabled={pending}>{pending ? "جارٍ الحفظ…" : "حفظ الإعدادات"}</button>
     </fieldset>
+    {state.error ? <p role="alert">{state.error}</p> : null}
+    {state.success ? <p role="status">{state.success}</p> : null}
+  </form>;
+}
+
+function DeleteRecord({ organizationId, entity, record }: { organizationId: string; entity: Entity; record: OperationRecord }) {
+  const [state, action, pending] = useActionState(deleteOperation, {});
+  const invoiceLocked = entity === "invoices" && record.status !== "draft";
+  return <form action={action} className="danger-zone" aria-label="حذف السجل">
+    <input type="hidden" name="organization_id" value={organizationId} />
+    <input type="hidden" name="entity" value={entity} />
+    <input type="hidden" name="record_id" value={record.id} />
+    {invoiceLocked ? <p className="hint">الفواتير الصادرة والمسددة ما تنحذف حفاظًا على السجل المالي. لإلغائها غيّر حالتها إلى «ملغاة».</p> : <>
+      <label><input type="checkbox" name="confirmed" value="yes" required /> أفهم أن الحذف نهائي ولا يمكن التراجع عنه</label>
+      <button type="submit" className="btn btn-danger" disabled={pending}>{pending ? "جارٍ الحذف…" : "حذف السجل نهائيًا"}</button>
+    </>}
     {state.error ? <p role="alert">{state.error}</p> : null}
     {state.success ? <p role="status">{state.success}</p> : null}
   </form>;

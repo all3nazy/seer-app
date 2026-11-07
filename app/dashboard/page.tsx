@@ -18,6 +18,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   if (authError || !user) redirect("/login");
   const loadMemberships = () => supabase.from("memberships")
     .select("organization_id,role,organizations(name,type)").eq("user_id", user.id);
+  // Joins any organization that invited this verified email. Takes no client input;
+  // failures (for example before the team migration) leave the page unchanged.
+  await supabase.rpc("claim_member_invitations");
   let { data: memberships, error: membershipError } = await loadMemberships();
   if (!membershipError && memberships?.length === 0) {
     // This RPC accepts no client-provided email, tenant or role. PostgreSQL checks

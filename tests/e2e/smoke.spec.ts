@@ -35,7 +35,7 @@ test("sign-in has keyboard reachable named fields and submission", async ({ page
 });
 
 test("anonymous users cannot render protected operations or assistant", async ({ page }) => {
-  for (const path of ["/dashboard", "/dashboard/operations?org=00000000-0000-0000-0000-000000000001", "/dashboard/assistant", "/dashboard/tasks"]) {
+  for (const path of ["/dashboard", "/dashboard/operations?org=00000000-0000-0000-0000-000000000001", "/dashboard/assistant", "/dashboard/tasks", "/dashboard/team", "/dashboard/settings"]) {
     await page.goto(path);
     await expect(page).toHaveURL(/^http:\/\/(127\.0\.0\.1|localhost):3100\/login$/);
     await expect(page.getByRole("heading", { name: "تسجيل الدخول" })).toBeVisible();

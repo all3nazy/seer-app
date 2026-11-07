@@ -5,8 +5,9 @@ import { dueLabel, isOverdue, neighbourStatus, riyadhToday, taskPriorityLabels, 
 import { Icon, SunPhase } from "./icons";
 import { celebrate, notify } from "./feedback";
 import { play } from "../lib/sound";
+import { memberName, type Member } from "../lib/team";
 
-type Props = { organizationId: string; manager: boolean; initialTasks: Task[] };
+type Props = { organizationId: string; manager: boolean; initialTasks: Task[]; members?: Member[]; me?: string };
 const emptyCopy: Record<TaskStatus, string> = {
   todo: "ما فيه مهام جديدة.",
   doing: "انقل مهمة هنا لما تبدأ فيها.",
@@ -14,7 +15,13 @@ const emptyCopy: Record<TaskStatus, string> = {
   done: "أول إنجاز يظهر هنا.",
 };
 
-export function TaskBoard({ organizationId, manager, initialTasks }: Props) {
+export function TaskBoard({ organizationId, manager, initialTasks, members = [], me }: Props) {
+  const [mineOnly, setMineOnly] = useState(false);
+  const nameOf = (id: string | null | undefined) => id ? memberName(members.find(member => member.user_id === id), id === me) : null;
+  const assigneeSelect = (value?: string | null) => members.length ? <label>المسؤول<select name="assignee_id" defaultValue={value ?? ""}>
+    <option value="">بدون مسؤول</option>
+    {members.map(member => <option key={member.user_id} value={member.user_id}>{memberName(member, member.user_id === me)}</option>)}
+  </select></label> : null;
   const [tasks, setTasks] = useState(initialTasks);
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<TaskStatus | null>(null);
@@ -24,8 +31,9 @@ export function TaskBoard({ organizationId, manager, initialTasks }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const composer = useRef<HTMLFormElement>(null);
   const today = riyadhToday();
-  const grouped = useMemo(() => Object.fromEntries(taskStatuses.map(status => [status, tasks.filter(task => task.status === status)])) as Record<TaskStatus, Task[]>, [tasks]);
-  const overdue = tasks.filter(task => isOverdue(task, today)).length;
+  const visibleTasks = useMemo(() => mineOnly && me ? tasks.filter(task => task.assignee_id === me) : tasks, [tasks, mineOnly, me]);
+  const grouped = useMemo(() => Object.fromEntries(taskStatuses.map(status => [status, visibleTasks.filter(task => task.status === status)])) as Record<TaskStatus, Task[]>, [visibleTasks]);
+  const overdue = visibleTasks.filter(task => isOverdue(task, today)).length;
 
   function move(task: Task, status: TaskStatus) {
     if (task.status === status) return;
@@ -85,7 +93,7 @@ export function TaskBoard({ organizationId, manager, initialTasks }: Props) {
 
   const [stage, setStage] = useState<TaskStatus>("todo");
   const n = (value: number) => value.toLocaleString("ar-SA");
-  const total = tasks.length;
+  const total = visibleTasks.length;
   const tones: Record<TaskStatus, string> = { todo: "todo", doing: "doing", review: "review", done: "done" };
   return <div className="board-page" aria-busy={pending}>
     <div className="stats">
@@ -97,9 +105,14 @@ export function TaskBoard({ organizationId, manager, initialTasks }: Props) {
       <label>مهمة جديدة<input name="title" required maxLength={120} placeholder="جهّز تقويم الفصل الدراسي" /></label>
       <label>الأولوية<select name="priority" defaultValue="normal">{Object.entries(taskPriorityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       <label>التسليم<input type="date" name="due_date" /></label>
+      {assigneeSelect()}
       <button type="submit" className="btn-primary" disabled={pending}><Icon name="plus" />إضافة</button>
     </form> : <p className="info-banner">تقدر تنقل المهام بين المراحل. الإضافة والتعديل للمالك أو المدير.</p>}
 
+    {me && members.length > 1 ? <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }} role="group" aria-label="عرض المهام">
+      <button type="button" className={`chip-soft${!mineOnly ? " ok" : ""}`} aria-pressed={!mineOnly} onClick={() => setMineOnly(false)}>كل المهام</button>
+      <button type="button" className={`chip-soft${mineOnly ? " ok" : ""}`} aria-pressed={mineOnly} onClick={() => setMineOnly(true)}>مهامي ({tasks.filter(task => task.assignee_id === me && task.status !== "done").length.toLocaleString("ar-SA")})</button>
+    </div> : null}
     <nav className="segments stage-tabs" aria-label="المراحل">
       {taskStatuses.map(status => <button key={status} type="button" aria-pressed={stage === status} onClick={() => setStage(status)}>{taskStatusLabels[status]}<span className="count">{n(grouped[status].length)}</span></button>)}
     </nav>
@@ -130,6 +143,7 @@ export function TaskBoard({ organizationId, manager, initialTasks }: Props) {
             <div className="task-meta">
               {task.status === "done" ? <span className="status ok">منجزة</span> : null}
               {task.priority === "high" && task.status !== "done" ? <span className="chip-soft coral">عاجلة</span> : null}
+              {task.assignee_id ? <span className="chip-soft"><Icon name="users" />{nameOf(task.assignee_id)}</span> : null}
               {task.due_date ? <span className={`chip-soft ${late ? "rose" : ""}`}><Icon name="calendar" />{late ? "متأخرة، " : ""}{dueLabel(task.due_date, today)}</span> : null}
             </div>
             <div className="task-actions">
@@ -154,6 +168,7 @@ export function TaskBoard({ organizationId, manager, initialTasks }: Props) {
           <label>الأولوية<select name="priority" defaultValue={editing.priority}>{Object.entries(taskPriorityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
           <label>التسليم<input type="date" name="due_date" defaultValue={editing.due_date ?? ""} /></label>
         </div>
+        {assigneeSelect(editing.assignee_id)}
         <div className="dialog-actions">
           <button type="button" className="btn btn-danger" onClick={remove} disabled={pending}>حذف</button>
           <div><button type="button" className="btn" onClick={() => dialog.current?.close()}>إلغاء</button><button type="submit" className="btn-primary" disabled={pending}>حفظ التعديلات</button></div>

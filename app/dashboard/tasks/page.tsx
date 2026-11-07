@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "../../../lib/supabase/server";
 import { canManage } from "../../../lib/operations";
 import type { Task } from "../../../lib/tasks";
+import type { Member } from "../../../lib/team";
 import { TaskBoard } from "../../../components/task-board";
 
 export const dynamic = "force-dynamic";
@@ -21,9 +22,11 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
   const name = (member.organizations as unknown as { name: string } | null)?.name ?? "المنشأة";
   // Search is a plain title match; LIKE wildcards typed by the user are escaped.
   const q = typeof params.q === "string" ? params.q.trim().slice(0, 80) : "";
-  let query = client.from("tasks").select("id,title,notes,status,priority,due_date,completed_at").eq("organization_id", org);
+  let query = client.from("tasks").select("id,title,notes,status,priority,due_date,completed_at,assignee_id").eq("organization_id", org);
   if (q) query = query.ilike("title", `%${q.replace(/[\\%_]/g, character => `\\${character}`)}%`);
   const { data: tasks, error: tasksError } = await query.order("created_at", { ascending: false }).limit(500);
+  // Names only; members never see each other's emails.
+  const { data: members } = await client.from("memberships").select("user_id,role,display_name").eq("organization_id", org).order("joined_at");
   return <>
     <header className="page-head">
       <div><h1>المهام</h1><p>{q ? <>نتائج البحث عن «{q}» في {name}. <Link href={`/dashboard/tasks?org=${encodeURIComponent(org)}`}>عرض كل المهام</Link></> : <>سير العمل في {name}: من الفكرة إلى الإنجاز.</>}</p></div>
@@ -32,6 +35,6 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
       </nav> : null}
     </header>
     {tasksError ? <section className="card"><h2>لوحة المهام غير جاهزة بعد</h2><p role="alert">تعذر تحميل المهام. إذا كانت هذه أول مرة، يلزم تطبيق ترحيل قاعدة البيانات الخاص بالمهام.</p></section>
-      : <TaskBoard key={`${org}:${q}`} organizationId={org} manager={canManage(member.role)} initialTasks={(tasks ?? []) as Task[]} />}
+      : <TaskBoard key={`${org}:${q}`} organizationId={org} manager={canManage(member.role)} initialTasks={(tasks ?? []) as Task[]} members={(members ?? []) as Member[]} me={user.id} />}
   </>;
 }

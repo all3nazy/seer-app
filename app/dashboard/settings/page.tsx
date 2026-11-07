@@ -4,6 +4,7 @@ import { supportLink } from "../../../lib/support";
 import { Icon } from "../../../components/icons";
 import { SoundSwitchRow, ThemeSwitchRow } from "../../../components/preferences";
 import SignOutButton from "../../../components/sign-out-button";
+import { MyNameForm } from "../../../components/my-name-form";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "الإعدادات" };
@@ -13,7 +14,8 @@ export default async function SettingsPage() {
   const supabase = await createSupabaseServerClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) redirect("/login");
-  const { data: memberships } = await supabase.from("memberships").select("organization_id,role,organizations(name)").eq("user_id", user.id);
+  const { data: memberships } = await supabase.from("memberships").select("organization_id,role,display_name,organizations(name)").eq("user_id", user.id);
+  const myName = (memberships ?? []).map(m => (m as { display_name?: string | null }).display_name).find(Boolean) ?? "";
   const support = supportLink(process.env.SEER_SUPPORT_WHATSAPP ?? "");
   const email = user.email ?? "";
   return <div style={{ maxWidth: 640 }}>
@@ -21,6 +23,13 @@ export default async function SettingsPage() {
     <div className="stack">
       <div className="list-row"><span className="avatar" style={{ margin: 0, width: 48, height: 48, fontSize: 18 }} aria-hidden="true">{(email[0] ?? "س").toUpperCase()}</span>
         <span className="body"><span className="title" dir="ltr" style={{ textAlign: "end" }}>{email}</span><span className="sub">{(memberships ?? []).map(m => `${(m.organizations as unknown as { name: string } | null)?.name ?? "منشأة"} (${roleNames[m.role] ?? "عضو"})`).join("، ") || "غير مرتبط بمنشأة"}</span></span></div>
+      <section aria-labelledby="me"><h2 id="me" className="section-label">اسمك في المنشأة</h2>
+        <MyNameForm current={myName} />
+        <p className="hint" style={{ marginTop: 8 }}>يظهر لزملائك في الفريق وعلى المهام المسندة لك.</p>
+      </section>
+      <section aria-labelledby="team-link"><h2 id="team-link" className="section-label">الفريق</h2>
+        <div className="group"><a className="group-row" href="/dashboard/team"><span className="tile-icon tone-plum"><Icon name="users" /></span><span className="grow">أعضاء المنشأة والدعوات</span><Icon name="arrowNext" /></a></div>
+      </section>
       <section aria-labelledby="general"><h2 id="general" className="section-label">الإعدادات العامة</h2>
         <div className="group"><ThemeSwitchRow /><SoundSwitchRow /></div>
         <p className="hint" style={{ marginTop: 8 }}>تنحفظ هذي التفضيلات في متصفحك فقط.</p>

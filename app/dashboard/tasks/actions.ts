@@ -5,7 +5,7 @@ import { canManage, uuid, ValidationError } from "../../../lib/operations";
 import { taskId, taskStatus, taskValues, type Task } from "../../../lib/tasks";
 
 export type TaskResult = { error?: string; success?: string; task?: Task };
-const columns = "id,title,notes,status,priority,due_date,completed_at";
+const columns = "id,title,notes,status,priority,due_date,completed_at,assignee_id";
 
 // Each action re-checks the session and membership; RLS and the guard trigger enforce the same rules again in PostgreSQL.
 async function member(org: string, needsManager: boolean) {
@@ -29,6 +29,7 @@ export async function createTask(data: FormData): Promise<TaskResult> {
     const access = await member(org, true);
     if ("error" in access) return { error: access.error };
     const { data: task, error } = await access.client.from("tasks").insert({ ...values, organization_id: org }).select(columns).single();
+    if (error?.code === "23503") return { error: "الشخص المختار لم يعد عضوًا في المنشأة. أعد تحميل الصفحة." };
     if (error || !task) return { error: "تعذر إضافة المهمة. أعد تحميل الصفحة وحاول مجددًا." };
     refresh();
     return { success: "أُضيفت المهمة", task: task as Task };
@@ -42,6 +43,7 @@ export async function updateTask(data: FormData): Promise<TaskResult> {
     const access = await member(org, true);
     if ("error" in access) return { error: access.error };
     const { data: task, error } = await access.client.from("tasks").update(values).eq("id", id).eq("organization_id", org).select(columns).maybeSingle();
+    if (error?.code === "23503") return { error: "الشخص المختار لم يعد عضوًا في المنشأة. أعد تحميل الصفحة." };
     if (error || !task) return { error: "تعذر حفظ التعديل. ربما حُذفت المهمة؛ أعد تحميل الصفحة." };
     refresh();
     return { success: "حُفظت التعديلات", task: task as Task };
