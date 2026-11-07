@@ -102,7 +102,7 @@ export function AssistantPanel({ organizations, supportPhone }: { organizations:
         </div>
       </article>)}
     </div>
-    <div className="suggestions" aria-label="اقتراحات"><span>جرّب:</span>
+    <div className="suggestions" aria-label="اقتراحات">
       {suggestions.map(item => <button key={item.label} type="button" className="suggestion" disabled={busy} onClick={() => void run(item.label, item.intent)}>{item.label}</button>)}
     </div>
     <form onSubmit={ask} className="assistant-form">

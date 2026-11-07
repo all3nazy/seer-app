@@ -8,8 +8,8 @@ import { play } from "../lib/sound";
 
 type Props = { organizationId: string; manager: boolean; initialTasks: Task[] };
 const emptyCopy: Record<TaskStatus, string> = {
-  todo: "لا شيء جديد هنا.",
-  doing: "اضغط دائرة أي مهمة لتبدأ العمل عليها.",
+  todo: "ما فيه مهام جديدة.",
+  doing: "انقل مهمة هنا لما تبدأ فيها.",
   review: "ما فيه شيء ينتظر المراجعة.",
   done: "أول إنجاز يظهر هنا.",
 };
@@ -83,55 +83,64 @@ export function TaskBoard({ organizationId, manager, initialTasks }: Props) {
     });
   }
 
-  const open = tasks.length - grouped.done.length;
+  const [stage, setStage] = useState<TaskStatus>("todo");
   const n = (value: number) => value.toLocaleString("ar-SA");
+  const total = tasks.length;
+  const tones: Record<TaskStatus, string> = { todo: "todo", doing: "doing", review: "review", done: "done" };
   return <div className="board-page" aria-busy={pending}>
-    <p className="brief-line">
-      {open ? <>عندك <b>{n(open)}</b> {open === 1 ? "مهمة مفتوحة" : "مهام مفتوحة"}{overdue ? <>، منها <b className="hot">{n(overdue)}</b> متأخرة</> : null}. أنجزتم <b>{n(grouped.done.length)}</b>.</> : tasks.length ? <>كل المهام منجزة. يوم مرتب.</> : <>ما فيه مهام بعد. ابدأ بأول مهمة.</>}
-    </p>
+    <div className="stats">
+      <div className="stat sky"><span className="figure">{n(grouped.done.length)}<small>/{n(total)}</small></span><span className="label">منجزة</span><span className="progress leaf"><span style={{ width: `${total ? Math.round(grouped.done.length / total * 100) : 0}%` }} /></span></div>
+      <div className={`stat ${overdue ? "peach" : "mint"}`}><span className="figure">{n(overdue)}</span><span className="label">{overdue ? "متأخرة عن موعدها" : "ما فيه شيء متأخر"}</span><span className="progress coral"><span style={{ width: `${total ? Math.round(overdue / total * 100) : 0}%` }} /></span></div>
+    </div>
 
     {manager ? <form ref={composer} action={add} className="composer" aria-label="إضافة مهمة">
-      <span className="composer-mark" aria-hidden="true"><SunPhase step={0} /></span>
-      <label className="composer-title"><span className="sr-only">المهمة</span><input name="title" required maxLength={120} placeholder="اكتب مهمة جديدة واضغط إدخال" /></label>
-      <label><span className="sr-only">الأولوية</span><select name="priority" defaultValue="normal">{Object.entries(taskPriorityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-      <label><span className="sr-only">تاريخ التسليم</span><input type="date" name="due_date" aria-label="تاريخ التسليم" /></label>
+      <label>مهمة جديدة<input name="title" required maxLength={120} placeholder="جهّز تقويم الفصل الدراسي" /></label>
+      <label>الأولوية<select name="priority" defaultValue="normal">{Object.entries(taskPriorityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+      <label>التسليم<input type="date" name="due_date" /></label>
       <button type="submit" className="btn-primary" disabled={pending}><Icon name="plus" />إضافة</button>
-    </form> : <p className="hint">تقدر تنقل المهام بين المراحل. الإضافة والتعديل للمدير.</p>}
+    </form> : <p className="info-banner">تقدر تنقل المهام بين المراحل. الإضافة والتعديل للمالك أو المدير.</p>}
 
-    <div className="lanes" role="list" aria-label="مراحل العمل">
-      {taskStatuses.map((status, index) => <section key={status} role="listitem" aria-labelledby={`lane-${status}`}
-        className={`lane${over === status ? " drop" : ""}`}
+    <nav className="segments stage-tabs" aria-label="المراحل">
+      {taskStatuses.map(status => <button key={status} type="button" aria-pressed={stage === status} onClick={() => setStage(status)}>{taskStatusLabels[status]}<span className="count">{n(grouped[status].length)}</span></button>)}
+    </nav>
+
+    <div className="board" data-stage={stage} role="list" aria-label="لوحة المهام">
+      {taskStatuses.map((status, index) => <section key={status} role="listitem" aria-labelledby={`col-${status}`} data-status={status}
+        className={`column${over === status ? " drop" : ""}`}
         onDragOver={event => { if (dragging) { event.preventDefault(); setOver(status); } }}
         onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setOver(null); }}
         onDrop={event => { event.preventDefault(); const task = tasks.find(item => item.id === dragging); setOver(null); setDragging(null); if (task) move(task, status); }}>
-        <header className="lane-head">
-          <SunPhase step={index as 0 | 1 | 2 | 3} size={28} />
-          <h2 id={`lane-${status}`}>{taskStatusLabels[status]}</h2>
-          <span className="lane-count">{n(grouped[status].length)}</span>
+        <header className="column-head">
+          <span className={`stage-${tones[status]}`}><SunPhase step={index as 0 | 1 | 2 | 3} /></span>
+          <h2 id={`col-${status}`}>{taskStatusLabels[status]}</h2>
+          <span className="count">{n(grouped[status].length)}</span>
         </header>
-        {grouped[status].length ? <ul className="rows">{grouped[status].map(task => {
+        {grouped[status].length ? grouped[status].map(task => {
           const late = isOverdue(task, today);
           const next = neighbourStatus(task.status, 1);
           const prev = neighbourStatus(task.status, -1);
-          return <li key={task.id} draggable
-            className={["row", task.status === "done" ? "done" : "", dragging === task.id ? "dragging" : "", landed === task.id ? "landed" : ""].filter(Boolean).join(" ")}
+          return <article key={task.id} draggable aria-label={task.title}
+            className={["task", task.status === "done" ? "done" : "", dragging === task.id ? "dragging" : "", landed === task.id ? "landed" : ""].filter(Boolean).join(" ")}
             onDragStart={event => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", task.id); setDragging(task.id); }}
             onDragEnd={() => { setDragging(null); setOver(null); }}>
-            <button type="button" className="advance" disabled={!next} onClick={() => next && move(task, next)}
-              aria-label={next ? `نقل «${task.title}» إلى ${taskStatusLabels[next]}` : `«${task.title}» منجزة`} title={next ? `إلى ${taskStatusLabels[next]}` : "منجزة"}>
-              <SunPhase step={index as 0 | 1 | 2 | 3} />
-            </button>
-            <div className="row-body">
-              <span className="row-title">{task.priority === "high" ? <span className="urgent">عاجلة</span> : null}{task.title}</span>
-              {task.notes ? <span className="row-notes">{task.notes}</span> : null}
+            <div className="task-top">
+              <span className={`tile-icon ${task.status === "done" ? "tone-leaf" : task.priority === "high" ? "tone-coral" : "tone-plum"}`} style={{ color: "#fff" }}><SunPhase step={index as 0 | 1 | 2 | 3} size={22} /></span>
+              <div className="body"><h3>{task.title}</h3>{task.notes ? <p>{task.notes}</p> : null}</div>
             </div>
-            {task.due_date ? <span className={`row-due${late ? " late" : ""}`}>{late ? "متأخرة، " : ""}{dueLabel(task.due_date, today)}</span> : <span className="row-due" />}
-            <span className="row-tools">
-              {prev ? <button type="button" onClick={() => move(task, prev)} aria-label={`إرجاع «${task.title}» إلى ${taskStatusLabels[prev]}`} title={`إرجاع إلى ${taskStatusLabels[prev]}`}><Icon name="arrowPrev" /></button> : null}
-              {manager ? <button type="button" onClick={() => openEditor(task)} aria-label={`تعديل «${task.title}»`} title="تعديل"><Icon name="edit" /></button> : null}
-            </span>
-          </li>;
-        })}</ul> : <p className="lane-empty">{emptyCopy[status]}</p>}
+            <div className="task-meta">
+              {task.status === "done" ? <span className="status ok">منجزة</span> : null}
+              {task.priority === "high" && task.status !== "done" ? <span className="chip-soft coral">عاجلة</span> : null}
+              {task.due_date ? <span className={`chip-soft ${late ? "rose" : ""}`}><Icon name="calendar" />{late ? "متأخرة، " : ""}{dueLabel(task.due_date, today)}</span> : null}
+            </div>
+            <div className="task-actions">
+              <span className="side">
+                {prev ? <button type="button" onClick={() => move(task, prev)} aria-label={`إرجاع «${task.title}» إلى ${taskStatusLabels[prev]}`} title={`إرجاع إلى ${taskStatusLabels[prev]}`}><Icon name="arrowPrev" /></button> : null}
+                {manager ? <button type="button" onClick={() => openEditor(task)} aria-label={`تعديل «${task.title}»`} title="تعديل"><Icon name="edit" /></button> : null}
+              </span>
+              {next ? <button type="button" className="go" onClick={() => move(task, next)} aria-label={`نقل «${task.title}» إلى ${taskStatusLabels[next]}`}>{next === "done" ? <><Icon name="check" />إنجاز</> : <>{taskStatusLabels[next]}<Icon name="arrowNext" /></>}</button> : null}
+            </div>
+          </article>;
+        }) : <p className="empty">{emptyCopy[status]}</p>}
       </section>)}
     </div>
 

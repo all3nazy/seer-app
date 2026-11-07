@@ -18,6 +18,13 @@ const paths = {
   users: "M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM2 21a7 7 0 0 1 14 0M17 11a3 3 0 1 0 0-6M22 21a6 6 0 0 0-5-6",
   chat: "M4 5h16v11H9l-5 4z",
   wallet: "M3 7h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM3 7l12-3v3M17 13h2",
+  settings: "M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM19.4 13a7.5 7.5 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-1.7-1L15 3.5h-4l-.4 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7.5 7.5 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.4z",
+  help: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.5v.01",
+  bell: "M6 16V11a6 6 0 1 1 12 0v5l2 2H4zM10 20a2 2 0 0 0 4 0",
+  child: "M12 7a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM8 22v-6l-3-3 3-4h8l3 4-3 3v6",
+  flag: "M5 21V4M5 4h11l-2 4 2 4H5",
+  list: "M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01",
+  search: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4",
 } as const;
 export type IconName = keyof typeof paths;
 export function Icon({ name, label }: { name: IconName; label?: string }) {
@@ -40,5 +47,22 @@ export function SunPhase({ step, size = 24 }: { step: 0 | 1 | 2 | 3; size?: numb
   }
   return <svg className={`sun-phase step-${step}`} width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
     <circle cx={cx} cy={cy} r={r} className="sun-ring" />{fill}
+  </svg>;
+}
+
+/** Isometric stack of task slabs with a setting sun, for the welcome banner. */
+export function StackArt({ className }: { className?: string }) {
+  const slab = (y: number, top: string, side: string, front: string) => <g transform={`translate(0 ${y})`}>
+    <path d="M30 70 130 20 230 70 130 120Z" fill={top} />
+    <path d="M30 70v22l100 50V120Z" fill={front} />
+    <path d="M230 70v22l-100 50V120Z" fill={side} />
+  </g>;
+  return <svg className={className} viewBox="0 0 260 210" role="img" aria-label="رسم لمهام مرتبة فوق بعض" focusable="false">
+    <ellipse cx="130" cy="186" rx="110" ry="16" fill="currentColor" opacity=".08" />
+    {slab(80, "#8C7FC9", "#3A4FA0", "#5C6FC0")}
+    {slab(44, "#FFB4A1", "#E06A4E", "#FF7A59")}
+    {slab(8, "#E9E3FF", "#7C5CFF", "#A58BFF")}
+    <g transform="translate(0 8)" fill="#7C5CFF" opacity=".55"><path d="M80 66l50-25 6 3-50 25z" /><path d="M95 74l50-25 6 3-50 25z" /><path d="M110 82l40-20 6 3-40 20z" /></g>
+    <circle cx="214" cy="30" r="20" fill="#FF7A59" />
   </svg>;
 }

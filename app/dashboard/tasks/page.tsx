@@ -8,7 +8,7 @@ import { TaskBoard } from "../../../components/task-board";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "المهام" };
 
-export default async function TasksPage({ searchParams }: { searchParams: Promise<{ org?: string }> }) {
+export default async function TasksPage({ searchParams }: { searchParams: Promise<{ org?: string; q?: string }> }) {
   const client = await createSupabaseServerClient();
   const { data: { user }, error } = await client.auth.getUser();
   if (error || !user) redirect("/login");
@@ -19,16 +19,19 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
   if (!member) return <section className="card"><h1>لا توجد منشأة مرتبطة</h1><p>اطلب من مسؤول المنصة ربط حسابك بمنشأة.</p></section>;
   const org = member.organization_id as string;
   const name = (member.organizations as unknown as { name: string } | null)?.name ?? "المنشأة";
-  const { data: tasks, error: tasksError } = await client.from("tasks").select("id,title,notes,status,priority,due_date,completed_at")
-    .eq("organization_id", org).order("created_at", { ascending: false }).limit(500);
+  // Search is a plain title match; LIKE wildcards typed by the user are escaped.
+  const q = typeof params.q === "string" ? params.q.trim().slice(0, 80) : "";
+  let query = client.from("tasks").select("id,title,notes,status,priority,due_date,completed_at").eq("organization_id", org);
+  if (q) query = query.ilike("title", `%${q.replace(/[\\%_]/g, character => `\\${character}`)}%`);
+  const { data: tasks, error: tasksError } = await query.order("created_at", { ascending: false }).limit(500);
   return <>
     <header className="page-head">
-      <div><h1>المهام</h1><p>سير العمل في {name}: من الفكرة إلى الإنجاز.</p></div>
+      <div><h1>المهام</h1><p>{q ? <>نتائج البحث عن «{q}» في {name}. <Link href={`/dashboard/tasks?org=${encodeURIComponent(org)}`}>عرض كل المهام</Link></> : <>سير العمل في {name}: من الفكرة إلى الإنجاز.</>}</p></div>
       {memberships && memberships.length > 1 ? <nav className="segments" aria-label="اختيار المنشأة">
         {memberships.map(item => <Link key={item.organization_id} href={`/dashboard/tasks?org=${encodeURIComponent(item.organization_id)}`} aria-current={item.organization_id === org ? "page" : undefined}>{(item.organizations as unknown as { name: string } | null)?.name ?? "منشأة"}</Link>)}
       </nav> : null}
     </header>
     {tasksError ? <section className="card"><h2>لوحة المهام غير جاهزة بعد</h2><p role="alert">تعذر تحميل المهام. إذا كانت هذه أول مرة، يلزم تطبيق ترحيل قاعدة البيانات الخاص بالمهام.</p></section>
-      : <TaskBoard key={org} organizationId={org} manager={canManage(member.role)} initialTasks={(tasks ?? []) as Task[]} />}
+      : <TaskBoard key={`${org}:${q}`} organizationId={org} manager={canManage(member.role)} initialTasks={(tasks ?? []) as Task[]} />}
   </>;
 }
