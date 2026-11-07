@@ -8,7 +8,7 @@ const form = (values: Record<string, string>) => { const data = new FormData(); 
 describe("student file validation", () => {
   it("accepts a complete profile and normalises empty optional fields to null", () => {
     expect(profileValues(form({ full_name: "  سارة  ", date_of_birth: "2020-01-15", gender: "female", national_id: "1234567890", branch_id: "", notes: "" })))
-      .toEqual({ full_name: "سارة", date_of_birth: "2020-01-15", gender: "female", national_id: "1234567890", branch_id: null, notes: null });
+      .toEqual({ full_name: "سارة", date_of_birth: "2020-01-15", gender: "female", national_id: "1234567890", branch_id: null, section_id: null, photo_consent: false, notes: null });
   });
   it("rejects bad identity numbers, future birthdays and unknown genders", () => {
     expect(() => profileValues(form({ full_name: "سارة", national_id: "12345" }))).toThrow("١٠ أرقام");
@@ -45,5 +45,21 @@ describe("audit log helpers", () => {
   });
   it("escapes CSV cells and neutralises formulas", () => {
     expect(toCsv([["a,b", '"q"', "=SUM(A1)", null]])).toBe('﻿"a,b","""q""",\'=SUM(A1),\r\n');
+  });
+});
+
+describe("academic structure validation", async () => {
+  const { academicValues, holidayOn, sectionLabel } = await import("../lib/academics");
+  it("validates years, holidays and sections", () => {
+    expect(academicValues("academic_years", form({ name: "1448", starts_on: "2026-08-23", ends_on: "2027-06-20", is_current: "on" }), false)).toEqual({ name: "1448", starts_on: "2026-08-23", ends_on: "2027-06-20", is_current: true });
+    expect(() => academicValues("academic_years", form({ name: "x", starts_on: "2026-08-23", ends_on: "2026-08-23" }), false)).toThrow();
+    expect(academicValues("holidays", form({ name: "اليوم الوطني", starts_on: "2026-09-23", ends_on: "2026-09-23" }), false)).toMatchObject({ starts_on: "2026-09-23" });
+    expect(() => academicValues("sections", form({ name: "أ", grade_level_id: child, gender: "boys", capacity: "500" }), false)).toThrow("السعة");
+    expect(academicValues("section_staff", form({ duty: " معلمة " }), true)).toEqual({ duty: "معلمة" });
+  });
+  it("finds holidays and labels sections", () => {
+    expect(holidayOn("2026-09-23", [{ name: "اليوم الوطني", starts_on: "2026-09-23", ends_on: "2026-09-23" }])).toBe("اليوم الوطني");
+    expect(holidayOn("2026-09-24", [{ name: "اليوم الوطني", starts_on: "2026-09-23", ends_on: "2026-09-23" }])).toBeNull();
+    expect(sectionLabel({ name: "أ", grade_level_id: "g" }, [{ id: "g", name: "الأول" }])).toBe("الأول — أ");
   });
 });
