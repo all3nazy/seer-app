@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getSupabaseBrowserClient } from "../../../lib/supabase";
 import { ActivationError, requestActivationEmail, verifyActivationInput } from "../../../lib/activation";
+import { Logo } from "../../../components/icons";
 
 export default function ActivateAccount() {
   const [email, setEmail] = useState("");
@@ -54,7 +55,7 @@ export default function ActivateAccount() {
   }
 
   return <><a className="skip-link" href="#main-content">تجاوز إلى المحتوى</a><main className="shell">
-    <header className="top"><a className="logo" href="/" aria-label="سِير — الصفحة الرئيسية">سِير.</a><a href="/login">تسجيل الدخول</a></header>
+    <header className="top"><Logo /><a href="/login">تسجيل الدخول</a></header>
     <section className="card login-card" id="main-content" tabIndex={-1} aria-labelledby="activation-title">
       <h1 id="activation-title">تفعيل حساب جديد</h1>
       <p>تحقق من بريدك أولًا، ثم عيّن كلمة مرور خاصة بك. تفعيل الحساب لا يمنحك الوصول إلى منشأة؛ ربط الصلاحيات يتم بعد موافقة مسؤول المنصة.</p>

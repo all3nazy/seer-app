@@ -45,6 +45,12 @@ beforeAll(async () => {
   const isolation = readdirSync("supabase/migrations").filter(name => name.endsWith("_isolate_onboarding_privileges.sql"));
   if (isolation.length !== 1) throw new Error("Expected exactly one onboarding isolation migration");
   await db.exec(readFileSync(`supabase/migrations/${isolation[0]}`, "utf8"));
+  const tasks = readdirSync("supabase/migrations").filter(name => name.endsWith("_task_workflow.sql"));
+  if (tasks.length !== 1) throw new Error("Expected exactly one task workflow migration");
+  await db.exec(readFileSync(`supabase/migrations/${tasks[0]}`, "utf8"));
+  const team = readdirSync("supabase/migrations").filter(name => name.endsWith("_team_records_links.sql"));
+  if (team.length !== 1) throw new Error("Expected exactly one team, records and links migration");
+  await db.exec(readFileSync(`supabase/migrations/${team[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -106,13 +112,14 @@ describe("Postgres tenant isolation and operational authorization", () => {
     ]) await expect(db.exec(sql)).rejects.toMatchObject({code:"23503"});
     // No child_guardians write policy exists; test the composite constraint with the DB operator.
     await db.exec("reset role");
-    await expect(db.exec(`insert into public.child_guardians values ('${orgA}','${childA}','${guardianB}','parent')`)).rejects.toMatchObject({code:"23503"});
+    await expect(db.exec(`insert into public.child_guardians values ('${orgA}','${childA}','${guardianB}','father')`)).rejects.toMatchObject({code:"23503"});
   });
   it("an administrator of both tenants still cannot move a record between them", async () => {
     await db.exec(`insert into public.memberships values ('${orgB}','${owner}','admin')`);
     await as("authenticated",owner);
     await expect(db.exec(`update public.children set organization_id='${orgB}' where id='${childA}'`)).rejects.toMatchObject({code:"23514"});
-    await db.exec("reset role"); await db.exec(`delete from public.memberships where organization_id='${orgB}' and user_id='${owner}'`);
+    // Operator cleanup runs without a user session.
+    await db.exec("reset role"); await db.query("select set_config('request.jwt.claim.sub','',false)"); await db.exec(`delete from public.memberships where organization_id='${orgB}' and user_id='${owner}'`);
   });
   it("organization updates only allow name/type and have an audit event", async () => {
     await as("authenticated",owner);
@@ -124,7 +131,7 @@ describe("Postgres tenant isolation and operational authorization", () => {
   it("members cannot create organizations, promote themselves, or forge audit events", async () => {
     await as("authenticated",staff);
     await expect(db.exec("insert into public.organizations(name,type) values ('Attack','school')")).rejects.toMatchObject({code:"42501"});
-    expect(await rows(`update public.memberships set role='owner' where user_id='${staff}' returning user_id`)).toEqual([]);
+    await expect(db.exec(`update public.memberships set role='owner' where user_id='${staff}'`)).rejects.toMatchObject({code:"42501"});
     await expect(db.exec(`insert into public.audit_events(organization_id,entity,record_id,action) values ('${orgA}','children','${childA}','INSERT')`)).rejects.toMatchObject({code:"42501"});
     await expect(db.exec("delete from public.audit_events")).rejects.toMatchObject({code:"42501"});
     await expect(db.exec("truncate public.audit_events")).rejects.toMatchObject({code:"42501"});
@@ -221,5 +228,191 @@ describe("onboarding privilege boundary", () => {
       {nspname:"private",prosecdef:true,anonymous:false,authenticated:true},
       {nspname:"public",prosecdef:false,anonymous:false,authenticated:true}
     ]);
+  });
+});
+
+
+describe("task workflow board", () => {
+  let taskA = "";
+  it("managers create tasks and the author and timestamps come from the database", async () => {
+    await as("authenticated", owner);
+    const created = await rows(`insert into public.tasks(organization_id,title,priority,due_date) values ('${orgA}','Prepare term calendar','high','2026-11-10') returning id,created_by,status,completed_at`);
+    taskA = String(created[0].id);
+    expect(created[0]).toMatchObject({ created_by: owner, status: "todo", completed_at: null });
+    expect(await rows(`select entity,action from public.audit_events where record_id='${taskA}'`)).toEqual([{ entity: "tasks", action: "INSERT" }]);
+  });
+  it("the browser cannot choose a task id, author or creation time", async () => {
+    await as("authenticated", owner);
+    await expect(db.exec(`insert into public.tasks(id,organization_id,title) values ('90000000-0000-0000-0000-000000000001','${orgA}','Forged')`)).rejects.toMatchObject({ code: "42501" });
+    await expect(db.exec(`insert into public.tasks(organization_id,title,created_by) values ('${orgA}','Forged','${staff}')`)).rejects.toMatchObject({ code: "42501" });
+    await expect(db.exec(`update public.tasks set created_at=now() where id='${taskA}'`)).rejects.toMatchObject({ code: "42501" });
+  });
+  it("staff can read and move tasks but cannot create, edit details or delete", async () => {
+    await as("authenticated", staff);
+    expect(await rows("select id from public.tasks")).toEqual([{ id: taskA }]);
+    await expect(db.exec(`insert into public.tasks(organization_id,title) values ('${orgA}','Staff task')`)).rejects.toMatchObject({ code: "42501" });
+    const moved = await rows(`update public.tasks set status='done' where id='${taskA}' returning status,completed_at is not null as completed`);
+    expect(moved).toEqual([{ status: "done", completed: true }]);
+    await expect(db.exec(`update public.tasks set title='Changed by staff' where id='${taskA}'`)).rejects.toMatchObject({ code: "42501" });
+    expect(await rows(`delete from public.tasks where id='${taskA}' returning id`)).toEqual([]);
+  });
+  it("reopening a finished task clears its completion time", async () => {
+    await as("authenticated", owner);
+    expect(await rows(`update public.tasks set status='doing' where id='${taskA}' returning completed_at`)).toEqual([{ completed_at: null }]);
+  });
+  it("other tenants and anonymous callers cannot see or touch tasks", async () => {
+    await as("authenticated", outsider);
+    expect(await rows("select id from public.tasks")).toEqual([]);
+    expect(await rows(`update public.tasks set status='done' where id='${taskA}' returning id`)).toEqual([]);
+    await expect(db.exec(`insert into public.tasks(organization_id,title) values ('${orgA}','Cross tenant')`)).rejects.toMatchObject({ code: "42501" });
+    await as("anon");
+    await expect(db.exec("select id from public.tasks")).rejects.toMatchObject({ code: "42501" });
+  });
+  it("rejects empty titles and unknown stages", async () => {
+    await as("authenticated", owner);
+    await expect(db.exec(`insert into public.tasks(organization_id,title) values ('${orgA}','   ')`)).rejects.toMatchObject({ code: "23514" });
+    await expect(db.exec(`update public.tasks set status='archived' where id='${taskA}'`)).rejects.toMatchObject({ code: "23514" });
+  });
+  it("managers delete tasks and the deletion is audited", async () => {
+    await as("authenticated", owner);
+    expect(await rows(`delete from public.tasks where id='${taskA}' returning id`)).toEqual([{ id: taskA }]);
+    await db.exec("reset role");
+    expect(await rows(`select action from public.audit_events where record_id='${taskA}' order by id`)).toEqual([{ action: "INSERT" }, { action: "UPDATE" }, { action: "UPDATE" }, { action: "DELETE" }]);
+  });
+});
+
+
+describe("record deletion, family links, team and assignment", () => {
+  const guardianA = "40000000-0000-0000-0000-000000000001";
+  const childLinked = "30000000-0000-0000-0000-000000000011";
+  const childEnrolled = "30000000-0000-0000-0000-000000000012";
+  const invitee = "10000000-0000-0000-0000-000000000011";
+  const lateInvitee = "10000000-0000-0000-0000-000000000012";
+  const unverifiedInvitee = "10000000-0000-0000-0000-000000000013";
+  beforeAll(async () => {
+    await db.exec("reset role");
+    await db.exec(`
+      update auth.users set email='staff@example.com' where id='${staff}';
+      insert into auth.users(id,email_confirmed_at,email) values ('${invitee}',now(),'new.teacher@example.com'),('${lateInvitee}',now(),'late@example.com'),('${unverifiedInvitee}',null,'pending@example.com');
+      insert into public.guardians(id,organization_id,full_name) values ('${guardianA}','${orgA}','Guardian A');
+      insert into public.children(id,organization_id,full_name) values ('${childLinked}','${orgA}','Linked child'),('${childEnrolled}','${orgA}','Enrolled child');
+      insert into public.enrollments(organization_id,child_id) values ('${orgA}','${childEnrolled}');
+    `);
+  });
+
+  it("only managers delete records, and deletions are audited", async () => {
+    await as("authenticated", owner);
+    const branch = await rows(`insert into public.branches(organization_id,name) values ('${orgA}','Temporary branch') returning id`);
+    await as("authenticated", staff);
+    expect(await rows(`delete from public.branches where id='${branch[0].id}' returning id`)).toEqual([]);
+    await as("authenticated", outsider);
+    expect(await rows(`delete from public.branches where id='${branch[0].id}' returning id`)).toEqual([]);
+    await as("authenticated", owner);
+    expect(await rows(`delete from public.branches where id='${branch[0].id}' returning id`)).toEqual([{ id: branch[0].id }]);
+    expect(await rows(`select action from public.audit_events where record_id='${branch[0].id}' order by id`)).toEqual([{ action: "INSERT" }, { action: "DELETE" }]);
+  });
+  it("a child with an enrollment cannot be deleted until the enrollment is removed", async () => {
+    await as("authenticated", owner);
+    await expect(db.exec(`delete from public.children where id='${childEnrolled}'`)).rejects.toMatchObject({ code: "23503" });
+  });
+  it("only draft invoices can be deleted; issued invoices must be voided", async () => {
+    await as("authenticated", owner);
+    expect(await rows(`delete from public.invoices where organization_id='${orgA}' and status='issued' returning id`)).toEqual([]);
+    const draft = await rows(`insert into public.invoices(organization_id,amount_sar,status) values ('${orgA}',50,'draft') returning id`);
+    expect(await rows(`delete from public.invoices where id='${draft[0].id}' returning id`)).toEqual([{ id: draft[0].id }]);
+  });
+  it("managers link a child to a guardian of the same tenant with a known relationship", async () => {
+    await as("authenticated", owner);
+    await db.exec(`insert into public.child_guardians(organization_id,child_id,guardian_id,relationship) values ('${orgA}','${childLinked}','${guardianA}','mother')`);
+    expect(await rows(`select action from public.audit_events where entity='child_guardians' and record_id='${childLinked}'`)).toEqual([{ action: "INSERT" }]);
+    await expect(db.exec(`insert into public.child_guardians(organization_id,child_id,guardian_id,relationship) values ('${orgA}','${childA}','${guardianA}','cousin')`)).rejects.toMatchObject({ code: "23514" });
+    await expect(db.exec(`insert into public.child_guardians(organization_id,child_id,guardian_id,relationship) values ('${orgA}','${childA}','${guardianB}','father')`)).rejects.toMatchObject({ code: "23503" });
+  });
+  it("staff and other tenants cannot create or remove family links", async () => {
+    await as("authenticated", staff);
+    await expect(db.exec(`insert into public.child_guardians(organization_id,child_id,guardian_id,relationship) values ('${orgA}','${childA}','${guardianA}','father')`)).rejects.toMatchObject({ code: "42501" });
+    expect(await rows(`delete from public.child_guardians where child_id='${childLinked}' returning child_id`)).toEqual([]);
+    await as("authenticated", outsider);
+    expect(await rows(`select child_id from public.child_guardians`)).toEqual([]);
+  });
+  it("deleting a child removes its family links in the same step", async () => {
+    await as("authenticated", owner);
+    await db.exec(`delete from public.children where id='${childLinked}'`);
+    await db.exec("reset role");
+    expect(await rows(`select child_id from public.child_guardians where child_id='${childLinked}'`)).toEqual([]);
+  });
+  it("members set their own display name but not their own role", async () => {
+    await as("authenticated", staff);
+    expect(await rows(`update public.memberships set display_name='Sara' where user_id='${staff}' and organization_id='${orgA}' returning display_name`)).toEqual([{ display_name: "Sara" }]);
+    await expect(db.exec(`update public.memberships set role='admin' where user_id='${staff}'`)).rejects.toMatchObject({ code: "42501" });
+    expect(await rows(`update public.memberships set display_name='Hijack' where user_id='${owner}' returning user_id`)).toEqual([]);
+  });
+  it("owners change roles of others but never their own, and cannot remove themselves", async () => {
+    await as("authenticated", owner);
+    expect(await rows(`update public.memberships set role='admin' where user_id='${staff}' and organization_id='${orgA}' returning role`)).toEqual([{ role: "admin" }]);
+    await expect(db.exec(`update public.memberships set role='staff' where user_id='${owner}' and organization_id='${orgA}'`)).rejects.toMatchObject({ code: "42501" });
+    await expect(db.exec(`delete from public.memberships where user_id='${owner}' and organization_id='${orgA}'`)).rejects.toMatchObject({ code: "42501" });
+    expect(await rows(`select action from public.audit_events where entity='memberships' and record_id='${staff}'`)).toEqual([{ action: "UPDATE" }, { action: "UPDATE" }]);
+  });
+  it("admins cannot change roles or remove the owner, and other tenants cannot touch memberships", async () => {
+    await as("authenticated", staff);
+    await expect(db.exec(`delete from public.memberships where user_id='${owner}' and organization_id='${orgA}'`)).rejects.toMatchObject({ code: "42501" });
+    await as("authenticated", outsider);
+    expect(await rows(`update public.memberships set display_name='x' where organization_id='${orgA}' returning user_id`)).toEqual([]);
+    expect(await rows(`delete from public.memberships where organization_id='${orgA}' returning user_id`)).toEqual([]);
+    await as("authenticated", owner);
+    await db.exec(`update public.memberships set role='staff' where user_id='${staff}' and organization_id='${orgA}'`);
+  });
+  it("only managers invite, and admins may invite staff only", async () => {
+    await as("authenticated", staff);
+    await expect(db.exec(`select public.invite_member('${orgA}','someone@example.com','staff','x')`)).rejects.toMatchObject({ code: "42501" });
+    await as("authenticated", outsider);
+    await expect(db.exec(`select public.invite_member('${orgA}','someone@example.com','staff','x')`)).rejects.toMatchObject({ code: "42501" });
+    await expect(db.exec(`select public.invite_member('${orgB}','someone@example.com','owner','x')`)).rejects.toMatchObject({ code: "42501" });
+    await expect(db.exec(`select * from public.list_member_invitations('${orgA}')`)).rejects.toMatchObject({ code: "42501" });
+  });
+  it("owners invite by email; repeats refresh one invitation and members cannot be invited twice", async () => {
+    await as("authenticated", owner);
+    await db.exec(`select public.invite_member('${orgA}','  New.Teacher@Example.com ','staff','Noura')`);
+    await db.exec(`select public.invite_member('${orgA}','new.teacher@example.com','admin','Noura A')`);
+    expect(await rows(`select email,role,display_name from public.list_member_invitations('${orgA}')`)).toEqual([{ email: "new.teacher@example.com", role: "admin", display_name: "Noura A" }]);
+    await expect(db.exec(`select public.invite_member('${orgA}','staff@example.com','staff',null)`)).rejects.toMatchObject({ code: "23505" });
+    await expect(db.exec(`select public.invite_member('${orgA}','not-an-email','staff',null)`)).rejects.toMatchObject({ code: "23514" });
+    await expect(db.exec("select * from private.member_invitations")).rejects.toMatchObject({ code: "42501" });
+  });
+  it("a verified account claims its invitation once; unverified accounts get nothing", async () => {
+    await as("authenticated", unverifiedInvitee);
+    expect(await rows("select public.claim_member_invitations() as joined")).toEqual([{ joined: 0 }]);
+    await as("authenticated", invitee);
+    expect(await rows("select public.claim_member_invitations() as joined")).toEqual([{ joined: 1 }]);
+    expect(await rows("select public.claim_member_invitations() as joined")).toEqual([{ joined: 0 }]);
+    expect(await rows(`select role,display_name from public.memberships where user_id='${invitee}'`)).toEqual([{ role: "admin", display_name: "Noura A" }]);
+    expect(await rows(`select entity,action from public.audit_events where entity='memberships' and record_id='${invitee}'`)).toEqual([{ entity: "memberships", action: "INSERT" }]);
+  });
+  it("revoked and expired invitations cannot be claimed", async () => {
+    await as("authenticated", owner);
+    const revoked = await rows(`select public.invite_member('${orgA}','late@example.com','staff',null) as id`);
+    await db.exec(`select public.revoke_member_invitation('${revoked[0].id}')`);
+    await as("authenticated", lateInvitee);
+    expect(await rows("select public.claim_member_invitations() as joined")).toEqual([{ joined: 0 }]);
+    await as("authenticated", owner);
+    const expiring = await rows(`select public.invite_member('${orgA}','late@example.com','staff',null) as id`);
+    await db.exec("reset role");
+    await db.exec(`update private.member_invitations set expires_at=now()-interval '1 minute' where id='${expiring[0].id}'`);
+    await as("authenticated", lateInvitee);
+    expect(await rows("select public.claim_member_invitations() as joined")).toEqual([{ joined: 0 }]);
+    await as("authenticated", outsider);
+    await expect(db.exec(`select public.revoke_member_invitation('${expiring[0].id}')`)).rejects.toMatchObject({ code: "P0002" });
+  });
+  it("tasks are assigned only to members of the same organization, by managers", async () => {
+    await as("authenticated", owner);
+    const task = await rows(`insert into public.tasks(organization_id,title,assignee_id) values ('${orgA}','Assigned task','${staff}') returning id,assignee_id`);
+    expect(task[0].assignee_id).toBe(staff);
+    await expect(db.exec(`insert into public.tasks(organization_id,title,assignee_id) values ('${orgA}','Wrong person','${outsider}')`)).rejects.toMatchObject({ code: "23503" });
+    await as("authenticated", staff);
+    await expect(db.exec(`update public.tasks set assignee_id=null where id='${task[0].id}'`)).rejects.toMatchObject({ code: "42501" });
+    await as("authenticated", owner);
+    await db.exec(`delete from public.memberships where user_id='${staff}' and organization_id='${orgA}'`);
+    expect(await rows(`select assignee_id from public.tasks where id='${task[0].id}'`)).toEqual([{ assignee_id: null }]);
   });
 });
