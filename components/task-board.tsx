@@ -2,16 +2,16 @@
 import { useMemo, useRef, useState, useTransition } from "react";
 import { createTask, deleteTask, moveTask, updateTask } from "../app/dashboard/tasks/actions";
 import { dueLabel, isOverdue, neighbourStatus, riyadhToday, taskPriorityLabels, taskStatuses, taskStatusLabels, type Task, type TaskStatus } from "../lib/tasks";
-import { Icon } from "./icons";
+import { Icon, SunPhase } from "./icons";
 import { celebrate, notify } from "./feedback";
 import { play } from "../lib/sound";
 
 type Props = { organizationId: string; manager: boolean; initialTasks: Task[] };
 const emptyCopy: Record<TaskStatus, string> = {
-  todo: "لا مهام جديدة. أضف أول مهمة من الأعلى.",
-  doing: "اسحب مهمة إلى هنا عندما يبدأ العمل عليها.",
-  review: "المهام الجاهزة للتدقيق تظهر هنا.",
-  done: "ما أُنجز يظهر هنا.",
+  todo: "لا شيء جديد هنا.",
+  doing: "اضغط دائرة أي مهمة لتبدأ العمل عليها.",
+  review: "ما فيه شيء ينتظر المراجعة.",
+  done: "أول إنجاز يظهر هنا.",
 };
 
 export function TaskBoard({ organizationId, manager, initialTasks }: Props) {
@@ -83,53 +83,55 @@ export function TaskBoard({ organizationId, manager, initialTasks }: Props) {
     });
   }
 
-  return <div className="stack" aria-busy={pending}>
-    <dl className="metrics" aria-label="ملخص المهام">
-      <div className="metric"><dt>مفتوحة</dt><dd>{(tasks.length - grouped.done.length).toLocaleString("ar-SA")}</dd></div>
-      <div className="metric"><dt>قيد التنفيذ</dt><dd>{grouped.doing.length.toLocaleString("ar-SA")}</dd></div>
-      <div className={`metric${overdue ? " alert" : ""}`}><dt>متأخرة</dt><dd>{overdue.toLocaleString("ar-SA")}</dd></div>
-      <div className="metric"><dt>منجزة</dt><dd>{grouped.done.length.toLocaleString("ar-SA")}</dd></div>
-    </dl>
+  const open = tasks.length - grouped.done.length;
+  const n = (value: number) => value.toLocaleString("ar-SA");
+  return <div className="board-page" aria-busy={pending}>
+    <p className="brief-line">
+      {open ? <>عندك <b>{n(open)}</b> {open === 1 ? "مهمة مفتوحة" : "مهام مفتوحة"}{overdue ? <>، منها <b className="hot">{n(overdue)}</b> متأخرة</> : null}. أنجزتم <b>{n(grouped.done.length)}</b>.</> : tasks.length ? <>كل المهام منجزة. يوم مرتب.</> : <>ما فيه مهام بعد. ابدأ بأول مهمة.</>}
+    </p>
 
-    {manager ? <form ref={composer} action={add} className="composer card" aria-label="إضافة مهمة">
-      <label>المهمة<input name="title" required maxLength={120} placeholder="جهّز تقويم الفصل الدراسي" /></label>
-      <label>الأولوية<select name="priority" defaultValue="normal">{Object.entries(taskPriorityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-      <label>تاريخ التسليم<input type="date" name="due_date" /></label>
+    {manager ? <form ref={composer} action={add} className="composer" aria-label="إضافة مهمة">
+      <span className="composer-mark" aria-hidden="true"><SunPhase step={0} /></span>
+      <label className="composer-title"><span className="sr-only">المهمة</span><input name="title" required maxLength={120} placeholder="اكتب مهمة جديدة واضغط إدخال" /></label>
+      <label><span className="sr-only">الأولوية</span><select name="priority" defaultValue="normal">{Object.entries(taskPriorityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+      <label><span className="sr-only">تاريخ التسليم</span><input type="date" name="due_date" aria-label="تاريخ التسليم" /></label>
       <button type="submit" className="btn-primary" disabled={pending}><Icon name="plus" />إضافة</button>
-    </form> : <p className="pill muted" style={{ width: "fit-content" }}>تقدر تنقل المهام بين المراحل. الإضافة والتعديل للمدير.</p>}
+    </form> : <p className="hint">تقدر تنقل المهام بين المراحل. الإضافة والتعديل للمدير.</p>}
 
-    <div className="board" role="list" aria-label="لوحة المهام">
-      {taskStatuses.map(status => <section key={status} role="listitem" aria-labelledby={`col-${status}`}
-        className={`column${over === status ? " drop" : ""}`}
+    <div className="lanes" role="list" aria-label="مراحل العمل">
+      {taskStatuses.map((status, index) => <section key={status} role="listitem" aria-labelledby={`lane-${status}`}
+        className={`lane${over === status ? " drop" : ""}`}
         onDragOver={event => { if (dragging) { event.preventDefault(); setOver(status); } }}
         onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setOver(null); }}
         onDrop={event => { event.preventDefault(); const task = tasks.find(item => item.id === dragging); setOver(null); setDragging(null); if (task) move(task, status); }}>
-        <header className="column-head">
-          <h2 id={`col-${status}`}><span className={`status-dot status-${status}`} aria-hidden="true" />{taskStatusLabels[status]}</h2>
-          <span className="count" aria-label={`${grouped[status].length} مهمة`}>{grouped[status].length.toLocaleString("ar-SA")}</span>
+        <header className="lane-head">
+          <SunPhase step={index as 0 | 1 | 2 | 3} size={28} />
+          <h2 id={`lane-${status}`}>{taskStatusLabels[status]}</h2>
+          <span className="lane-count">{n(grouped[status].length)}</span>
         </header>
-        {grouped[status].length ? grouped[status].map(task => {
+        {grouped[status].length ? <ul className="rows">{grouped[status].map(task => {
           const late = isOverdue(task, today);
           const next = neighbourStatus(task.status, 1);
           const prev = neighbourStatus(task.status, -1);
-          return <article key={task.id} draggable
-            className={["task", task.status === "done" ? "done" : "", task.priority === "high" ? "prio-high" : "", dragging === task.id ? "dragging" : "", landed === task.id ? "landed" : ""].filter(Boolean).join(" ")}
+          return <li key={task.id} draggable
+            className={["row", task.status === "done" ? "done" : "", dragging === task.id ? "dragging" : "", landed === task.id ? "landed" : ""].filter(Boolean).join(" ")}
             onDragStart={event => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", task.id); setDragging(task.id); }}
-            onDragEnd={() => { setDragging(null); setOver(null); }}
-            aria-label={task.title}>
-            <h3>{task.title}</h3>
-            {task.notes ? <p>{task.notes}</p> : null}
-            <div className="task-meta">
-              {task.priority === "high" ? <span className="pill accent">عاجلة</span> : task.priority === "low" ? <span className="pill muted">منخفضة</span> : null}
-              {task.due_date ? <span className={`pill ${late ? "danger" : task.status === "done" ? "ok" : "muted"}`}><Icon name="calendar" />{late ? "متأخرة، " : ""}{dueLabel(task.due_date, today)}</span> : null}
+            onDragEnd={() => { setDragging(null); setOver(null); }}>
+            <button type="button" className="advance" disabled={!next} onClick={() => next && move(task, next)}
+              aria-label={next ? `نقل «${task.title}» إلى ${taskStatusLabels[next]}` : `«${task.title}» منجزة`} title={next ? `إلى ${taskStatusLabels[next]}` : "منجزة"}>
+              <SunPhase step={index as 0 | 1 | 2 | 3} />
+            </button>
+            <div className="row-body">
+              <span className="row-title">{task.priority === "high" ? <span className="urgent">عاجلة</span> : null}{task.title}</span>
+              {task.notes ? <span className="row-notes">{task.notes}</span> : null}
             </div>
-            <div className="task-actions">
-              {prev ? <button type="button" onClick={() => move(task, prev)} aria-label={`إرجاع «${task.title}» إلى ${taskStatusLabels[prev]}`} title={`إلى ${taskStatusLabels[prev]}`}><Icon name="arrowPrev" /></button> : null}
+            {task.due_date ? <span className={`row-due${late ? " late" : ""}`}>{late ? "متأخرة، " : ""}{dueLabel(task.due_date, today)}</span> : <span className="row-due" />}
+            <span className="row-tools">
+              {prev ? <button type="button" onClick={() => move(task, prev)} aria-label={`إرجاع «${task.title}» إلى ${taskStatusLabels[prev]}`} title={`إرجاع إلى ${taskStatusLabels[prev]}`}><Icon name="arrowPrev" /></button> : null}
               {manager ? <button type="button" onClick={() => openEditor(task)} aria-label={`تعديل «${task.title}»`} title="تعديل"><Icon name="edit" /></button> : null}
-              {next ? <button type="button" onClick={() => move(task, next)} aria-label={`نقل «${task.title}» إلى ${taskStatusLabels[next]}`} title={`إلى ${taskStatusLabels[next]}`}>{next === "done" ? <Icon name="check" /> : <Icon name="arrowNext" />}</button> : null}
-            </div>
-          </article>;
-        }) : <p className="empty">{emptyCopy[status]}</p>}
+            </span>
+          </li>;
+        })}</ul> : <p className="lane-empty">{emptyCopy[status]}</p>}
       </section>)}
     </div>
 
@@ -138,7 +140,7 @@ export function TaskBoard({ organizationId, manager, initialTasks }: Props) {
         <h2 id="edit-title">تعديل المهمة</h2>
         <label>العنوان<input name="title" required maxLength={120} defaultValue={editing.title} /></label>
         <label>ملاحظات<textarea name="notes" rows={3} maxLength={1000} defaultValue={editing.notes ?? ""} /></label>
-        <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))" }}>
+        <div className="field-row">
           <label>المرحلة<select name="status" defaultValue={editing.status}>{taskStatuses.map(status => <option key={status} value={status}>{taskStatusLabels[status]}</option>)}</select></label>
           <label>الأولوية<select name="priority" defaultValue={editing.priority}>{Object.entries(taskPriorityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
           <label>التسليم<input type="date" name="due_date" defaultValue={editing.due_date ?? ""} /></label>

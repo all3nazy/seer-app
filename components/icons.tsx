@@ -26,3 +26,19 @@ export function Icon({ name, label }: { name: IconName; label?: string }) {
 export function Logo({ href = "/", label = "سِير — الصفحة الرئيسية" }: { href?: string; label?: string }) {
   return <a className="logo" href={href} aria-label={label}>سِير<span className="logo-dot" aria-hidden="true">.</span></a>;
 }
+
+/** The brand's progress mark: a sun that rises with each stage, full and coral when done. */
+export function SunPhase({ step, size = 24 }: { step: 0 | 1 | 2 | 3; size?: number }) {
+  const fraction = [0, 0.5, 0.78, 1][step];
+  const r = 8, cx = 12, cy = 12;
+  let fill = null;
+  if (fraction >= 1) fill = <circle cx={cx} cy={cy} r={r} className="sun-fill" />;
+  else if (fraction > 0) {
+    const chord = cy + r - 2 * r * fraction;
+    const half = Math.sqrt(r * r - (chord - cy) ** 2);
+    fill = <path className="sun-fill" d={`M${cx - half} ${chord}A${r} ${r} 0 ${fraction > 0.5 ? 1 : 0} 0 ${cx + half} ${chord}Z`} />;
+  }
+  return <svg className={`sun-phase step-${step}`} width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <circle cx={cx} cy={cy} r={r} className="sun-ring" />{fill}
+  </svg>;
+}

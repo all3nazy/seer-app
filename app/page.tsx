@@ -10,22 +10,24 @@ const features: { icon: IconName; title: string; description: string }[] = [
 ];
 
 export default function Home() {
-  return <><a className="skip-link" href="#main-content">تجاوز إلى المحتوى</a><main className="shell">
-    <header className="top">
+  return <><a className="skip-link" href="#main-content">تجاوز إلى المحتوى</a><main>
+    <header className="top shell" style={{ paddingBlock: 20 }}>
       <Logo />
-      <nav aria-label="التنقل الرئيسي"><a className="primary-button" href="/login">تسجيل الدخول</a></nav>
+      <nav aria-label="التنقل الرئيسي"><a className="btn" href="/login">تسجيل الدخول</a></nav>
     </header>
     <section className="dusk" id="main-content" tabIndex={-1} aria-labelledby="home-title">
-      <h1 id="home-title">يومك في المدرسة، يسير.</h1>
-      <p>سِير منصة تشغيل للمدارس الأهلية والحضانات: المهام والسجلات والمساعد في مكان واحد، بالعربي ومن أول يوم.</p>
-      <div className="dusk-actions"><a className="primary-button" href="/login">الدخول إلى سِير</a><a className="btn" href="/auth/activate">تفعيل حساب جديد</a></div>
+      <div className="dusk-inner">
+        <h1 id="home-title">يومك في المدرسة، يسير.</h1>
+        <p>سِير منصة تشغيل للمدارس الأهلية والحضانات: المهام والسجلات والمساعد في مكان واحد، بالعربي ومن أول يوم.</p>
+        <div className="dusk-actions"><a className="primary-button" href="/login">الدخول إلى سِير</a><a className="btn" href="/auth/activate">تفعيل حساب جديد</a></div>
+      </div>
       <div className="dusk-sun" aria-hidden="true" />
       <div className="dusk-horizon" aria-hidden="true" />
     </section>
-    <section aria-labelledby="modules-title">
+    <section className="shell" aria-labelledby="modules-title">
       <h2 id="modules-title" className="section-title">وش تلقى داخل سِير</h2>
       <div className="feature-list">{features.map(feature => <article key={feature.title}><h3><Icon name={feature.icon} />{feature.title}</h3><p>{feature.description}</p></article>)}</div>
+      <footer className="foot">سِير، منصة إدارة عمليات المدارس والحضانات.</footer>
     </section>
-    <footer className="foot">سِير، منصة إدارة عمليات المدارس والحضانات.</footer>
   </main></>;
 }

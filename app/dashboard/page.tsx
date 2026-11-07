@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "../../lib/supabase/server";
 import { canManage } from "../../lib/operations";
 import { riyadhToday } from "../../lib/tasks";
-import { Icon } from "../../components/icons";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "لوحة التشغيل" };
 
@@ -31,37 +30,40 @@ export default async function Dashboard() {
     const org = membership.organization_id;
     const manager = canManage(membership.role);
     const count = (table: string) => supabase.from(table).select("id", { count: "exact", head: true }).eq("organization_id", org);
-    const queries = [
-      { label: "مهام مفتوحة", query: count("tasks").neq("status", "done"), optional: true },
-      { label: "مهام متأخرة", query: count("tasks").neq("status", "done").lt("due_date", today), alert: true, optional: true },
-      { label: "الأطفال", query: count("children") },
-      { label: "طلبات بانتظار الموافقة", query: count("enrollments").eq("status", "pending"), alert: true },
-      { label: "الفروع", query: count("branches") },
-      ...(manager ? [{ label: "فواتير غير مسددة", query: count("invoices").eq("status", "issued"), alert: true }] : []),
-    ];
-    const results = await Promise.all(queries.map(item => item.query));
+    const [open, late, pending, children, unpaid] = await Promise.all([
+      count("tasks").neq("status", "done"),
+      count("tasks").neq("status", "done").lt("due_date", today),
+      count("enrollments").eq("status", "pending"),
+      count("children"),
+      manager ? count("invoices").eq("status", "issued") : Promise.resolve({ count: null, error: null }),
+    ]);
     return {
       id: org, name: (membership.organizations as unknown as { name: string } | null)?.name ?? "منشأة",
-      role: membership.role,
-      // Task counts are optional until the task migration is applied; other failures are surfaced.
-      failed: results.some((result, index) => result.error && !queries[index].optional),
-      metrics: queries.map((query, index) => ({ label: query.label, alert: query.alert ?? false, count: results[index].error ? null : results[index].count })).filter(metric => metric.count !== null),
+      role: membership.role, manager,
+      // Task counts stay optional so a missing task table never hides the rest of the brief.
+      failed: Boolean(pending.error || children.error || unpaid.error),
+      tasks: open.error ? null : { open: open.count ?? 0, late: late.error ? 0 : late.count ?? 0 },
+      pending: pending.count ?? 0, children: children.count ?? 0, unpaid: unpaid.count,
     };
   }));
+  const n = (value: number) => value.toLocaleString("ar-SA");
   return <>
-    <header className="page-head"><div><h1>{greeting()}</h1><p>هذا ملخص منشآتك اليوم.</p></div>
-      <Link className="primary-button" href="/dashboard/tasks"><Icon name="board" />لوحة المهام</Link>
-    </header>
+    <header className="page-head"><div><p className="eyebrow-date">{new Intl.DateTimeFormat("ar-SA-u-ca-gregory", { weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Riyadh" }).format(new Date())}</p><h1>{greeting()}</h1></div></header>
     {membershipError ? <p role="alert">تعذر تحميل عضويات المنشآت. حاول مرة أخرى.</p> : null}
-    <div className="stack">{organizations.map(org => <section className="card org-card" key={org.id} aria-labelledby={`org-${org.id}`}>
-      <header><h2 id={`org-${org.id}`}>{org.name}</h2><span className="pill">{roleNames[org.role] ?? "عضو"}</span></header>
-      {org.failed ? <p role="alert">تعذر تحميل بعض المؤشرات. أعد تحميل الصفحة أو حاول لاحقًا.</p> : <dl className="metrics">{org.metrics.map(metric => <div key={metric.label} className={`metric${metric.alert && metric.count ? " alert" : ""}`}><dt>{metric.label}</dt><dd>{(metric.count ?? 0).toLocaleString("ar-SA")}</dd></div>)}</dl>}
-      <div className="link-row">
-        <Link className="btn btn-sm" href={`/dashboard/tasks?${new URLSearchParams({ org: org.id })}`}><Icon name="board" />المهام</Link>
-        <Link className="btn btn-sm" href={`/dashboard/operations?${new URLSearchParams({ org: org.id })}`}><Icon name="folder" />السجلات</Link>
-        <Link className="btn btn-sm" href="/dashboard/assistant"><Icon name="spark" />اسأل المساعد</Link>
-      </div>
-    </section>)}</div>
-    {!membershipError && !organizations.length ? <section className="card"><h2>حسابك غير مرتبط بمنشأة بعد</h2><p>اطلب من مسؤول المنصة إسناد حسابك إلى منشأة، ثم أعد تحميل الصفحة.</p></section> : null}
+    {organizations.map(org => <section className="brief" key={org.id} aria-labelledby={`org-${org.id}`}>
+      <h2 id={`org-${org.id}`}>{org.name}<span className="role">{roleNames[org.role] ?? "عضو"}</span></h2>
+      {org.failed ? <p role="alert">تعذر تحميل بعض الأرقام. أعد تحميل الصفحة أو حاول لاحقًا.</p> : <p className="statement">
+        {org.tasks ? org.tasks.open ? <>عندكم <Link href={`/dashboard/tasks?org=${encodeURIComponent(org.id)}`}><b>{n(org.tasks.open)}</b> مهام مفتوحة</Link>{org.tasks.late ? <>، <b className="hot">{n(org.tasks.late)}</b> منها متأخرة</> : null}. </> : <>كل المهام منجزة. </> : null}
+        {org.pending ? <><Link href={`/dashboard/operations?org=${encodeURIComponent(org.id)}&entity=enrollments`}><b>{n(org.pending)}</b> طلبات تسجيل</Link> تنتظر الموافقة. </> : <>ما فيه طلبات تسجيل معلّقة. </>}
+        {org.unpaid !== null ? org.unpaid ? <><b className="hot">{n(org.unpaid)}</b> فواتير ما انسددت. </> : <>الفواتير كلها مسددة. </> : null}
+        <span className="quiet">وفي المنشأة <b>{n(org.children)}</b> طفل.</span>
+      </p>}
+      <nav className="text-links" aria-label={`روابط ${org.name}`}>
+        <Link href={`/dashboard/tasks?${new URLSearchParams({ org: org.id })}`}>المهام</Link>
+        <Link href={`/dashboard/operations?${new URLSearchParams({ org: org.id })}`}>السجلات</Link>
+        <Link href="/dashboard/assistant">اسأل المساعد</Link>
+      </nav>
+    </section>)}
+    {!membershipError && !organizations.length ? <section className="brief"><h2>حسابك غير مرتبط بمنشأة بعد</h2><p>اطلب من مسؤول المنصة إسناد حسابك إلى منشأة، ثم أعد تحميل الصفحة.</p></section> : null}
   </>;
 }

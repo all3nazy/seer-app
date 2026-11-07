@@ -80,7 +80,7 @@ export function AssistantPanel({ organizations, supportPhone }: { organizations:
     setQuestion("");
     void run(q, classifyIntent(q, activeTopic));
   }
-  return <section className="card assistant" aria-label="مساعد سِير">
+  return <section className="assistant" aria-label="مساعد سِير">
     <div className="assistant-head">
       <h2><span className={`orb${busy ? " thinking" : ""}`} aria-hidden="true" />مساعد سِير</h2>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -92,18 +92,18 @@ export function AssistantPanel({ organizations, supportPhone }: { organizations:
       </div>
     </div>
     <div className="messages" ref={log} role="log" aria-label="المحادثة" aria-live="polite" aria-busy={busy}>
-      {!threads.length ? <div className="bubble"><p>{greeting()}. {help}</p></div> : null}
-      {threads.map(thread => <article key={thread.id} aria-label={`سؤال: ${thread.question}`} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        <p className="bubble user">{thread.question}</p>
-        <div className="bubble">
+      {!threads.length ? <div className="answer"><p>{greeting()}. {help}</p></div> : null}
+      {threads.map(thread => <article key={thread.id} className="exchange" aria-label={`سؤال: ${thread.question}`}>
+        <p className="question">{thread.question}</p>
+        <div className="answer">
           {thread.reply ? <><p>{thread.reply.text}</p>
-            {thread.reply.actions?.length ? <div className="actions">{thread.reply.actions.map(action => <a key={action.href + action.label} className="btn" href={action.href} {...(action.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}>{action.label}</a>)}</div> : null}
+            {thread.reply.actions?.length ? <div className="actions">{thread.reply.actions.map(action => <a key={action.href + action.label} href={action.href} {...(action.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}>{action.label}</a>)}</div> : null}
           </> : <span className="typing" aria-label="جارٍ التفكير"><i /><i /><i /></span>}
         </div>
       </article>)}
     </div>
-    <div className="chips" aria-label="اقتراحات">
-      {suggestions.map(item => <button key={item.label} type="button" className="chip" disabled={busy} onClick={() => void run(item.label, item.intent)}>{item.label}</button>)}
+    <div className="suggestions" aria-label="اقتراحات"><span>جرّب:</span>
+      {suggestions.map(item => <button key={item.label} type="button" className="suggestion" disabled={busy} onClick={() => void run(item.label, item.intent)}>{item.label}</button>)}
     </div>
     <form onSubmit={ask} className="assistant-form">
       <input aria-label="اسأل مساعد سِير" placeholder="مثلًا: كم مهمة متأخرة؟" maxLength={500} value={question} onChange={event => setQuestion(event.target.value)} disabled={busy} />
