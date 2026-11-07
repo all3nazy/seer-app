@@ -51,6 +51,9 @@ beforeAll(async () => {
   const team = readdirSync("supabase/migrations").filter(name => name.endsWith("_team_records_links.sql"));
   if (team.length !== 1) throw new Error("Expected exactly one team, records and links migration");
   await db.exec(readFileSync(`supabase/migrations/${team[0]}`, "utf8"));
+  const studentFiles = readdirSync("supabase/migrations").filter(name => name.endsWith("_student_files_attendance.sql"));
+  if (studentFiles.length !== 1) throw new Error("Expected exactly one student files and attendance migration");
+  await db.exec(readFileSync(`supabase/migrations/${studentFiles[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -414,5 +417,57 @@ describe("record deletion, family links, team and assignment", () => {
     await as("authenticated", owner);
     await db.exec(`delete from public.memberships where user_id='${staff}' and organization_id='${orgA}'`);
     expect(await rows(`select assignee_id from public.tasks where id='${task[0].id}'`)).toEqual([{ assignee_id: null }]);
+  });
+});
+
+describe("student files, health and attendance", () => {
+  const today = () => new Date(Date.now() + 3 * 3600_000).toISOString().slice(0, 10);
+  const yesterday = () => new Date(Date.now() + 3 * 3600_000 - 86400_000).toISOString().slice(0, 10);
+  const tomorrow = () => new Date(Date.now() + 3 * 3600_000 + 86400_000).toISOString().slice(0, 10);
+  beforeEach(async () => { await db.exec("reset role"); await db.exec(`delete from public.attendance; delete from public.child_health; insert into public.memberships(organization_id,user_id,role) values ('${orgA}','${staff}','staff') on conflict do nothing`); });
+  it("managers write health records; staff read them; other tenants see nothing", async () => {
+    await as("authenticated", owner);
+    await db.exec(`insert into public.child_health(child_id,organization_id,allergies,blood_type) values ('${childA}','${orgA}','Peanuts','O+')`);
+    expect(await rows(`select updated_by from public.child_health where child_id='${childA}'`)).toEqual([{ updated_by: owner }]);
+    await as("authenticated", staff);
+    expect(await rows("select allergies from public.child_health")).toEqual([{ allergies: "Peanuts" }]);
+    await expect(db.exec(`update public.child_health set allergies='None' where child_id='${childA}'`)).resolves.toBeDefined();
+    expect(await rows("select allergies from public.child_health")).toEqual([{ allergies: "Peanuts" }]);
+    await as("authenticated", outsider);
+    expect(await rows("select * from public.child_health")).toEqual([]);
+    await expect(db.exec(`insert into public.child_health(child_id,organization_id) values ('${childA}','${orgB}')`)).rejects.toBeDefined();
+    await db.exec("reset role");
+    const audit = await rows(`select entity,record_id,action from public.audit_events where entity='child_health'`);
+    expect(audit).toContainEqual({ entity: "child_health", record_id: childA, action: "INSERT" });
+  });
+  it("any member records today's attendance once per child; the recorder comes from the database", async () => {
+    await as("authenticated", staff);
+    await db.exec(`insert into public.attendance(organization_id,child_id,attendance_date,status) values ('${orgA}','${childA}','${today()}','present')`);
+    expect(await rows("select status,recorded_by from public.attendance")).toEqual([{ status: "present", recorded_by: staff }]);
+    await expect(db.exec(`insert into public.attendance(organization_id,child_id,attendance_date,status) values ('${orgA}','${childA}','${today()}','absent')`)).rejects.toMatchObject({ code: "23505" });
+    await db.exec(`update public.attendance set status='late' where child_id='${childA}'`);
+    expect(await rows("select status from public.attendance")).toEqual([{ status: "late" }]);
+    await expect(db.exec(`insert into public.attendance(organization_id,child_id,attendance_date,status) values ('${orgA}','${childA}','${today()}','asleep')`)).rejects.toBeDefined();
+  });
+  it("staff cannot correct past days or delete; nobody records the future", async () => {
+    await as("authenticated", staff);
+    await expect(db.exec(`insert into public.attendance(organization_id,child_id,attendance_date,status) values ('${orgA}','${childA}','${yesterday()}','present')`)).rejects.toMatchObject({ code: "42501" });
+    await as("authenticated", owner);
+    await expect(db.exec(`insert into public.attendance(organization_id,child_id,attendance_date,status) values ('${orgA}','${childA}','${tomorrow()}','present')`)).rejects.toMatchObject({ code: "23514" });
+    await db.exec(`insert into public.attendance(organization_id,child_id,attendance_date,status) values ('${orgA}','${childA}','${yesterday()}','absent')`);
+    await as("authenticated", staff);
+    await expect(db.exec(`update public.attendance set status='present' where child_id='${childA}'`)).rejects.toMatchObject({ code: "42501" });
+    await db.exec(`delete from public.attendance where child_id='${childA}'`);
+    await as("authenticated", owner);
+    expect(await rows("select status from public.attendance")).toEqual([{ status: "absent" }]);
+  });
+  it("attendance cannot reference another tenant's child and is invisible across tenants", async () => {
+    await as("authenticated", owner);
+    await expect(db.exec(`insert into public.attendance(organization_id,child_id,attendance_date,status) values ('${orgA}','${childB}','${today()}','present')`)).rejects.toBeDefined();
+    await db.exec(`insert into public.attendance(organization_id,child_id,attendance_date,status) values ('${orgA}','${childA}','${today()}','present')`);
+    await as("authenticated", outsider);
+    expect(await rows("select * from public.attendance")).toEqual([]);
+    await as("anon");
+    await expect(db.exec("select * from public.attendance")).rejects.toBeDefined();
   });
 });

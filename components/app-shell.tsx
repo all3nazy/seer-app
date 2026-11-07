@@ -9,10 +9,13 @@ import SignOutButton from "./sign-out-button";
 const links: { href: string; label: string; short: string; icon: IconName; desktopOnly?: boolean }[] = [
   { href: "/dashboard", label: "لوحة التشغيل", short: "الرئيسية", icon: "home" },
   { href: "/dashboard/tasks", label: "المهام", short: "المهام", icon: "board" },
-  { href: "/dashboard/operations", label: "السجلات", short: "السجلات", icon: "folder" },
+  { href: "/dashboard/attendance", label: "الحضور", short: "الحضور", icon: "clock" },
+  { href: "/dashboard/children", label: "الطلاب", short: "الطلاب", icon: "child" },
+  { href: "/dashboard/operations", label: "السجلات", short: "السجلات", icon: "folder", desktopOnly: true },
   { href: "/dashboard/team", label: "الفريق", short: "الفريق", icon: "users", desktopOnly: true },
+  { href: "/dashboard/audit", label: "سجل التدقيق", short: "التدقيق", icon: "shield", desktopOnly: true },
   { href: "/dashboard/assistant", label: "المساعد", short: "المساعد", icon: "spark" },
-  { href: "/dashboard/settings", label: "الإعدادات", short: "الإعدادات", icon: "settings" },
+  { href: "/dashboard/settings", label: "الإعدادات", short: "الإعدادات", icon: "settings", desktopOnly: true },
 ];
 export function AppShell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
@@ -28,7 +31,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="sidebar-foot"><ThemeToggle /><SoundToggle /><SignOutButton compact /></div>
     </aside>
     <div style={{ minWidth: 0 }}>
-      <header className="mobile-bar"><Logo href="/dashboard" label="سِير — لوحة التشغيل" /><div><ThemeToggle /></div></header>
+      <header className="mobile-bar"><Logo href="/dashboard" label="سِير — لوحة التشغيل" /><div style={{ display: "flex", gap: 6, alignItems: "center" }}><Link className="icon-btn" href="/dashboard/operations" aria-label="السجلات"><Icon name="folder" /></Link><Link className="icon-btn" href="/dashboard/settings" aria-label="الإعدادات"><Icon name="settings" /></Link><ThemeToggle /></div></header>
       <main className={`main${path === "/dashboard" || path.startsWith("/dashboard/tasks") ? " wide" : ""}`} id="main-content" tabIndex={-1}>{children}</main>
     </div>
     <nav className="tabbar" aria-label="التنقل السفلي">
