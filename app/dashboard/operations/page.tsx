@@ -4,11 +4,11 @@ import { createSupabaseServerClient } from "../../../lib/supabase/server";
 import { canManage, entities, entityLabels, isEntity, statusLabels, type Entity, type OperationRecord, type RecordOption } from "../../../lib/operations";
 import { OperationForm, OrganizationForm } from "../../../components/operation-form";
 import { FamilyLinks, type FamilyLink } from "../../../components/family-links";
+import { auditEntityLabels as auditLabels } from "../../../lib/audit";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "السجلات" };
 const pageSize = 25;
-const auditLabels: Record<string, string> = { organizations: "المنشأة", tasks: "المهام", memberships: "الفريق", member_invitations: "دعوات الفريق", child_guardians: "روابط أولياء الأمور" };
 const selections: Record<Entity, string> = {
   branches: "id,name", children: "id,full_name,date_of_birth", guardians: "id,full_name,phone",
   enrollments: "id,child_id,branch_id,status", invoices: "id,guardian_id,amount_sar,status",
@@ -88,7 +88,7 @@ export default async function Operations({ searchParams }: { searchParams: Promi
       : <FamilyLinks key={org} organizationId={org} manager={manager} childrenOptions={childrenResult.options} guardians={guardiansResult.options} links={(linksResult.data ?? []) as FamilyLink[]} /> : null}
     {manager ? <>
       <section className="card" style={{ marginTop: 24 }}><details><summary>إعدادات المنشأة</summary><OrganizationForm key={org} organizationId={org} name={organization?.name ?? ""} type={organization?.type ?? "school"} /></details></section>
-      <section className="card" style={{ marginTop: 24 }}><h2>آخر العمليات</h2>
+      <section className="card" style={{ marginTop: 24 }}><div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}><h2>آخر العمليات</h2><Link href={`/dashboard/audit?org=${encodeURIComponent(org)}`}>سجل التدقيق كامل</Link></div>
         {auditResult.error ? <p role="alert">سجل التدقيق غير متاح. تواصل مع مسؤول المنصة.</p> : auditResult.data?.length ? <ul>{auditResult.data.map(event => <li key={event.id}>{entityLabels[event.entity as Entity] ?? auditLabels[event.entity] ?? "سجل"} — {event.action === "INSERT" ? "إضافة" : event.action === "UPDATE" ? "تعديل" : "حذف"} — {new Date(event.created_at).toLocaleString("ar-SA", { timeZone: "Asia/Riyadh" })}</li>)}</ul> : <p>لا توجد عمليات مسجلة بعد.</p>}
       </section>
     </> : null}

@@ -25,6 +25,8 @@ const paths = {
   flag: "M5 21V4M5 4h11l-2 4 2 4H5",
   list: "M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01",
   search: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4",
+  clock: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2",
+  shield: "M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z",
 } as const;
 export type IconName = keyof typeof paths;
 export function Icon({ name, label }: { name: IconName; label?: string }) {
