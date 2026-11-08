@@ -84,6 +84,9 @@ beforeAll(async () => {
   const family = readdirSync("supabase/migrations").filter(name => name.endsWith("_family_portal.sql"));
   if (family.length !== 1) throw new Error("Expected exactly one family portal migration");
   await db.exec(readFileSync(`supabase/migrations/${family[0]}`, "utf8"));
+  const hr = readdirSync("supabase/migrations").filter(name => name.endsWith("_staff_hr.sql"));
+  if (hr.length !== 1) throw new Error("Expected exactly one staff HR migration");
+  await db.exec(readFileSync(`supabase/migrations/${hr[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -1030,5 +1033,65 @@ describe("family portal, daily reports and announcements", () => {
     expect(fresh).not.toBe(token);
     await as("anon");
     expect((await rows(`select public.family_portal('${token}') as p`))[0].p).toBeNull();
+  });
+});
+
+describe("staff files, leave, attendance and payroll", () => {
+  let mine: string; let other: string;
+  beforeEach(async () => {
+    await db.exec("reset role");
+    await db.exec(`delete from public.payroll_runs; delete from public.staff_profiles;
+      insert into public.memberships(organization_id,user_id,role) values ('${orgA}','${staff}','staff') on conflict do nothing`);
+    await as("authenticated", owner);
+    mine = (await rows(`insert into public.staff_profiles(organization_id,user_id,full_name,basic_salary,housing_allowance,transport_allowance,gosi_rate) values ('${orgA}','${staff}','Teacher Mona',6000,1500,500,9.75) returning id`))[0].id as string;
+    other = (await rows(`insert into public.staff_profiles(organization_id,full_name,basic_salary) values ('${orgA}','Driver',3000) returning id`))[0].id as string;
+  });
+  const today = async () => (await rows("select (now() at time zone 'Asia/Riyadh')::date::text as d"))[0].d as string;
+  it("pay files are for managers; an employee sees only their own", async () => {
+    await as("authenticated", staff);
+    expect(await rows("select full_name from public.staff_profiles")).toEqual([{ full_name: "Teacher Mona" }]);
+    await expect(db.exec(`update public.staff_profiles set basic_salary=99999 where id='${mine}'`)).resolves.toBeDefined();
+    await as("authenticated", owner);
+    expect((await rows(`select basic_salary from public.staff_profiles where id='${mine}'`))[0].basic_salary).toBe("6000.00");
+    await as("authenticated", outsider);
+    expect(await rows("select * from public.staff_profiles")).toEqual([]);
+  });
+  it("employees request their own leave; managers decide and it marks attendance", async () => {
+    await as("authenticated", staff);
+    await expect(db.exec(`insert into public.leave_requests(organization_id,staff_id,kind,starts_on,ends_on) values ('${orgA}','${other}','annual','2030-01-01','2030-01-02')`)).rejects.toMatchObject({ code: "42501" });
+    const leave = (await rows(`insert into public.leave_requests(organization_id,staff_id,kind,starts_on,ends_on,status) values ('${orgA}','${mine}','unpaid','2026-01-05','2026-01-07','approved') returning id,status,days`))[0];
+    expect(leave).toMatchObject({ status: "pending", days: 3 });
+    await expect(db.exec(`update public.leave_requests set status='approved' where id='${leave.id}'`)).rejects.toMatchObject({ code: "42501" });
+    await as("authenticated", owner);
+    expect(await rows(`update public.leave_requests set status='approved' where id='${leave.id}' returning decided_by`)).toEqual([{ decided_by: owner }]);
+    expect(await rows(`select count(*)::int as n from public.staff_attendance where staff_id='${mine}' and status='leave'`)).toEqual([{ n: 3 }]);
+  });
+  it("employees check themselves in and out today only", async () => {
+    const day = await today();
+    await as("authenticated", staff);
+    const row = (await rows(`insert into public.staff_attendance(organization_id,staff_id,work_date,status,check_in) values ('${orgA}','${mine}','${day}','absent','2020-01-01T00:00:00Z') returning status,check_in > now() - interval '1 minute' as fresh`))[0];
+    expect(row).toEqual({ status: "present", fresh: true });
+    await db.exec(`update public.staff_attendance set check_out=now() where staff_id='${mine}'`);
+    await expect(db.exec(`update public.staff_attendance set check_out=now() where staff_id='${mine}'`)).rejects.toMatchObject({ code: "23514" });
+    await expect(db.exec(`insert into public.staff_attendance(organization_id,staff_id,work_date) values ('${orgA}','${other}','${day}')`)).rejects.toMatchObject({ code: "42501" });
+  });
+  it("payroll deducts unpaid leave, absences and GOSI, and freezes once approved", async () => {
+    await as("authenticated", owner);
+    await db.exec(`insert into public.leave_requests(organization_id,staff_id,kind,starts_on,ends_on,status) values ('${orgA}','${mine}','unpaid','2026-01-30','2026-02-02','approved')`);
+    await db.exec(`insert into public.staff_attendance(organization_id,staff_id,work_date,status) values ('${orgA}','${other}','2026-01-12','absent')`);
+    const run = (await rows(`select public.generate_payroll('${orgA}','2026-01-15') as id`))[0].id as string;
+    const lines = await rows(`select full_name,unpaid_days,absence_days,absence_deduction,gosi_deduction,net from public.payroll_lines where run_id='${run}' order by full_name`);
+    expect(lines).toEqual([
+      { full_name: "Driver", unpaid_days: 0, absence_days: 1, absence_deduction: "100.00", gosi_deduction: "0.00", net: "2900.00" },
+      { full_name: "Teacher Mona", unpaid_days: 2, absence_days: 0, absence_deduction: "533.34", gosi_deduction: "731.25", net: "6735.41" },
+    ]);
+    await db.exec(`update public.payroll_lines set bonus=200 where run_id='${run}' and full_name='Driver'`);
+    expect((await rows(`select total_net from public.payroll_runs where id='${run}'`))[0].total_net).toBe("9835.41");
+    await db.exec(`update public.payroll_runs set status='approved' where id='${run}'`);
+    await expect(db.exec(`update public.payroll_lines set bonus=1 where run_id='${run}'`)).rejects.toMatchObject({ code: "42501" });
+    await expect(db.exec(`select public.generate_payroll('${orgA}','2026-01-01')`)).rejects.toMatchObject({ code: "23514" });
+    await as("authenticated", staff);
+    expect(await rows("select * from public.payroll_lines")).toEqual([]);
+    await expect(db.exec(`select public.generate_payroll('${orgA}','2026-02-01')`)).rejects.toMatchObject({ code: "42501" });
   });
 });

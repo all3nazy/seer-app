@@ -6,6 +6,8 @@ import { CopyLink, InquiryForm } from "../../../components/work-forms";
 import { dueLabel, isOverdue, riyadhToday, taskPriorityLabels, taskStatusLabels, type Task } from "../../../lib/tasks";
 import { inquiryCategoryLabels, inquiryStatusLabels, inquiryStatusTone, since, type Inquiry } from "../../../lib/inquiries";
 import { memberName, type Member } from "../../../lib/team";
+import { CheckInButton, LeaveDecision, LeaveForm } from "../../../components/hr-forms";
+import { leaveLabels, leaveStatusLabels, leaveStatusTone, type LeaveKind } from "../../../lib/hr";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "مهامي" };
@@ -21,6 +23,12 @@ export default async function MyWorkPage({ searchParams }: { searchParams: Promi
     client.from("inquiries").select("id,author_id,category,subject,body,task_id,status,created_at,updated_at").eq("organization_id", org).eq("author_id", userId).order("updated_at", { ascending: false }).limit(50),
     client.from("memberships").select("user_id,role,display_name").eq("organization_id", org).eq("user_id", userId).maybeSingle(),
   ]);
+  // The employee's own HR file, if the manager linked one to this account.
+  const { data: myFile } = await client.from("staff_profiles").select("id,annual_leave_days").eq("organization_id", org).eq("user_id", userId).maybeSingle();
+  const [myToday, myLeave] = myFile ? await Promise.all([
+    client.from("staff_attendance").select("check_in,check_out,status").eq("staff_id", myFile.id as string).eq("work_date", today).maybeSingle(),
+    client.from("leave_requests").select("id,kind,starts_on,ends_on,days,status").eq("staff_id", myFile.id as string).order("starts_on", { ascending: false }).limit(10),
+  ]) : [{ data: null }, { data: [] }];
   const rows = (tasks.data ?? []) as Task[];
   const open = rows.filter(task => task.status !== "done");
   const overdue = open.filter(task => isOverdue(task, today));
@@ -46,6 +54,19 @@ export default async function MyWorkPage({ searchParams }: { searchParams: Promi
       <span>رابط صفحتك: <span dir="ltr" style={{ wordBreak: "break-all" }}>{link}</span>. يفتح بعد تسجيل الدخول بحسابك، وكل موظف يشوف مهامه هو.</span>
       <CopyLink link={link} />
     </p>
+    {myFile ? <section className="card my-hr" aria-labelledby="hr-title" style={{ marginBottom: 20 }}>
+      <h2 id="hr-title">حضوري وإجازاتي</h2>
+      <div className="my-hr-grid">
+        {(myToday.data as { status: string } | null)?.status === "leave" ? <p className="chip-soft ok">اليوم إجازة 🌴</p>
+          : <CheckInButton organizationId={org} staffId={myFile.id as string} checkedIn={(myToday.data as { check_in: string | null } | null)?.check_in ?? null} checkedOut={(myToday.data as { check_out: string | null } | null)?.check_out ?? null} />}
+        <details><summary>طلب إجازة</summary><div style={{ marginTop: 10 }}><LeaveForm organizationId={org} manager={false} staffOptions={[{ id: myFile.id as string, name: "" }]} /></div></details>
+      </div>
+      {((myLeave.data ?? []) as { id: string; kind: LeaveKind; starts_on: string; ends_on: string; days: number; status: string }[]).length ? <ul className="records" style={{ marginTop: 12 }}>
+        {((myLeave.data ?? []) as { id: string; kind: LeaveKind; starts_on: string; ends_on: string; days: number; status: string }[]).map(row => <li key={row.id}>
+          <span>{leaveLabels[row.kind]} · {row.starts_on}{row.ends_on !== row.starts_on ? ` ← ${row.ends_on}` : ""} ({row.days.toLocaleString("ar-SA")} يوم)</span>
+          <span style={{ display: "flex", gap: 8, alignItems: "center" }}><span className={`chip-soft ${leaveStatusTone[row.status]}`}>{leaveStatusLabels[row.status]}</span>{row.status === "pending" ? <LeaveDecision organizationId={org} id={row.id} manager={false} mine /> : null}</span>
+        </li>)}</ul> : null}
+    </section> : null}
     <div className="home-grid">
       <section className="card" aria-labelledby="tasks-title">
         <h2 id="tasks-title">المهام المسندة لي</h2>
