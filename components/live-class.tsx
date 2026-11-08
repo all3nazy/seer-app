@@ -61,7 +61,7 @@ export function LiveClass(props: Props) {
     try {
       const client = getSupabaseBrowserClient();
       const filterOrg = `organization_id=eq.${organizationId}`;
-      channel = client.channel(`live-class-${organizationId}`)
+      channel = client.channel(`live-class-${organizationId}-${Math.random().toString(36).slice(2, 8)}`)
         .on("postgres_changes", { event: "*", schema: "public", table: "attendance", filter: filterOrg }, refresh)
         .on("postgres_changes", { event: "*", schema: "public", table: "pickups", filter: filterOrg }, refresh)
         .subscribe((status: string) => { connected = status === "SUBSCRIBED"; setLive(connected ? "live" : status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED" ? "polling" : "connecting"); });
