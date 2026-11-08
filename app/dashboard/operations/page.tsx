@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createSupabaseServerClient } from "../../../lib/supabase/server";
+import { createSupabaseServerClient, sessionUser } from "../../../lib/supabase/server";
 import { canManage, entities, entityLabels, isEntity, statusLabels, type Entity, type OperationRecord, type RecordOption } from "../../../lib/operations";
 import { OperationForm, OrganizationForm } from "../../../components/operation-form";
 import { FamilyLinks, type FamilyLink } from "../../../components/family-links";
@@ -22,8 +22,8 @@ function recordLabel(record: OperationRecord, options: RecordOption[]): string {
 }
 export default async function Operations({ searchParams }: { searchParams: Promise<{ org?: string; entity?: string; page?: string }> }) {
   const client = await createSupabaseServerClient();
-  const { data: { user }, error } = await client.auth.getUser();
-  if (error || !user) redirect("/login");
+  const user = await sessionUser(client);
+  if (!user) redirect("/login");
   const { data: memberships, error: membershipError } = await client.from("memberships").select("organization_id,role,organizations(name,type)").eq("user_id", user.id);
   if (membershipError) return <><h1>تعذر تحميل المنشآت</h1><p role="alert">حاول مجددًا لاحقًا.</p><Link href="/dashboard">العودة للوحة التشغيل</Link></>;
   const params = await searchParams;

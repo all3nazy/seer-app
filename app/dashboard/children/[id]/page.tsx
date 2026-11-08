@@ -8,6 +8,7 @@ import { statusLabels, uuid } from "../../../../lib/operations";
 import { age, attendanceLabels, attendanceStatuses, attendanceTone, genderLabels, isAttendanceStatus, riyadhToday, type ChildHealth, type ChildProfile } from "../../../../lib/students";
 import { relationshipLabels, type Relationship } from "../../../../lib/team";
 import { sectionLabel } from "../../../../lib/academics";
+import { AuthorizedPickupForm, AuthorizedToggle } from "../../../../components/pickup-forms";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "ملف الطالب" };
@@ -38,6 +39,8 @@ export default async function StudentFile({ params, searchParams }: { params: Pr
     client.from("sections").select("id,name,grade_level_id").eq("organization_id", org).order("name"),
     client.from("grade_levels").select("id,name").eq("organization_id", org).order("sort_order"),
   ]);
+  const { data: authorizedData } = await client.from("authorized_pickups").select("id,full_name,relationship,phone,national_id,is_active").eq("organization_id", org).eq("child_id", id).order("created_at");
+  const authorizedRows = (authorizedData ?? []) as { id: string; full_name: string; relationship: string; phone: string | null; national_id: string | null; is_active: boolean }[];
   const grades = (gradesResult.data ?? []) as { id: string; name: string }[];
   const sections = ((sectionsResult.data ?? []) as { id: string; name: string; grade_level_id: string }[]).map(item => ({ id: item.id, name: sectionLabel(item, grades) }));
   const sectionName = sections.find(item => item.id === profile.section_id)?.name ?? null;
@@ -71,7 +74,7 @@ export default async function StudentFile({ params, searchParams }: { params: Pr
         <Field label="الموافقة على التصوير" value={profile.photo_consent ? `موافق${profile.photo_consent_at ? ` منذ ${new Date(profile.photo_consent_at).toLocaleDateString("ar-SA", { timeZone: "Asia/Riyadh" })}` : ""}` : "غير موافق"} />
       </dl>
       {profile.notes ? <p style={{ marginTop: 12, whiteSpace: "pre-wrap" }}>{profile.notes}</p> : null}
-      {manager ? <details style={{ marginTop: 16 }}><summary>تعديل البيانات</summary><div style={{ marginTop: 12 }}><StudentProfileForm organizationId={org} branches={branches} sections={sections} child={profile} /></div></details> : null}
+      {manager ? <details className="desktop-only" style={{ marginTop: 16 }}><summary>تعديل البيانات</summary><div style={{ marginTop: 12 }}><StudentProfileForm organizationId={org} branches={branches} sections={sections} child={profile} /></div></details> : null}
     </section>
 
     <section className="card" aria-labelledby="guardians-title">
@@ -81,11 +84,21 @@ export default async function StudentFile({ params, searchParams }: { params: Pr
         return <li key={link.guardian_id}><span>{guardian?.full_name ?? "ولي أمر"} <span className="chip-soft">{relationshipLabels[link.relationship as Relationship] ?? link.relationship}</span></span>
           {guardian?.phone ? <a href={`tel:${guardian.phone}`} dir="ltr">{guardian.phone}</a> : null}</li>;
       })}</ul> : <p className="hint">ما فيه ولي أمر مربوط بهذا الطالب.</p>}
-      {manager ? <details style={{ marginTop: 12 }}><summary>ربط ولي أمر أو إلغاء ربط</summary>
+      {manager ? <details className="desktop-only" style={{ marginTop: 12 }}><summary>ربط ولي أمر أو إلغاء ربط</summary>
         <FamilyLinks organizationId={org} manager childrenOptions={[{ id, name: profile.full_name }]} guardians={guardians.map(item => ({ id: item.id, name: item.full_name }))} links={links} />
       </details> : null}
     </section>
 
+    <section className="card" aria-labelledby="pickup-title">
+      <h2 id="pickup-title">المصرّح لهم باستلام الطالب</h2>
+      <p className="hint" style={{ marginBottom: 12 }}>أولياء الأمور المربوطين يقدرون يستلمون دائمًا. أضف هنا غيرهم، مثل الجد أو السائق.</p>
+      {authorizedRows.length ? <ul className="records">{authorizedRows.map(item => <li key={item.id}>
+        <span><strong>{item.full_name}</strong> <span className="chip-soft">{item.relationship}</span>{item.is_active ? null : <span className="chip-soft rose" style={{ marginInlineStart: 6 }}>موقوف</span>}
+          <span className="hint" style={{ display: "block" }} dir="ltr">{[item.phone, item.national_id].filter(Boolean).join(" · ")}</span></span>
+        {manager ? <span className="desktop-only"><AuthorizedToggle organizationId={org} childId={id} id={item.id} active={item.is_active} /></span> : null}
+      </li>)}</ul> : <p className="hint">ما فيه أشخاص مضافين.</p>}
+      {manager ? <details className="desktop-only" style={{ marginTop: 12 }}><summary>إضافة شخص مصرّح له</summary><div style={{ marginTop: 12 }}><AuthorizedPickupForm organizationId={org} childId={id} /></div></details> : null}
+    </section>
     <section className="card" aria-labelledby="health-title">
       <h2 id="health-title">الملف الصحي</h2>
       {healthResult.error ? <p role="alert">تعذر تحميل الملف الصحي.</p> : <>
@@ -101,7 +114,7 @@ export default async function StudentFile({ params, searchParams }: { params: Pr
           <Field label="ملاحظات صحية" value={health?.notes} />
         </dl>
         {health ? <p className="hint" style={{ marginTop: 8 }}>آخر تحديث: {new Date(health.updated_at).toLocaleString("ar-SA", { timeZone: "Asia/Riyadh" })}</p> : null}
-        {manager ? <details style={{ marginTop: 16 }}><summary>{health ? "تحديث الملف الصحي" : "إضافة الملف الصحي"}</summary><div style={{ marginTop: 12 }}><StudentHealthForm organizationId={org} childId={id} health={health} /></div></details> : null}
+        {manager ? <details className="desktop-only" style={{ marginTop: 16 }}><summary>{health ? "تحديث الملف الصحي" : "إضافة الملف الصحي"}</summary><div style={{ marginTop: 12 }}><StudentHealthForm organizationId={org} childId={id} health={health} /></div></details> : null}
       </>}
     </section>
 

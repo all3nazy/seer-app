@@ -7,6 +7,9 @@ import { dueLabel, isOverdue, riyadhToday, taskPriorityLabels, type Task } from 
 import { since, type TaskComment } from "../../../../lib/inquiries";
 import { memberName, type Member } from "../../../../lib/team";
 import { uuid } from "../../../../lib/operations";
+import { ShareButtons } from "../../../../components/share-buttons";
+import { taskMessage } from "../../../../lib/share";
+import { siteOrigin } from "../../../../lib/origin";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "مهمة" };
@@ -17,12 +20,14 @@ export default async function TaskPage({ params, searchParams }: { params: Promi
   try { id = uuid(rawId); } catch { notFound(); }
   const context = await loadOrgContext(requestedOrg);
   if ("error" in context) return <OrgUnavailable reason={context.error} />;
-  const { client, org, userId, manager } = context;
+  const { client, org, orgName, userId, manager } = context;
   const [task, comments, members] = await Promise.all([
     client.from("tasks").select("id,title,notes,status,priority,due_date,completed_at,assignee_id").eq("organization_id", org).eq("id", id).maybeSingle(),
     client.from("task_comments").select("id,task_id,author_id,body,created_at").eq("organization_id", org).eq("task_id", id).order("created_at").limit(200),
     client.from("memberships").select("user_id,role,display_name").eq("organization_id", org),
   ]);
+  const contacts = manager ? await client.rpc("member_contacts", { org }) : { data: null };
+  const origin = await siteOrigin();
   if (task.error) return <section className="card"><h1>تعذر تحميل المهمة</h1><p role="alert">أعد تحميل الصفحة.</p></section>;
   if (!task.data) notFound();
   const row = task.data as Task;
@@ -41,6 +46,15 @@ export default async function TaskPage({ params, searchParams }: { params: Promi
       </div>
       <TaskStatusPicker organizationId={org} taskId={row.id} status={row.status} />
     </header>
+    {manager && row.assignee_id && row.assignee_id !== userId ? (() => {
+      const contact = ((contacts.data ?? []) as { user_id: string; email: string | null; phone: string | null }[]).find(item => item.user_id === row.assignee_id);
+      const assignee = memberRows.find(member => member.user_id === row.assignee_id);
+      const message = taskMessage({ organization: orgName, title: row.title, due: row.due_date ? new Date(row.due_date).toLocaleDateString("ar-SA", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long" }) : null, link: `${origin}/dashboard/tasks/${row.id}?org=${orgParam}`, name: assignee?.display_name });
+      return <section className="card" style={{ display: "flex", gap: 12, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
+        <span>أرسل المهمة لـ{name(row.assignee_id)}{contact?.phone ? "" : <span className="hint"> (ما سجّل رقم جواله بعد)</span>}</span>
+        <ShareButtons phone={contact?.phone} email={contact?.email} subject={message.subject} body={message.body} />
+      </section>;
+    })() : null}
     {row.notes ? <section className="card"><h2>التفاصيل</h2><p style={{ whiteSpace: "pre-wrap" }}>{row.notes}</p></section> : null}
     <section className="card" aria-labelledby="comments-title">
       <h2 id="comments-title">التعليقات والتحديثات</h2>

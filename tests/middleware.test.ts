@@ -13,14 +13,14 @@ type CookieAdapter = {
 function authResult(user: { id: string } | null, error: object | null = null, refresh: boolean | "twice" = false) {
   mocks.createServerClient.mockImplementation((_url: string, _key: string, options: { cookies: CookieAdapter }) => ({
     auth: {
-      getUser: vi.fn(async () => {
+      getClaims: vi.fn(async () => {
         if (refresh) options.cookies.setAll([
           { name: "sb-session", value: "refreshed", options: { path: "/", httpOnly: true, sameSite: "lax" } },
         ], { "Cache-Control": "private, no-store", Expires: "0", Pragma: "no-cache" });
         if (refresh === "twice") options.cookies.setAll([
           { name: "sb-secondary", value: "second", options: { path: "/" } },
         ], {});
-        return { data: { user }, error };
+        return { data: user ? { claims: { sub: user.id } } : null, error };
       }),
     },
   }));

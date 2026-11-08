@@ -80,6 +80,37 @@ describe("admissions validation", async () => {
   });
 });
 
+describe("share links", async () => {
+  const { whatsappNumber, whatsappLink, mailtoLink, taskMessage } = await import("../lib/share");
+  it("normalises Saudi and international numbers for WhatsApp", () => {
+    expect(whatsappNumber("0501234567")).toBe("966501234567");
+    expect(whatsappNumber("+966 50 123 4567")).toBe("966501234567");
+    expect(whatsappNumber("00971501234567")).toBe("971501234567");
+    expect(whatsappNumber("abc")).toBeNull();
+    expect(whatsappLink(null, "hi")).toBe("https://wa.me/?text=hi");
+  });
+  it("builds a task message with the login link", () => {
+    const message = taskMessage({ organization: "روضة", title: "تقرير", due: null, link: "https://x/t", name: "نورة" });
+    expect(message.body).toContain("https://x/t");
+    expect(mailtoLink("a@b.c", message.subject, message.body)).toMatch(/^mailto:a%40b\.c\?subject=/);
+  });
+});
+
+describe("phone and computer versions", async () => {
+  const { computerOnlySection, navLinks } = await import("../lib/navigation");
+  it("keeps daily work on phones and the rest for computers and iPads", () => {
+    for (const path of ["/dashboard", "/dashboard/my", "/dashboard/attendance", "/dashboard/pickup", "/dashboard/children/abc", "/dashboard/classes", "/dashboard/inquiries/x", "/dashboard/assistant", "/dashboard/settings", "/dashboard/tasks/123"]) {
+      expect(computerOnlySection(path), path).toBeUndefined();
+    }
+    for (const path of ["/dashboard/tasks", "/dashboard/finance", "/dashboard/finance/invoices/1", "/dashboard/admissions", "/dashboard/academics", "/dashboard/operations", "/dashboard/team", "/dashboard/audit"]) {
+      expect(computerOnlySection(path), path).toBeDefined();
+    }
+  });
+  it("has four bottom tabs plus «more»", () => {
+    expect(navLinks.filter(link => link.tab).map(link => link.short)).toEqual(["الرئيسية", "مهامي", "الحضور", "التسليم"]);
+  });
+});
+
 describe("finance validation", async () => {
   const { financeValues, lineValues, paymentValues, lineNet, balance, sar } = await import("../lib/finance");
   it("validates catalogue, plans and discounts", () => {
