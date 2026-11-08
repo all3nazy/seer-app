@@ -50,7 +50,7 @@ export function BotDock({ stage, organizations, supportPhone }: { stage: Stage; 
       </header>
       <p className="bot-hint">{persona.greeting} {persona.hint}</p>
       <div className="bot-drawer-body">
-        {organizations.length ? <AssistantPanel organizations={organizations} supportPhone={supportPhone} /> : <p className="hint">اطلب من مسؤول المنصة ربط حسابك بمنشأة.</p>}
+        {organizations.length ? <AssistantPanel organizations={organizations} supportPhone={supportPhone} stage={stage} /> : <p className="hint">اطلب من مسؤول المنصة ربط حسابك بمنشأة.</p>}
       </div>
     </aside>
   </>;
