@@ -14,7 +14,7 @@ type Report = { date: string; mood: Mood | null; breakfast: Portion | null; lunc
 type Portal = {
   guardian: string;
   organization: { name: string; type: string; legal_name: string | null; phone: string | null; brand_color: string; logo_data: string | null };
-  children: { name: string; section: string | null; today: AttendanceStatus | null; picked_up: { by: string; at: string } | null; attendance: Record<AttendanceStatus, number>; reports: Report[]; pickup_people: { name: string; relationship: string }[] }[];
+  children: { name: string; section: string | null; today: AttendanceStatus | null; picked_up: { by: string; at: string } | null; attendance: Record<AttendanceStatus, number>; reports: Report[]; bus: { route: string; direction: "to_school" | "to_home"; event: "boarded" | "dropped" | "absent"; at: string }[]; pickup_people: { name: string; relationship: string }[] }[];
   invoices: { number: number | null; title: string | null; status: string; due_date: string | null; total: number; paid: number; token: string }[];
   announcements: { title: string; body: string; pinned: boolean; at: string }[];
 };
@@ -48,6 +48,7 @@ export default async function FamilyPortalPage({ params }: { params: Promise<{ t
         <strong>{child.picked_up ? `انصرف مع ${child.picked_up.by} الساعة ${time(child.picked_up.at)}` : child.today ? `اليوم: ${attendanceLabels[child.today]}` : "ما تسجّل حضور اليوم بعد"}</strong>
         <span className="portal-stats">آخر ٣٠ يوم: {(["present", "late", "absent", "excused"] as AttendanceStatus[]).map(status => `${attendanceLabels[status]} ${Number(child.attendance[status] ?? 0).toLocaleString("ar-SA")}`).join(" · ")}</span>
       </div>
+      {child.bus?.length ? <div className="portal-card portal-bus"><strong>🚌 الباص اليوم</strong>{child.bus.map((item, index) => <span key={index}>{time(item.at)} — {item.event === "boarded" ? `صعد باص ${item.route}` : item.event === "dropped" ? (item.direction === "to_school" ? "وصل المدرسة" : "نزل عند البيت") : `ما ركب باص ${item.route}`}</span>)}</div> : null}
       {child.reports.length ? <div className="portal-reports">{child.reports.map(report => <details key={report.date} className="portal-card" open={report === child.reports[0]}>
         <summary><span>{report.mood ? moodEmoji[report.mood] : "📝"}</span> {day(report.date)}{report.mood ? ` — ${moodLabels[report.mood]}` : ""}</summary>
         <ul>
