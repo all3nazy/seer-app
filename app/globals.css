@@ -703,3 +703,29 @@ button.chip-soft[aria-pressed="true"]{box-shadow:inset 0 0 0 1.5px currentColor}
 .payroll-adjust{display:flex;gap:4px;align-items:center}.payroll-adjust input{width:76px;padding:6px 8px;min-height:34px}
 .print-only{display:none}
 @media print{body:has(.payroll-sheet) *{visibility:hidden}body:has(.payroll-sheet) .payroll-sheet,body:has(.payroll-sheet) .payroll-sheet *{visibility:visible}.payroll-sheet{position:absolute;inset:0 auto auto 0;width:100%}.print-only{display:block}.payroll-adjust input{border:0}}
+
+/* Learning */
+.timetable{width:100%;border-collapse:separate;border-spacing:6px;min-width:760px}
+.timetable th{font-size:13px;color:var(--text-2);font-weight:600;text-align:center}
+.tt-cell{width:100%;min-height:62px;border-radius:14px;border:1.5px dashed var(--border-strong);background:transparent;color:var(--text);font:inherit;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:6px}
+.tt-cell.filled{border-style:solid;border-color:transparent;background:var(--tint-lilac)}
+.tt-cell strong{font-size:13.5px}.tt-cell small{font-size:11.5px;color:var(--text-2)}.tt-empty{color:var(--text-3);font-size:20px}
+.tt-cell:disabled{cursor:default}
+.tt-edit{display:grid;gap:4px;padding:6px;border-radius:14px;background:var(--surface-2)}.tt-edit select{min-height:34px;padding:4px 8px;font-size:13px}.tt-edit span{display:flex;gap:4px}
+.grades-layout{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:1100px){.grades-layout{grid-template-columns:1fr}}
+.assessment-list{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:6px}
+.assessment-list li{display:flex;gap:6px;align-items:center}
+.assessment-list a{flex:1;display:flex;flex-direction:column;padding:10px 12px;border-radius:12px;border:1px solid var(--border);text-decoration:none;color:var(--text)}
+.assessment-list li[aria-current="true"] a{border-color:var(--primary);background:var(--tint-lilac)}
+.assessment-list small{color:var(--text-2);font-size:12px}
+.grade-sheet ol{list-style:none;margin:10px 0 14px;padding:0;display:grid;gap:6px}
+.grade-sheet li{display:grid;grid-template-columns:minmax(0,1fr) 90px 80px;gap:10px;align-items:center;padding:6px 8px;border-radius:12px;background:var(--surface-2)}
+.grade-sheet input{min-height:38px;text-align:center}.grade-sheet input[aria-invalid="true"]{border-color:var(--danger)}
+.grade-bar{display:block;height:6px;border-radius:99px;background:linear-gradient(90deg,var(--leaf) var(--p),var(--surface-3) var(--p))}
+.star-board{margin:8px 0 0;padding:0;list-style:none;display:grid;gap:4px}.star-board li{display:flex;justify-content:space-between;padding:6px 10px;border-radius:10px;background:var(--surface-2)}.star-board .neg{color:var(--danger)}
+.report-cards{display:grid;gap:24px}
+.report-card .grade-bar{margin-top:4px;max-width:140px}
+.report-sign{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-top:26px}
+@media print{.report-card{page-break-after:always;break-after:page;position:static!important}body:has(.report-cards) .fdoc{position:static}}
+@media print{.sidebar,.tabbar,.mobile-bar,.bot-launcher,.bot-drawer,.bot-scrim,.stage-pattern,.toasts{display:none!important}.main{padding:0!important;margin:0!important}}
