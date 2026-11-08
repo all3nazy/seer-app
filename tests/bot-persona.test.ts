@@ -58,3 +58,13 @@ describe("bot persona", () => {
     expect(briefingItems({ ...empty, unassigned: 3 })[0]).toMatchObject({ label: "الطلاب", href: "/dashboard/children?section=none" });
   });
 });
+describe("bot management commands", () => {
+  it("understands tasks, leave, notifications and hand-over", () => {
+    expect(parseCommand("مهامي")).toEqual({ kind: "myTasks" });
+    expect(parseCommand("وش مهامي؟")).toEqual({ kind: "myTasks" });
+    expect(parseCommand("طلبات الإجازة")).toEqual({ kind: "leave" });
+    expect(parseCommand("الإشعارات")).toEqual({ kind: "unread" });
+    expect(parseCommand("سلّم ريم")).toEqual({ kind: "pickup", name: "ريم" });
+    expect(parseCommand("ملخص اليوم")).toEqual({ kind: "brief" });
+  });
+});

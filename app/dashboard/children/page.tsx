@@ -78,6 +78,7 @@ export default async function ChildrenPage({ searchParams }: { searchParams: Pro
         {page * pageSize < total ? <Link href={pageUrl(page + 1)}>الصفحة التالية</Link> : null}
       </nav>
     </>}
+    {manager ? <p className="desktop-only" style={{ marginTop: 12 }}><Link className="btn" href={`/dashboard/children/import?org=${encodeURIComponent(org)}`}>استيراد من Excel</Link></p> : null}
     {manager ? <section className="card desktop-only" style={{ marginTop: 12 }}><details><summary>إضافة طالب جديد</summary>
       <div style={{ marginTop: 16 }}><StudentProfileForm organizationId={org} branches={branches} sections={sections} /></div>
     </details></section> : null}

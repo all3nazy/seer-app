@@ -169,3 +169,77 @@ export async function briefingFor(client: Awaited<ReturnType<typeof createSupaba
     } };
   } catch (error) { return fail(error, "تعذر تجهيز الملخص الآن."); }
 }
+
+export type BotTask = { id: string; title: string; due_date: string | null; status: string };
+/** The person's own open tasks, soonest first. */
+export async function botMyTasks(organizationId: string): Promise<BotResult<BotTask[]>> {
+  try {
+    const auth = await access(organizationId);
+    if ("error" in auth) return { error: auth.error };
+    const { data, error } = await auth.client.from("tasks").select("id,title,due_date,status").eq("organization_id", auth.org).eq("assignee_id", auth.user)
+      .neq("status", "done").order("due_date", { ascending: true, nullsFirst: false }).limit(8);
+    if (error) return { error: "تعذر قراءة مهامك." };
+    return { data: (data ?? []) as BotTask[] };
+  } catch (error) { return fail(error, "تعذر قراءة مهامك."); }
+}
+export async function botCompleteTask(organizationId: string, taskId: string): Promise<BotResult<string>> {
+  const { moveTask } = await import("../tasks/actions");
+  const result = await moveTask(organizationId, taskId, "done");
+  return result.error ? { error: result.error } : { data: "أحسنت! انقفلت المهمة كمنجزة، وانحفظت في سجلها." };
+}
+
+export type BotLeave = { id: string; who: string; kind: string; starts_on: string; ends_on: string; days: number };
+/** Pending leave requests (managers). */
+export async function botPendingLeave(organizationId: string): Promise<BotResult<BotLeave[]>> {
+  try {
+    const auth = await access(organizationId);
+    if ("error" in auth) return { error: auth.error };
+    if (!auth.manager) return { error: "طلبات الإجازة يعتمدها المالك أو المدير. تقدر تتابع إجازتك من «مهامي»." };
+    const { data, error } = await auth.client.from("leave_requests").select("id,kind,starts_on,ends_on,days,staff_profiles(full_name)").eq("organization_id", auth.org).eq("status", "pending").order("starts_on").limit(8);
+    if (error) return { error: "تعذر قراءة طلبات الإجازة." };
+    return { data: (data ?? []).map(row => ({ id: row.id as string, who: (row.staff_profiles as unknown as { full_name: string } | null)?.full_name ?? "موظف", kind: row.kind as string, starts_on: row.starts_on as string, ends_on: row.ends_on as string, days: Number(row.days) })) };
+  } catch (error) { return fail(error, "تعذر قراءة طلبات الإجازة."); }
+}
+export async function botDecideLeave(organizationId: string, id: string, approve: boolean): Promise<BotResult<string>> {
+  const { decideLeave } = await import("../staff/actions");
+  const result = await decideLeave(organizationId, id, approve ? "approved" : "rejected");
+  return result.error ? { error: result.error } : { data: approve ? "اعتُمدت الإجازة، ووصل الموظف إشعار." : "رُفض الطلب، ووصل الموظف إشعار." };
+}
+
+export type BotNotice = { title: string; body: string | null; url: string | null; created_at: string };
+export async function botUnread(organizationId: string): Promise<BotResult<BotNotice[]>> {
+  try {
+    const auth = await access(organizationId);
+    if ("error" in auth) return { error: auth.error };
+    const { data, error } = await auth.client.from("notifications").select("title,body,url,created_at").is("read_at", null).order("created_at", { ascending: false }).limit(8);
+    if (error) return { error: "تعذر قراءة الإشعارات." };
+    return { data: (data ?? []) as BotNotice[] };
+  } catch (error) { return fail(error, "تعذر قراءة الإشعارات."); }
+}
+
+export type BotPickupPerson = { key: string; name: string; relation: string };
+/** Who may collect a student: guardians and active authorised people. */
+export async function botPickupPeople(organizationId: string, childId: string): Promise<BotResult<BotPickupPerson[]>> {
+  try {
+    const auth = await access(organizationId);
+    if ("error" in auth) return { error: auth.error };
+    const child = uuid(childId);
+    const [links, authorized, picked] = await Promise.all([
+      auth.client.from("child_guardians").select("relationship,guardians(id,full_name)").eq("organization_id", auth.org).eq("child_id", child),
+      auth.client.from("authorized_pickups").select("id,full_name,relationship").eq("organization_id", auth.org).eq("child_id", child).eq("is_active", true),
+      auth.client.from("pickups").select("picked_by_name").eq("organization_id", auth.org).eq("child_id", child).eq("pickup_date", riyadhToday()).maybeSingle(),
+    ]);
+    if (picked.data) return { error: `انصرف اليوم مع ${picked.data.picked_by_name as string}.` };
+    const relation: Record<string, string> = { father: "الأب", mother: "الأم", guardian: "ولي الأمر", other: "قريب" };
+    const people = [
+      ...((links.data ?? []) as unknown as { relationship: string; guardians: { id: string; full_name: string } | null }[]).filter(row => row.guardians).map(row => ({ key: `guardian:${row.guardians!.id}`, name: row.guardians!.full_name, relation: relation[row.relationship] ?? "ولي الأمر" })),
+      ...((authorized.data ?? []) as { id: string; full_name: string; relationship: string }[]).map(row => ({ key: `authorized:${row.id}`, name: row.full_name, relation: `مصرّح له: ${row.relationship}` })),
+    ];
+    return { data: people };
+  } catch (error) { return fail(error, "تعذر قراءة المستلمين."); }
+}
+export async function botRecordPickup(organizationId: string, childId: string, person: string): Promise<BotResult<string>> {
+  const { recordPickup } = await import("../pickup/actions");
+  const result = await recordPickup(organizationId, childId, person, "");
+  return result.error ? { error: result.error } : { data: "تم التسليم وانحفظ بالوقت واسمك. وصل المستلم رابط تأكيد برقم هويته إذا كانت الرسائل مفعّلة." };
+}

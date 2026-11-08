@@ -13,7 +13,10 @@ export type BotCommand =
   | { kind: "today"; status: AttendanceStatus | "pending" | null }
   | { kind: "openClass"; name: string | null }
   | { kind: "tip" }
-  | { kind: "brief" };
+  | { kind: "brief" }
+  | { kind: "myTasks" }
+  | { kind: "leave" }
+  | { kind: "unread" };
 
 const norm = (value: string) => normalizeArabic(value).replace(/ئ/g, "ي").replace(/ؤ/g, "و").replace(/[؟?!.,،؛:«»"]/g, " ").replace(/\s+/g, " ").trim();
 
@@ -31,6 +34,9 @@ export function parseCommand(input: string): BotCommand | null {
   if (!q) return null;
   const words = q.split(" ");
 
+  if (/^(?:مهامي|وش مهامي|ايش مهامي|مهامي اليوم|المهام المسنده لي|المسند لي|وش المطلوب مني من مهام)$/.test(q)) return { kind: "myTasks" };
+  if (/^(?:الاجازات|اجازات|طلبات الاجازه|طلبات الاجازات|الاجازات المعلقه|اجازات الموظفين|اعتماد الاجازات)$/.test(q)) return { kind: "leave" };
+  if (/^(?:الاشعارات|اشعاراتي|وش الاشعارات|التنبيهات|تنبيهاتي|الاشعارات الجديده)$/.test(q)) return { kind: "unread" };
   // The day at a glance: "ملخص اليوم", "وش الوضع؟", "وش عندي اليوم", "ابدأ يومي", "وش فاتني".
   if (/^(?:ملخص|الملخص|ملخص اليوم|ملخصي|ملخص يومي|تقرير اليوم|الوضع|وش الوضع|ايش الوضع|كيف الوضع|وش الجديد|ايش الجديد|وش فاتني|ايش فاتني|ابدا يومي|ابدي يومي|خلنا نبدا|الاولويات|وش الاولويات|اولوياتي|وش المطلوب(?: مني)?(?: اليوم)?|وش عندي(?: اليوم)?|ايش عندي(?: اليوم)?|وش علي(?: اليوم)?|طمني|طمنني|طمني على الوضع)(?: اليوم)?$/.test(q)) return { kind: "brief" };
   if (/^(?:نصيحه|فكره|اقتراح)(?: اليوم)?$|نصيحه اليوم|فكره اليوم/.test(q)) return { kind: "tip" };
