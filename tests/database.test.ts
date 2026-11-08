@@ -69,6 +69,9 @@ beforeAll(async () => {
   const contacts = readdirSync("supabase/migrations").filter(name => name.endsWith("_member_contacts.sql"));
   if (contacts.length !== 1) throw new Error("Expected exactly one member contacts migration");
   await db.exec(readFileSync(`supabase/migrations/${contacts[0]}`, "utf8"));
+  const pickups = readdirSync("supabase/migrations").filter(name => name.endsWith("_pickups.sql"));
+  if (pickups.length !== 1) throw new Error("Expected exactly one pickups migration");
+  await db.exec(readFileSync(`supabase/migrations/${pickups[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -694,5 +697,46 @@ describe("member contacts", () => {
     await expect(db.exec(`select * from public.member_contacts('${orgA}')`)).rejects.toMatchObject({ code: "42501" });
     await as("anon");
     await expect(db.exec(`select * from public.member_contacts('${orgA}')`)).rejects.toBeDefined();
+  });
+});
+
+describe("student pickup", () => {
+  const guardianA = "40000000-0000-0000-0000-00000000000a";
+  beforeEach(async () => {
+    await db.exec("reset role");
+    await db.exec(`delete from public.pickups; delete from public.authorized_pickups; insert into public.memberships(organization_id,user_id,role) values ('${orgA}','${staff}','staff') on conflict do nothing;
+      insert into public.guardians(id,organization_id,full_name) values ('${guardianA}','${orgA}','Mother A') on conflict do nothing;
+      insert into public.child_guardians(organization_id,child_id,guardian_id,relationship) values ('${orgA}','${childA}','${guardianA}','mother') on conflict do nothing`);
+  });
+  it("staff hand a child to a linked guardian once a day; the record is stamped by the database", async () => {
+    await as("authenticated", staff);
+    const row = (await rows(`insert into public.pickups(organization_id,child_id,guardian_id) values ('${orgA}','${childA}','${guardianA}') returning picked_by_name,handed_by`))[0];
+    expect(row).toEqual({ picked_by_name: "Mother A", handed_by: staff });
+    await expect(db.exec(`insert into public.pickups(organization_id,child_id,guardian_id) values ('${orgA}','${childA}','${guardianA}')`)).rejects.toMatchObject({ code: "23505" });
+    await db.exec(`delete from public.pickups where child_id='${childA}'`);
+    expect(await rows("select * from public.pickups")).toEqual([]);
+  });
+  it("only linked guardians or active authorized people can collect", async () => {
+    await as("authenticated", owner);
+    const other = (await rows(`insert into public.guardians(organization_id,full_name) values ('${orgA}','Stranger') returning id`))[0].id;
+    const driver = (await rows(`insert into public.authorized_pickups(organization_id,child_id,full_name,relationship) values ('${orgA}','${childA}','Driver','سائق') returning id`))[0].id;
+    await as("authenticated", staff);
+    await expect(db.exec(`insert into public.pickups(organization_id,child_id,guardian_id) values ('${orgA}','${childA}','${other}')`)).rejects.toMatchObject({ code: "42501" });
+    await expect(db.exec(`insert into public.authorized_pickups(organization_id,child_id,full_name,relationship) values ('${orgA}','${childA}','Self added','x')`)).rejects.toBeDefined();
+    await as("authenticated", owner);
+    await db.exec(`update public.authorized_pickups set is_active=false where id='${driver}'`);
+    await as("authenticated", staff);
+    await expect(db.exec(`insert into public.pickups(organization_id,child_id,authorized_id) values ('${orgA}','${childA}','${driver}')`)).rejects.toMatchObject({ code: "42501" });
+    await as("authenticated", owner);
+    await db.exec(`update public.authorized_pickups set is_active=true where id='${driver}'`);
+    await as("authenticated", staff);
+    expect(await rows(`insert into public.pickups(organization_id,child_id,authorized_id) values ('${orgA}','${childA}','${driver}') returning picked_by_name`)).toEqual([{ picked_by_name: "Driver" }]);
+  });
+  it("other tenants see nothing", async () => {
+    await as("authenticated", staff);
+    await db.exec(`insert into public.pickups(organization_id,child_id,guardian_id) values ('${orgA}','${childA}','${guardianA}')`);
+    await as("authenticated", outsider);
+    expect(await rows("select * from public.pickups")).toEqual([]);
+    expect(await rows("select * from public.authorized_pickups")).toEqual([]);
   });
 });

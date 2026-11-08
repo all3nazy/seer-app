@@ -95,3 +95,18 @@ describe("share links", async () => {
     expect(mailtoLink("a@b.c", message.subject, message.body)).toMatch(/^mailto:a%40b\.c\?subject=/);
   });
 });
+
+describe("phone and computer versions", async () => {
+  const { computerOnlySection, navLinks } = await import("../lib/navigation");
+  it("keeps daily work on phones and the rest for computers and iPads", () => {
+    for (const path of ["/dashboard", "/dashboard/my", "/dashboard/attendance", "/dashboard/pickup", "/dashboard/children/abc", "/dashboard/classes", "/dashboard/inquiries/x", "/dashboard/assistant", "/dashboard/settings", "/dashboard/tasks/123"]) {
+      expect(computerOnlySection(path), path).toBeUndefined();
+    }
+    for (const path of ["/dashboard/tasks", "/dashboard/finance", "/dashboard/finance/invoices/1", "/dashboard/admissions", "/dashboard/academics", "/dashboard/operations", "/dashboard/team", "/dashboard/audit"]) {
+      expect(computerOnlySection(path), path).toBeDefined();
+    }
+  });
+  it("has four bottom tabs plus «more»", () => {
+    expect(navLinks.filter(link => link.tab).map(link => link.short)).toEqual(["الرئيسية", "مهامي", "الحضور", "التسليم"]);
+  });
+});
