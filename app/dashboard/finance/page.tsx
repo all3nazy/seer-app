@@ -34,7 +34,8 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
       <div><h1>المالية</h1><p>فواتير {orgName} ومدفوعاتها ورسومها.</p></div>
       <OrgSwitcher path="/dashboard/finance" current={org} organizations={organizations} extra={{ tab }} />
     </header>
-    <nav className="segments" aria-label="أقسام المالية">{(Object.keys(tabs) as Tab[]).map(key => <Link key={key} href={`/dashboard/finance?org=${orgParam}&tab=${key}`} aria-current={key === tab ? "page" : undefined}>{tabs[key]}</Link>)}</nav>
+    <nav className="segments" aria-label="أقسام المالية">{(Object.keys(tabs) as Tab[]).map(key => <Link key={key} href={`/dashboard/finance?org=${orgParam}&tab=${key}`} aria-current={key === tab ? "page" : undefined}>{tabs[key]}</Link>)}
+      <Link href={`/dashboard/finance/quotes?org=${orgParam}`}>عروض الأسعار</Link><Link href={`/dashboard/finance/branding?org=${orgParam}`}>هوية المستندات</Link></nav>
   </>;
   const invoiceRow = (invoice: Invoice) => <Link key={invoice.id} className="list-row" href={`/dashboard/finance/invoices/${invoice.id}?org=${orgParam}`}>
     <span className="body"><span className="title">{invoiceLabel(invoice)}{invoice.number && invoice.title ? ` — ${invoice.title}` : ""}</span>
