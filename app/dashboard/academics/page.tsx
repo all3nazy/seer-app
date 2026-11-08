@@ -25,7 +25,7 @@ export default async function AcademicsPage({ searchParams }: { searchParams: Pr
     client.from("sections").select("id,grade_level_id,branch_id,name,gender,capacity,homeroom_teacher_id").eq("organization_id", org).order("name"),
     client.from("branches").select("id,name").eq("organization_id", org).order("name").limit(200),
     client.from("memberships").select("user_id,role,display_name").eq("organization_id", org),
-    client.from("children").select("section_id").eq("organization_id", org).not("section_id", "is", null).limit(10000),
+    client.rpc("section_enrollment", { org }),
   ]);
   const failed = [years, terms, holidays, grades, sections].find(result => result.error);
   const yearRows = (years.data ?? []) as AcademicYear[];
@@ -36,7 +36,7 @@ export default async function AcademicsPage({ searchParams }: { searchParams: Pr
   const branchOptions = (branches.data ?? []) as { id: string; name: string }[];
   const options = { years: yearRows.map(year => ({ id: year.id, name: year.name })), grades: gradeRows.map(grade => ({ id: grade.id, name: grade.name })), branches: branchOptions, members: memberOptions };
   const enrolled = new Map<string, number>();
-  for (const row of (counts.data ?? []) as { section_id: string }[]) enrolled.set(row.section_id, (enrolled.get(row.section_id) ?? 0) + 1);
+  for (const row of (counts.data ?? []) as { section_id: string | null; total: number }[]) if (row.section_id) enrolled.set(row.section_id, Number(row.total));
   const orgParam = encodeURIComponent(org);
   return <>
     <header className="page-head">

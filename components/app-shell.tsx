@@ -10,6 +10,7 @@ const links: { href: string; label: string; short: string; icon: IconName; deskt
   { href: "/dashboard", label: "لوحة التشغيل", short: "الرئيسية", icon: "home" },
   { href: "/dashboard/tasks", label: "المهام", short: "المهام", icon: "board" },
   { href: "/dashboard/attendance", label: "الحضور", short: "الحضور", icon: "clock" },
+  { href: "/dashboard/classes", label: "متابعة الفصول", short: "الفصول", icon: "list", desktopOnly: true },
   { href: "/dashboard/children", label: "الطلاب", short: "الطلاب", icon: "child" },
   { href: "/dashboard/admissions", label: "القبول والتسجيل", short: "القبول", icon: "flag", desktopOnly: true },
   { href: "/dashboard/academics", label: "الهيكل الدراسي", short: "الصفوف", icon: "list", desktopOnly: true },

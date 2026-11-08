@@ -60,6 +60,9 @@ beforeAll(async () => {
   const admissions = readdirSync("supabase/migrations").filter(name => name.endsWith("_admissions.sql"));
   if (admissions.length !== 1) throw new Error("Expected exactly one admissions migration");
   await db.exec(readFileSync(`supabase/migrations/${admissions[0]}`, "utf8"));
+  const summaries = readdirSync("supabase/migrations").filter(name => name.endsWith("_class_summaries.sql"));
+  if (summaries.length !== 1) throw new Error("Expected exactly one class summaries migration");
+  await db.exec(readFileSync(`supabase/migrations/${summaries[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -600,5 +603,26 @@ describe("admissions", () => {
     await expect(db.exec(`select public.convert_application('${app}')`)).rejects.toMatchObject({ code: "23505" });
     await as("authenticated", outsider);
     await expect(db.exec(`select public.convert_application('${app}')`)).rejects.toMatchObject({ code: "P0002" });
+  });
+});
+
+describe("class summaries", () => {
+  it("count per section inside the tenant only", async () => {
+    await db.exec("reset role");
+    await db.exec(`delete from public.attendance; update public.children set section_id=null; delete from public.sections; delete from public.grade_levels`);
+    await as("authenticated", owner);
+    const grade = (await rows(`insert into public.grade_levels(organization_id,name,stage) values ('${orgA}','G1','primary') returning id`))[0].id;
+    const section = (await rows(`insert into public.sections(organization_id,grade_level_id,name,capacity) values ('${orgA}','${grade}','A',20) returning id`))[0].id;
+    await db.exec(`update public.children set section_id='${section}' where id='${childA}'`);
+    const day = new Date(Date.now() + 3 * 3600_000).toISOString().slice(0, 10);
+    await db.exec(`insert into public.attendance(organization_id,child_id,attendance_date,status) values ('${orgA}','${childA}','${day}','late')`);
+    expect(await rows(`select section_id,total::int from public.section_enrollment('${orgA}') where section_id is not null`)).toEqual([{ section_id: section, total: 1 }]);
+    expect(await rows(`select section_id,status,total::int from public.section_attendance_summary('${orgA}','${day}','${day}')`)).toEqual([{ section_id: section, status: "late", total: 1 }]);
+    await expect(db.exec(`select * from public.section_attendance_summary('${orgA}','2026-01-01','2026-06-01')`)).rejects.toMatchObject({ code: "22023" });
+    await as("authenticated", outsider);
+    expect(await rows(`select * from public.section_enrollment('${orgA}')`)).toEqual([]);
+    expect(await rows(`select * from public.section_attendance_summary('${orgA}','${day}','${day}')`)).toEqual([]);
+    await as("anon");
+    await expect(db.exec(`select * from public.section_enrollment('${orgA}')`)).rejects.toBeDefined();
   });
 });
