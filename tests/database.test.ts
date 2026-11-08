@@ -93,6 +93,9 @@ beforeAll(async () => {
   const transport = readdirSync("supabase/migrations").filter(name => name.endsWith("_transport.sql"));
   if (transport.length !== 1) throw new Error("Expected exactly one transport migration");
   await db.exec(readFileSync(`supabase/migrations/${transport[0]}`, "utf8"));
+  const online = readdirSync("supabase/migrations").filter(name => name.endsWith("_online_payments.sql"));
+  if (online.length !== 1) throw new Error("Expected exactly one online payments migration");
+  await db.exec(readFileSync(`supabase/migrations/${online[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -1181,5 +1184,61 @@ describe("transport routes and trips", () => {
     await as("anon");
     const portal = (await rows(`select public.family_portal('${token}') as p`))[0].p as { children: { bus: { route: string; event: string }[] }[] };
     expect(portal.children[0].bus).toMatchObject([{ route: "North", event: "dropped" }]);
+  });
+});
+
+describe("online payments foundation", () => {
+  let invoice: { id: string; share_token: string };
+  beforeEach(async () => {
+    await db.exec("reset role");
+    await db.exec(`delete from public.payment_settings; delete from public.payment_intents; delete from public.payments; delete from public.invoice_lines; delete from public.invoices;
+      insert into public.memberships(organization_id,user_id,role) values ('${orgA}','${staff}','staff') on conflict do nothing`);
+    await as("authenticated", owner);
+    invoice = (await rows(`insert into public.invoices(organization_id,child_id,amount_sar,status,title) values ('${orgA}','${childA}',0,'draft','Fees') returning id,share_token`))[0] as { id: string; share_token: string };
+    await db.exec(`insert into public.invoice_lines(organization_id,invoice_id,description,kind,quantity,unit_price,vat_rate) values ('${orgA}','${invoice.id}','Tuition','tuition',1,1000,15)`);
+    await db.exec(`update public.invoices set status='issued' where id='${invoice.id}'`);
+  });
+  it("only managers configure payments; sandbox must stay in test mode", async () => {
+    await as("authenticated", staff);
+    await expect(db.exec(`insert into public.payment_settings(organization_id,provider,is_enabled) values ('${orgA}','sandbox',true)`)).rejects.toMatchObject({ code: "42501" });
+    await as("authenticated", owner);
+    await expect(db.exec(`insert into public.payment_settings(organization_id,provider,mode,is_enabled) values ('${orgA}','sandbox','live',true)`)).rejects.toMatchObject({ code: "23514" });
+    await expect(db.exec(`insert into public.payment_settings(organization_id,provider,methods) values ('${orgA}','moyasar','{bitcoin}')`)).rejects.toMatchObject({ code: "23514" });
+  });
+  it("families start a payment from the invoice link; sandbox payments never touch the ledger", async () => {
+    await as("anon");
+    await expect(db.exec(`select public.start_online_payment('${invoice.share_token}','mada')`)).rejects.toMatchObject({ code: "42501" });
+    await as("authenticated", owner);
+    await db.exec(`insert into public.payment_settings(organization_id,provider,mode,methods,is_enabled) values ('${orgA}','sandbox','test','{mada,apple_pay}',true)`);
+    await as("anon");
+    const shared = (await rows(`select public.shared_document('${invoice.share_token}') as d`))[0].d as { pay: { provider: string; methods: string[] } };
+    expect(shared.pay).toMatchObject({ provider: "sandbox", methods: ["mada", "apple_pay"] });
+    await expect(db.exec(`select public.start_online_payment('${invoice.share_token}','tabby')`)).rejects.toMatchObject({ code: "22023" });
+    const started = (await rows(`select public.start_online_payment('${invoice.share_token}','mada') as r`))[0].r as { intent: string; amount: number };
+    expect(started.amount).toBe(1150);
+    expect((await rows(`select public.payment_intent_view('${invoice.share_token}','${started.intent}') as v`))[0].v).toMatchObject({ amount: 1150, status: "initiated" });
+    expect((await rows(`select public.payment_intent_view(gen_random_uuid(),'${started.intent}') as v`))[0].v).toBeNull();
+    expect((await rows(`select public.finish_sandbox_payment('${invoice.share_token}','${started.intent}',true) as s`))[0].s).toBe("paid");
+    await db.exec("reset role");
+    expect(await rows("select count(*)::int as n from public.payments")).toEqual([{ n: 0 }]);
+    expect((await rows(`select paid_total from public.invoices where id='${invoice.id}'`))[0].paid_total).toBe("0.00");
+    await as("anon");
+    await expect(db.exec(`select private.settle_online_payment('${started.intent}','x',1150,true)`)).rejects.toBeDefined();
+    await expect(db.exec("select * from public.payment_intents")).rejects.toBeDefined();
+  });
+  it("a verified live payment is recorded once in the ledger and pays the invoice", async () => {
+    await as("authenticated", owner);
+    await db.exec(`insert into public.payment_settings(organization_id,provider,mode,methods,is_enabled) values ('${orgA}','moyasar','live','{mada,tabby}',true)`);
+    await as("anon");
+    const started = (await rows(`select public.start_online_payment('${invoice.share_token}','tabby') as r`))[0].r as { intent: string };
+    await expect(db.exec(`select public.finish_sandbox_payment('${invoice.share_token}','${started.intent}',true)`)).rejects.toMatchObject({ code: "42501" });
+    await db.exec("reset role");
+    await expect(db.exec(`select private.settle_online_payment('${started.intent}','pay_1',999,true)`)).rejects.toMatchObject({ code: "23514" });
+    const payment = (await rows(`select private.settle_online_payment('${started.intent}','pay_1',1150,true) as p`))[0].p as string;
+    expect((await rows(`select private.settle_online_payment('${started.intent}','pay_1',1150,true) as p`))[0].p).toBe(payment);
+    expect(await rows(`select method,amount,reference from public.payments`)).toEqual([{ method: "tabby", amount: "1150.00", reference: "pay_1" }]);
+    expect((await rows(`select status from public.invoices where id='${invoice.id}'`))[0].status).toBe("paid");
+    await as("anon");
+    expect((await rows(`select public.shared_document('${invoice.share_token}') as d`))[0].d).toMatchObject({ pay: null });
   });
 });

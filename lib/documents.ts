@@ -21,7 +21,7 @@ export type DocData = {
   subtotal: number; discount_total: number; vat_total: number; vat_relief: number; total: number; paid_total: number;
   child: string | null; recipient: string | null; recipient_phone?: string | null;
 };
-export type SharedDocument = { kind: "invoice" | "quote"; document: DocData; lines: DocLine[]; payments: DocPayment[]; organization: OrgProfile };
+export type SharedDocument = { kind: "invoice" | "quote"; document: DocData; lines: DocLine[]; payments: DocPayment[]; organization: OrgProfile; pay?: { provider: string; mode: string; methods: import("./payments").PayMethod[] } | null };
 
 export const quoteStatuses = ["draft", "sent", "accepted", "rejected", "invoiced"] as const;
 export type QuoteStatus = (typeof quoteStatuses)[number];
