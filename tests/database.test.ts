@@ -122,6 +122,9 @@ beforeAll(async () => {
   const staffAccess = readdirSync("supabase/migrations").filter(name => name.endsWith("_staff_access_links.sql"));
   if (staffAccess.length !== 1) throw new Error("Expected exactly one staff access migration");
   await db.exec(readFileSync(`supabase/migrations/${staffAccess[0]}`, "utf8"));
+  const teaching = readdirSync("supabase/migrations").filter(name => name.endsWith("_teaching_notifications.sql"));
+  if (teaching.length !== 1) throw new Error("Expected exactly one teaching notifications migration");
+  await db.exec(readFileSync(`supabase/migrations/${teaching[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -1498,5 +1501,64 @@ describe("staff join links, password resets and short links", () => {
     await db.exec("reset role");
     await db.exec(`insert into public.message_outbox(organization_id,to_phone,kind,body) values ('${orgA}','0500000777','custom','See https://seer.example${path} now')`);
     expect((await rows(`select body from public.message_outbox where to_phone='0500000777'`))[0].body).toBe(`See https://seer.example/s/${code} now`);
+  });
+});
+
+describe("teaching permissions, notifications and absence notices", () => {
+  const kidX = "50000000-0000-0000-0000-0000000000a1", kidY = "50000000-0000-0000-0000-0000000000a2", dad = "50000000-0000-0000-0000-0000000000b1";
+  let sectionX = "", sectionY = "";
+  const today = async () => (await rows("select (now() at time zone 'Asia/Riyadh')::date::text as d"))[0].d as string;
+  beforeAll(async () => {
+    await db.exec("reset role");
+    const grade = (await rows(`insert into public.grade_levels(organization_id,name,stage,sort_order) values ('${orgA}','G-Teach','primary',50) returning id`))[0].id;
+    sectionX = (await rows(`insert into public.sections(organization_id,grade_level_id,name) values ('${orgA}','${grade}','X') returning id`))[0].id as string;
+    sectionY = (await rows(`insert into public.sections(organization_id,grade_level_id,name) values ('${orgA}','${grade}','Y') returning id`))[0].id as string;
+    await db.exec(`insert into public.children(id,organization_id,full_name,section_id) values ('${kidX}','${orgA}','Kid X','${sectionX}'),('${kidY}','${orgA}','Kid Y','${sectionY}') on conflict do nothing;
+      insert into public.memberships(organization_id,user_id,role) values ('${orgA}','${staff}','staff') on conflict do nothing;
+      insert into public.guardians(id,organization_id,full_name,phone) values ('${dad}','${orgA}','Dad X','0500000666') on conflict do nothing;
+      insert into public.child_guardians(organization_id,child_id,guardian_id,relationship) values ('${orgA}','${kidX}','${dad}','father') on conflict do nothing`);
+  });
+  it("a teacher assigned to classes records attendance only for them; managers record for all", async () => {
+    await db.exec("reset role");
+    await db.exec(`update public.sections set homeroom_teacher_id = null where homeroom_teacher_id = '${staff}'; delete from public.timetable_slots where teacher_id = '${staff}'`);
+    await as("authenticated", staff);
+    // Not assigned anywhere yet: today's open access is kept.
+    await db.exec(`insert into public.attendance(organization_id,child_id,attendance_date,status) values ('${orgA}','${kidY}','${await today()}','present')`);
+    await db.exec("reset role");
+    await db.exec(`delete from public.attendance where child_id in ('${kidX}','${kidY}'); update public.sections set homeroom_teacher_id = '${staff}' where id = '${sectionX}'`);
+    await as("authenticated", staff);
+    await db.exec(`insert into public.attendance(organization_id,child_id,attendance_date,status) values ('${orgA}','${kidX}','${await today()}','present')`);
+    await expect(db.exec(`insert into public.attendance(organization_id,child_id,attendance_date,status) values ('${orgA}','${kidY}','${await today()}','present')`)).rejects.toMatchObject({ code: "42501" });
+    await as("authenticated", owner);
+    await db.exec(`insert into public.attendance(organization_id,child_id,attendance_date,status) values ('${orgA}','${kidY}','${await today()}','late')`);
+    await db.exec("reset role");
+    await db.exec(`update public.sections set homeroom_teacher_id = null where id = '${sectionX}'`);
+  });
+  it("assigning a task notifies the assignee only, and each person reads only their own notifications", async () => {
+    await as("authenticated", owner);
+    await db.exec(`insert into public.tasks(organization_id,title,assignee_id) values ('${orgA}','Prepare the hall','${staff}')`);
+    expect((await rows("select count(*)::int as n from public.notifications where kind='task'"))[0].n).toBe(0);
+    await as("authenticated", staff);
+    const mine = await rows("select id,kind,title,url from public.notifications where title like '%Prepare the hall%'");
+    expect(mine).toEqual([expect.objectContaining({ kind: "task", url: "/dashboard/my" })]);
+    await db.exec(`update public.notifications set read_at = now() where id = '${mine[0].id}'`);
+    await expect(db.exec(`update public.notifications set title = 'x' where id = '${mine[0].id}'`)).rejects.toMatchObject({ code: "42501" });
+    await expect(db.exec(`insert into public.notifications(organization_id,user_id,kind,title) values ('${orgA}','${staff}','task','fake')`)).rejects.toBeDefined();
+  });
+  it("parents send an absence notice from the portal; managers are notified", async () => {
+    await as("authenticated", owner);
+    const token = (await rows(`select public.guardian_portal_token('${dad}') as t`))[0].t as string;
+    await as("anon");
+    const portal = (await rows(`select public.family_portal('${token}') as p`))[0].p as { children: { id: string; name: string }[] };
+    expect(portal.children[0]).toMatchObject({ id: kidX, name: "Kid X" });
+    await expect(db.exec(`select public.submit_absence_notice('${token}','${kidY}','${await today()}','${await today()}','sick')`)).rejects.toMatchObject({ code: "42501" });
+    await expect(db.exec(`select public.submit_absence_notice('${token}','${kidX}','2020-01-01','2020-01-02','sick')`)).rejects.toMatchObject({ code: "22023" });
+    await db.exec(`select public.submit_absence_notice('${token}','${kidX}','${await today()}','${await today()}','Fever')`);
+    await as("authenticated", staff);
+    expect(await rows(`select reason from public.absence_notices where child_id='${kidX}'`)).toEqual([{ reason: "Fever" }]);
+    await as("authenticated", owner);
+    expect((await rows("select title from public.notifications where kind='absence_notice'"))[0].title).toContain("Kid X");
+    await as("anon");
+    expect(((await rows(`select public.family_portal('${token}') as p`))[0].p as { children: { notices: unknown[] }[] }).children[0].notices).toHaveLength(1);
   });
 });

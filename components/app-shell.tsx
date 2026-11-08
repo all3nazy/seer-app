@@ -8,12 +8,13 @@ import { FeedbackLayer } from "./feedback";
 import SignOutButton from "./sign-out-button";
 import { BotDock } from "./bot-dock";
 import { BotAvatar } from "./bot-avatar";
+import { NotificationBell } from "./notifications";
 import { computerOnlySection, matches, navGroupLabels, navLinks, visibleLinks, type NavGroup } from "../lib/navigation";
 import { patternUrl, type Stage } from "../lib/stage";
 
-type ShellProps = { children: React.ReactNode; stage: Stage; organizations: { id: string; name: string }[]; supportPhone: string; manager?: boolean };
+type ShellProps = { children: React.ReactNode; stage: Stage; organizations: { id: string; name: string }[]; supportPhone: string; manager?: boolean; userId?: string };
 
-export function AppShell({ children, stage, organizations, supportPhone, manager = true }: ShellProps) {
+export function AppShell({ children, stage, organizations, supportPhone, manager = true, userId }: ShellProps) {
   const path = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   useEffect(() => { try { setCollapsed(localStorage.getItem("seer-sidebar") === "rail"); } catch { /* storage unavailable */ } }, []);
@@ -44,13 +45,13 @@ export function AppShell({ children, stage, organizations, supportPhone, manager
       </nav>
       <div className="sidebar-foot">
         <Link className="nav-link" href={settings.href} aria-current={current(settings)} title={collapsed ? settings.label : undefined}><Icon name="settings" /><span className="nav-text">{settings.label}</span></Link>
-        <div className="sidebar-tools"><ThemeToggle /><SoundToggle /><SignOutButton compact /></div>
+        <div className="sidebar-tools">{userId ? <NotificationBell userId={userId} /> : null}<ThemeToggle /><SoundToggle /><SignOutButton compact /></div>
       </div>
     </aside>
     <div className="app-content">
       <header className="mobile-bar"><Logo href="/dashboard" label="سِير — لوحة التشغيل" /><div style={{ display: "flex", gap: 6, alignItems: "center" }}>
         {organizations.length ? <button type="button" className="bar-bot" onClick={() => window.dispatchEvent(new Event("seer:open-bot"))} aria-label="افتح المساعد"><BotAvatar stage={stage} size={30} mood="idle" /></button> : null}
-        <ThemeToggle /></div></header>
+        {userId ? <NotificationBell userId={userId} /> : null}<ThemeToggle /></div></header>
       <main className={`main${path === "/dashboard" || path === "/dashboard/tasks" ? " wide" : ""}`} id="main-content" tabIndex={-1}>
         {fullOnly ? <>
           <section className="card phone-notice" aria-live="polite">

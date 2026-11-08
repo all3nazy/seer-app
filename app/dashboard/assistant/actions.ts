@@ -130,7 +130,7 @@ export async function briefingFor(client: Awaited<ReturnType<typeof createSupaba
     const today = riyadhToday();
     const head = (table: string) => client.from(table).select("id", { count: "exact", head: true }).eq("organization_id", org);
     const count = async (query: PromiseLike<{ count: number | null; error: unknown }>) => { const result = await query; return result.error ? null : result.count ?? 0; };
-    const [summary, enrolled, overdue, dueToday, mine, applications, leave, inquiries, invoices, queued, failed, reports, trips, kind, unassigned] = await Promise.all([
+    const [summary, enrolled, overdue, dueToday, mine, applications, leave, inquiries, invoices, queued, failed, reports, trips, kind, unassigned, notices] = await Promise.all([
       client.rpc("section_attendance_summary", { org, from_day: today, to_day: today }),
       count(head("children").eq("status", "active")),
       count(head("tasks").neq("status", "done").lt("due_date", today)),
@@ -146,6 +146,7 @@ export async function briefingFor(client: Awaited<ReturnType<typeof createSupaba
       client.from("transport_trips").select("finished_at").eq("organization_id", org).eq("trip_date", today).limit(200),
       client.from("organizations").select("type").eq("id", org).maybeSingle(),
       manager ? count(head("children").eq("status", "active").is("section_id", null)) : null,
+      count(head("absence_notices").lte("starts_on", today).gte("ends_on", today).is("handled_at", null)),
     ]);
     let attendance: Briefing["attendance"] = null;
     if (!summary.error && enrolled !== null) {
@@ -163,7 +164,7 @@ export async function briefingFor(client: Awaited<ReturnType<typeof createSupaba
       invoices: owed ? { overdue: owed.length, overdueAmount: Math.round(owed.reduce((sum, row) => sum + Number(row.amount_sar) - Number(row.paid_total), 0) * 100) / 100 } : null,
       messages: queued === null && failed === null ? null : { queued: queued ?? 0, failed: failed ?? 0 },
       dailyReports: young && reports !== null ? { written: reports } : null,
-      unassigned,
+      unassigned, notices,
       trips: tripRows && tripRows.length ? { running: tripRows.filter(row => !row.finished_at).length, done: tripRows.filter(row => row.finished_at).length } : null,
     } };
   } catch (error) { return fail(error, "تعذر تجهيز الملخص الآن."); }

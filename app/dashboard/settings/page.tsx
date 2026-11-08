@@ -9,6 +9,7 @@ import { MyPhoneForm } from "../../../components/my-phone-form";
 import { cookies } from "next/headers";
 import { InstallCard, IconPicker } from "../../../components/install-app";
 import { ChangePassword } from "../../../components/change-password";
+import { PushToggle } from "../../../components/notifications";
 import { iconCookie, parseIconChoice } from "../../../lib/app-icons";
 
 export const dynamic = "force-dynamic";
@@ -31,6 +32,12 @@ export default async function SettingsPage() {
     <div className="stack">
       <div className="list-row"><span className="avatar" style={{ margin: 0, width: 48, height: 48, fontSize: 18 }} aria-hidden="true">{(email[0] ?? "س").toUpperCase()}</span>
         <span className="body"><span className="title" dir="ltr" style={{ textAlign: "end" }}>{email.endsWith("@users.seer.local") ? email.split("@")[0] : email}</span><span className="sub">{(memberships ?? []).map(m => `${(m.organizations as unknown as { name: string } | null)?.name ?? "منشأة"} (${roleNames[m.role] ?? "عضو"})`).join("، ") || "غير مرتبط بمنشأة"}</span></span></div>
+      <section aria-labelledby="notify-title" id="notify"><h2 id="notify-title" className="section-label">الإشعارات</h2>
+        <div className="card" style={{ display: "grid", gap: 10 }}>
+          <p style={{ margin: 0 }}>يوصلك إشعار على هذا الجهاز لما تنسند لك مهمة، أو يردّون على استفسارك، أو تنحسم إجازتك. وللمدير: الاستفسارات وطلبات الإجازة والالتحاق وإشعارات الغياب والدفعات.</p>
+          <PushToggle />
+        </div>
+      </section>
       <section aria-labelledby="app" id="app"><h2 id="app-title" className="section-label">سِير على جهازك</h2>
         <div className="card" style={{ display: "grid", gap: 14 }}>
           <p style={{ margin: 0 }}>ثبّت سِير على الكمبيوتر أو الجوال أو الآيباد، ويفتح مثل التطبيق في نافذته الخاصة بأيقونته على الشاشة الرئيسية.</p>

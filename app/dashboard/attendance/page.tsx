@@ -1,3 +1,4 @@
+import { AbsenceNotices, type Notice } from "../../../components/absence-notices";
 import Link from "next/link";
 import { loadOrgContext } from "../../../lib/org-context";
 import { OrgSwitcher, OrgUnavailable } from "../../../components/org-unavailable";
@@ -33,10 +34,15 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
   if (section) studentsQuery = studentsQuery.eq("section_id", section);
   const { data: students, count, error } = await studentsQuery.order("full_name").limit(limit);
   const ids = (students ?? []).map(student => student.id as string);
-  const [recordsResult, healthResult] = ids.length ? await Promise.all([
+  const [recordsResult, healthResult, noticesResult] = ids.length ? await Promise.all([
     client.from("attendance").select("child_id,status,note").eq("organization_id", org).eq("attendance_date", day).in("child_id", ids),
     client.from("child_health").select("child_id,allergies,conditions").eq("organization_id", org).in("child_id", ids),
-  ]) : [{ data: [], error: null }, { data: [], error: null }];
+    client.from("absence_notices").select("id,child_id,reason,starts_on,ends_on,handled_at").eq("organization_id", org).lte("starts_on", day).gte("ends_on", day).in("child_id", ids),
+  ]) : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }];
+  const nameOf = new Map((students ?? []).map(student => [student.id as string, student.full_name as string]));
+  const recordedOf = new Map(((recordsResult.data ?? []) as { child_id: string; status: string }[]).map(row => [row.child_id, row.status]));
+  const notices: Notice[] = ((noticesResult.data ?? []) as { id: string; child_id: string; reason: string | null; starts_on: string; ends_on: string; handled_at: string | null }[])
+    .map(row => ({ id: row.id, child_id: row.child_id, child: nameOf.get(row.child_id) ?? "طالب", reason: row.reason, starts_on: row.starts_on, ends_on: row.ends_on, handled: Boolean(row.handled_at), recorded: recordedOf.get(row.child_id) ?? null }));
   const alerts = new Set((healthResult.data ?? []).filter(row => row.allergies || row.conditions).map(row => row.child_id as string));
   const shift = (days: number) => new Date(Date.parse(day) + days * 86400_000).toISOString().slice(0, 10);
   const link = (target: string) => `/dashboard/attendance?${new URLSearchParams({ org, day: target, ...(branch ? { branch } : {}), ...(section ? { section } : {}) })}`;
@@ -55,6 +61,7 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
       {manager ? <span style={{ display: "flex", gap: 16 }}><Link href={link(shift(-1))}>اليوم السابق</Link>{day < today ? <Link href={link(shift(1))}>اليوم التالي</Link> : null}</span> : null}
     </form>
     {holiday ? <p className="info-banner" style={{ marginBottom: 16 }}>هذا اليوم إجازة: {holiday}. تقدر تسجّل الحضور لو فيه دوام استثنائي.</p> : null}
+    <AbsenceNotices organizationId={org} notices={notices} />
     <section className="card">
       {error || recordsResult.error ? <p role="alert">تعذر تحميل كشف الحضور. أعد تحميل الصفحة.</p>
         : ids.length ? <>
