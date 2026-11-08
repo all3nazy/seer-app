@@ -28,7 +28,7 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
   const sections = ((sectionsResult.data ?? []) as { id: string; name: string; grade_level_id: string }[]).map(item => ({ id: item.id, name: sectionLabel(item, grades) }));
   const section = sections.some(item => item.id === params.section) ? params.section : undefined;
   const holiday = holidayOn(day, (holidaysResult.data ?? []) as { name: string; starts_on: string; ends_on: string }[]);
-  let studentsQuery = client.from("children").select("id,full_name", { count: "exact" }).eq("organization_id", org);
+  let studentsQuery = client.from("children").select("id,full_name", { count: "exact" }).eq("organization_id", org).eq("status", "active");
   if (branch) studentsQuery = studentsQuery.eq("branch_id", branch);
   if (section) studentsQuery = studentsQuery.eq("section_id", section);
   const { data: students, count, error } = await studentsQuery.order("full_name").limit(limit);

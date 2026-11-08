@@ -89,3 +89,18 @@ export async function saveAttendance(_: ActionResult, data: FormData): Promise<A
     return { success: changed ? `حُفظ الحضور (${changed.toLocaleString("ar-SA")} تغيير).` : "ما فيه تغييرات جديدة." };
   } catch (error) { return failure(error, "تعذر حفظ الحضور حاليًا. حاول مجددًا لاحقًا."); }
 }
+
+/** Withdraw, graduate or re-activate a student. History stays; daily lists and fee plans skip non-active students. */
+export async function setStudentStatus(organizationId: string, childId: string, status: string): Promise<ActionResult> {
+  try {
+    if (!["active", "withdrawn", "graduated"].includes(status)) return { error: "حالة غير صالحة." };
+    const org = uuid(organizationId);
+    const auth = await memberClient(org, true);
+    if ("error" in auth) return { error: auth.error };
+    const { data, error } = await auth.client.from("children").update({ status }).eq("organization_id", org).eq("id", uuid(childId)).select("id");
+    if (error || !data?.length) return { error: "تعذر تحديث حالة الطالب." };
+    revalidatePath("/dashboard/children");
+    revalidatePath(`/dashboard/children/${childId}`);
+    return { success: status === "active" ? "رجع الطالب لقائمة الدراسة." : status === "withdrawn" ? "سُجّل انسحاب الطالب. سجله محفوظ، وما عاد يظهر في الحضور والتسليم والباص." : "سُجّل تخرّج الطالب. سجله محفوظ." };
+  } catch (error) { return failure(error, "تعذر التحديث."); }
+}

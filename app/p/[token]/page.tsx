@@ -14,7 +14,10 @@ type Report = { date: string; mood: Mood | null; breakfast: Portion | null; lunc
 type Portal = {
   guardian: string;
   organization: { name: string; type: string; legal_name: string | null; phone: string | null; brand_color: string; logo_data: string | null };
-  children: { name: string; section: string | null; today: AttendanceStatus | null; picked_up: { by: string; at: string } | null; attendance: Record<AttendanceStatus, number>; reports: Report[]; bus: { route: string; direction: "to_school" | "to_home"; event: "boarded" | "dropped" | "absent"; at: string }[]; pickup_people: { name: string; relationship: string }[] }[];
+  children: { name: string; section: string | null; today: AttendanceStatus | null; picked_up: { by: string; at: string } | null; attendance: Record<AttendanceStatus, number>; reports: Report[]; bus: { route: string; direction: "to_school" | "to_home"; event: "boarded" | "dropped" | "absent"; at: string }[]; pickup_people: { name: string; relationship: string }[];
+    status?: string; grades?: { subject: string; title: string; kind: string; score: number | null; max: number; absent: boolean; date: string }[];
+    behavior?: { kind: "positive" | "concern"; category: string; note: string | null; points: number; at: string }[];
+    bus_stop?: { route: string; stop: string | null; pickup_time: string | null; dropoff_time: string | null } | null }[];
   invoices: { number: number | null; title: string | null; status: string; due_date: string | null; total: number; paid: number; token: string }[];
   announcements: { title: string; body: string; pinned: boolean; at: string }[];
 };
@@ -61,6 +64,13 @@ export default async function FamilyPortalPage({ params }: { params: Promise<{ t
           {report.notes ? <li>{report.notes}</li> : null}
         </ul>
       </details>)}</div> : null}
+      {child.bus_stop ? <p className="hint">🚌 {child.bus_stop.route}{child.bus_stop.stop ? ` · محطة ${child.bus_stop.stop}` : ""}{child.bus_stop.pickup_time ? ` · الركوب ${child.bus_stop.pickup_time.slice(0, 5)}` : ""}{child.bus_stop.dropoff_time ? ` · العودة ${child.bus_stop.dropoff_time.slice(0, 5)}` : ""}</p> : null}
+      {child.grades?.length ? <details className="portal-card"><summary><strong>📚 آخر الدرجات</strong></summary>
+        <ul className="portal-grades">{child.grades.map((grade, index) => <li key={index}><span>{grade.subject} — {grade.title}</span><b dir="ltr">{grade.absent ? "غائب" : grade.score === null ? "—" : `${Number(grade.score).toLocaleString("ar-SA")} / ${Number(grade.max).toLocaleString("ar-SA")}`}</b></li>)}</ul>
+      </details> : null}
+      {child.behavior?.length ? <details className="portal-card"><summary><strong>⭐ ملاحظات السلوك</strong></summary>
+        <ul className="portal-grades">{child.behavior.map((note, index) => <li key={index}><span>{note.kind === "positive" ? "⭐" : "⚠️"} {note.note ?? (note.kind === "positive" ? "ملاحظة إيجابية" : "ملاحظة")}</span><small>{new Date(note.at).toLocaleDateString("ar-SA", { timeZone: "Asia/Riyadh", day: "numeric", month: "short" })}</small></li>)}</ul>
+      </details> : null}
       {child.pickup_people.length ? <p className="hint">المصرّح لهم بالاستلام: {child.pickup_people.map(person => `${person.name} (${person.relationship})`).join("، ")}</p> : null}
     </section>)}
 

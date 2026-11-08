@@ -43,3 +43,16 @@ export async function guardianPortalLink(guardianId: string, renew = false): Pro
     return { link: `${await siteOrigin()}/p/${data as string}`, success: renew ? "تجدّد الرابط، والقديم ما عاد يفتح." : undefined };
   } catch { return { error: "تعذر إنشاء الرابط." }; }
 }
+/** Queues the announcement as a message to every guardian concerned, each with their own portal link. */
+export async function sendAnnouncementToFamilies(id: string): Promise<NoticeResult> {
+  try {
+    const client = await createSupabaseServerClient();
+    const { data, error } = await client.rpc("send_announcement", { announcement: uuid(id) });
+    if (error?.code === "55000") return { error: "فعّل الرسائل أولًا من صفحة «الرسائل»." };
+    if (error?.code === "22023") return { error: "إعلانات الموظفين ما تُرسل للأهالي." };
+    if (error) return { error: "الإرسال لمالك المنشأة أو مديرها." };
+    revalidatePath("/dashboard/messages");
+    const count = Number(data ?? 0);
+    return { success: count ? `أُضيفت ${count.toLocaleString("ar-SA")} رسالة لصندوق الرسائل، مع رابط البوابة لكل ولي أمر.` : "كل الأهالي المعنيين وصلهم هذا الإعلان من قبل." };
+  } catch { return { error: "تعذر الإرسال." }; }
+}

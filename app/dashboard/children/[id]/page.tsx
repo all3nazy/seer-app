@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { loadOrgContext } from "../../../../lib/org-context";
 import { OrgUnavailable } from "../../../../components/org-unavailable";
-import { StudentHealthForm, StudentProfileForm } from "../../../../components/student-forms";
+import { StudentHealthForm, StudentProfileForm, StudentStatusControl } from "../../../../components/student-forms";
 import { FamilyLinks, type FamilyLink } from "../../../../components/family-links";
 import { statusLabels, uuid } from "../../../../lib/operations";
 import { age, attendanceLabels, attendanceStatuses, attendanceTone, genderLabels, isAttendanceStatus, riyadhToday, type ChildHealth, type ChildProfile } from "../../../../lib/students";
@@ -25,7 +25,7 @@ export default async function StudentFile({ params, searchParams }: { params: Pr
   const context = await loadOrgContext(requestedOrg);
   if ("error" in context) return <OrgUnavailable reason={context.error} />;
   const { client, org, orgName, manager } = context;
-  const { data: child, error } = await client.from("children").select("id,full_name,date_of_birth,gender,national_id,branch_id,notes,created_at,section_id,photo_consent,photo_consent_at").eq("organization_id", org).eq("id", id).maybeSingle();
+  const { data: child, error } = await client.from("children").select("id,full_name,date_of_birth,gender,national_id,branch_id,notes,created_at,section_id,photo_consent,photo_consent_at,status").eq("organization_id", org).eq("id", id).maybeSingle();
   if (error) return <section className="card"><h1>تعذر تحميل ملف الطالب</h1><p role="alert">أعد تحميل الصفحة أو حاول لاحقًا.</p></section>;
   if (!child) notFound();
   const profile = child as ChildProfile;
@@ -61,6 +61,7 @@ export default async function StudentFile({ params, searchParams }: { params: Pr
         <h1>{profile.full_name}</h1>
         <p>{[age(profile.date_of_birth), profile.gender === "male" || profile.gender === "female" ? genderLabels[profile.gender] : null, sectionName, branchName(profile.branch_id)].filter(Boolean).join(" · ") || "أكمل بيانات الطالب من الأسفل."}</p>
       </div>
+      {manager ? <StudentStatusControl organizationId={org} childId={id} status={(child as { status?: string }).status ?? "active"} /> : (child as { status?: string }).status && (child as { status?: string }).status !== "active" ? <span className="chip-soft rose">{(child as { status?: string }).status === "withdrawn" ? "منسحب" : "متخرج"}</span> : null}
     </header>
 
     {health?.allergies || health?.conditions ? <p className="info-banner" role="note"><strong>تنبيه صحي:</strong>&nbsp;{[health.allergies && `حساسية: ${health.allergies}`, health.conditions && `حالات: ${health.conditions}`].filter(Boolean).join(" — ")}</p> : null}

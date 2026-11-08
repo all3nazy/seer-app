@@ -8,7 +8,7 @@ import { play } from "../lib/sound";
 import { parseCommand, type BotCommand } from "../lib/bot-commands";
 import { findGuide, isHowTo, type GuideEntry } from "../lib/bot-knowledge";
 import { botBriefing, botCreateTask, botFindSections, botFindStudents, botSetAttendance, botToday, type BotStudent } from "../app/dashboard/assistant/actions";
-import { briefingItems, briefingText, dayGreeting, detectMood, empathyLead, notUnderstood, smallTalk, stripCourtesy } from "../lib/bot-persona";
+import { briefingItems, briefingText, withOrg, dayGreeting, detectMood, empathyLead, notUnderstood, smallTalk, stripCourtesy } from "../lib/bot-persona";
 import { attendanceLabels, type AttendanceStatus } from "../lib/students";
 import { botPersonas, tipOfDay, type Stage } from "../lib/stage";
 import { Icon } from "./icons";
@@ -69,7 +69,7 @@ export function AssistantPanel({ organizations, supportPhone, stage = "school" }
       const items = briefingItems(result.data);
       return {
         text: briefingText(items, riyadhHour()),
-        list: items.map(item => ({ label: item.text, sub: item.label, tone: item.tone, href: `${item.href}?org=${orgParam}` })),
+        list: items.map(item => ({ label: item.text, sub: item.label, tone: item.tone, href: withOrg(item.href, org) })),
         actions: [{ href: `/dashboard?org=${orgParam}`, label: "لوحة التشغيل" }],
       };
     }

@@ -23,8 +23,8 @@ export default async function SectionPage({ params, searchParams }: { params: Pr
   const row = section as Section;
   const [grades, students, unassigned, staff, members, branches] = await Promise.all([
     client.from("grade_levels").select("id,name,stage,sort_order").eq("organization_id", org).order("sort_order"),
-    client.from("children").select("id,full_name").eq("organization_id", org).eq("section_id", id).order("full_name").limit(500),
-    manager ? client.from("children").select("id,full_name").eq("organization_id", org).is("section_id", null).order("full_name").limit(500) : Promise.resolve({ data: [], error: null }),
+    client.from("children").select("id,full_name").eq("organization_id", org).eq("status", "active").eq("section_id", id).order("full_name").limit(500),
+    manager ? client.from("children").select("id,full_name").eq("organization_id", org).eq("status", "active").is("section_id", null).order("full_name").limit(500) : Promise.resolve({ data: [], error: null }),
     client.from("section_staff").select("id,user_id,duty").eq("organization_id", org).eq("section_id", id),
     client.from("memberships").select("user_id,role,display_name").eq("organization_id", org),
     client.from("branches").select("id,name").eq("organization_id", org).order("name").limit(200),

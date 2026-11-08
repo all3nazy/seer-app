@@ -1,3 +1,4 @@
+import { weekdays } from "../../../lib/learning";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { loadOrgContext } from "../../../lib/org-context";
@@ -23,6 +24,16 @@ export default async function MyWorkPage({ searchParams }: { searchParams: Promi
     client.from("inquiries").select("id,author_id,category,subject,body,task_id,status,created_at,updated_at").eq("organization_id", org).eq("author_id", userId).order("updated_at", { ascending: false }).limit(50),
     client.from("memberships").select("user_id,role,display_name").eq("organization_id", org).eq("user_id", userId).maybeSingle(),
   ]);
+  // The teacher's own week: timetable periods and the classes they lead.
+  const [mySlots, myClasses] = await Promise.all([
+    client.from("timetable_slots").select("weekday,period,room,subjects(name),sections(id,name,grade_levels(name))").eq("organization_id", org).eq("teacher_id", userId).order("weekday").order("period").limit(80),
+    client.from("sections").select("id,name,grade_levels(name)").eq("organization_id", org).eq("homeroom_teacher_id", userId),
+  ]);
+  type SlotRow = { weekday: number; period: number; room: string | null; subjects: { name: string } | null; sections: { id: string; name: string; grade_levels: { name: string } | null } | null };
+  const slots = (mySlots.data ?? []) as unknown as SlotRow[];
+  const leads = (myClasses.data ?? []) as unknown as { id: string; name: string; grade_levels: { name: string } | null }[];
+  const todayWeekday = new Date(`${today}T12:00:00Z`).getUTCDay();
+  const className = (section: { name: string; grade_levels: { name: string } | null } | null) => section ? [section.grade_levels?.name, section.name].filter(Boolean).join(" — ") : "";
   // The employee's own HR file, if the manager linked one to this account.
   const { data: myFile } = await client.from("staff_profiles").select("id,annual_leave_days").eq("organization_id", org).eq("user_id", userId).maybeSingle();
   const [myToday, myLeave] = myFile ? await Promise.all([
@@ -67,6 +78,19 @@ export default async function MyWorkPage({ searchParams }: { searchParams: Promi
           <span style={{ display: "flex", gap: 8, alignItems: "center" }}><span className={`chip-soft ${leaveStatusTone[row.status]}`}>{leaveStatusLabels[row.status]}</span>{row.status === "pending" ? <LeaveDecision organizationId={org} id={row.id} manager={false} mine /> : null}</span>
         </li>)}</ul> : null}
     </section> : <p className="info-banner" style={{ marginBottom: 20 }}>تسجيل حضورك وطلب الإجازة يظهر هنا بعد ما يربط المدير ملفك الوظيفي بحسابك من «الموظفين».</p>}
+    {slots.length || leads.length ? <section className="card" aria-labelledby="week-title" style={{ marginBottom: 20 }}>
+      <h2 id="week-title">جدولي وفصلي</h2>
+      {leads.length ? <div className="chip-row" style={{ marginBlock: 10 }}>{leads.map(section => <span key={section.id} style={{ display: "inline-flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+        <strong>رائد فصل {className(section)}:</strong>
+        <a className="btn btn-sm" href={`/dashboard/classes/${section.id}?org=${encodeURIComponent(org)}`}>الفصل مباشر</a>
+        <a className="btn btn-sm" href={`/dashboard/attendance?org=${encodeURIComponent(org)}&section=${section.id}`}>الحضور</a>
+        <a className="btn btn-sm" href={`/dashboard/learning?org=${encodeURIComponent(org)}&section=${section.id}`}>الدرجات</a>
+      </span>)}</div> : null}
+      {slots.length ? <div className="my-week">{weekdays.map(([day, label]) => { const items = slots.filter(slot => slot.weekday === day); return items.length ? <div key={day} className={`my-day${day === todayWeekday ? " is-today" : ""}`}>
+        <strong>{label}{day === todayWeekday ? " · اليوم" : ""}</strong>
+        <ul>{items.map(slot => <li key={`${slot.weekday}-${slot.period}`}><span className="chip-soft">الحصة {slot.period.toLocaleString("ar-SA")}</span> {slot.subjects?.name ?? "مادة"} <span className="hint">{className(slot.sections)}{slot.room ? ` · ${slot.room}` : ""}</span></li>)}</ul>
+      </div> : null; })}</div> : null}
+    </section> : null}
     <div className="home-grid">
       <section className="card" aria-labelledby="tasks-title">
         <h2 id="tasks-title">المهام المسندة لي</h2>

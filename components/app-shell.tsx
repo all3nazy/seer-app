@@ -7,6 +7,7 @@ import { SoundToggle, ThemeToggle } from "./preferences";
 import { FeedbackLayer } from "./feedback";
 import SignOutButton from "./sign-out-button";
 import { BotDock } from "./bot-dock";
+import { BotAvatar } from "./bot-avatar";
 import { computerOnlySection, matches, navGroupLabels, navLinks, visibleLinks, type NavGroup } from "../lib/navigation";
 import { patternUrl, type Stage } from "../lib/stage";
 
@@ -36,7 +37,7 @@ export function AppShell({ children, stage, organizations, supportPhone, manager
       <nav aria-label="التنقل الرئيسي" className="sidebar-nav">
         {groups.map(({ group, links }) => <div key={group} className="nav-group">
           <span className="nav-group-label">{navGroupLabels[group]}</span>
-          {links.map(link => <Link key={link.href} className="nav-link" href={link.href} aria-current={current(link)} title={collapsed ? link.label : undefined}>
+          {links.map(link => <Link key={link.href} className="nav-link" href={link.href} aria-current={current(link)} title={link.label}>
             <Icon name={link.icon} /><span className="nav-text">{link.label}</span>
           </Link>)}
         </div>)}
@@ -47,7 +48,9 @@ export function AppShell({ children, stage, organizations, supportPhone, manager
       </div>
     </aside>
     <div className="app-content">
-      <header className="mobile-bar"><Logo href="/dashboard" label="سِير — لوحة التشغيل" /><div style={{ display: "flex", gap: 6, alignItems: "center" }}><ThemeToggle /></div></header>
+      <header className="mobile-bar"><Logo href="/dashboard" label="سِير — لوحة التشغيل" /><div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        {organizations.length ? <button type="button" className="bar-bot" onClick={() => window.dispatchEvent(new Event("seer:open-bot"))} aria-label="افتح المساعد"><BotAvatar stage={stage} size={30} mood="idle" /></button> : null}
+        <ThemeToggle /></div></header>
       <main className={`main${path === "/dashboard" || path === "/dashboard/tasks" ? " wide" : ""}`} id="main-content" tabIndex={-1}>
         {fullOnly ? <>
           <section className="card phone-notice" aria-live="polite">

@@ -24,7 +24,7 @@ export default async function DailyPage({ searchParams }: { searchParams: Promis
   const grades = (gradesResult.data ?? []) as { id: string; name: string }[];
   const sections = ((sectionsResult.data ?? []) as { id: string; name: string; grade_level_id: string }[]).map(item => ({ id: item.id, name: sectionLabel(item, grades) }));
   const section = sections.find(item => item.id === params.section)?.id ?? sections[0]?.id;
-  let studentsQuery = client.from("children").select("id,full_name").eq("organization_id", org).order("full_name").limit(300);
+  let studentsQuery = client.from("children").select("id,full_name").eq("organization_id", org).eq("status", "active").order("full_name").limit(300);
   if (section) studentsQuery = studentsQuery.eq("section_id", section);
   const { data: students } = await studentsQuery;
   const ids = (students ?? []).map(row => row.id as string);

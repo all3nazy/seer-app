@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { briefingItems, briefingText, dayGreeting, detectMood, empathyLead, notUnderstood, smallTalk, stripCourtesy, type Briefing } from "../lib/bot-persona";
+import { briefingItems, briefingText, withOrg, dayGreeting, detectMood, empathyLead, notUnderstood, smallTalk, stripCourtesy, type Briefing } from "../lib/bot-persona";
 import { parseCommand } from "../lib/bot-commands";
 import { botPersonas } from "../lib/stage";
 
@@ -51,5 +51,10 @@ describe("bot persona", () => {
   it("never leaves the person at a dead end", () => {
     expect(notUnderstood("ابغى شي غريب", persona)).toContain("ملخص اليوم");
     expect(notUnderstood("ما يشتغل!!", persona)).toMatch(/^آسف/);
+  });
+  it("links keep their own filters and add the organization", () => {
+    expect(withOrg("/dashboard/children?section=none", "o 1")).toBe("/dashboard/children?section=none&org=o%201");
+    expect(withOrg("/dashboard/tasks", "x")).toBe("/dashboard/tasks?org=x");
+    expect(briefingItems({ ...empty, unassigned: 3 })[0]).toMatchObject({ label: "الطلاب", href: "/dashboard/children?section=none" });
   });
 });

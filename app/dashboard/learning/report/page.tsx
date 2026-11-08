@@ -30,12 +30,17 @@ export default async function ReportCardsPage({ searchParams }: { searchParams: 
   ]);
   const terms = (termsResult.data ?? []) as { id: string; name: string; starts_on: string; ends_on: string }[];
   const term = terms.find(item => item.id === params.term);
-  let assessmentQuery = client.from("assessments").select("id,subject_id,title,kind,max_score,weight,due_date,term_id").eq("section_id", sectionId);
-  if (term) assessmentQuery = assessmentQuery.eq("term_id", term.id);
-  const { data: assessmentRows } = await assessmentQuery;
-  const assessments = (assessmentRows ?? []) as Assessment[];
   const students = (studentsResult.data ?? []) as { id: string; full_name: string; national_id: string | null }[];
   const ids = students.length ? students.map(student => student.id) : ["00000000-0000-0000-0000-000000000000"];
+  // A student's grades follow them: assessments from an earlier section still count after a move.
+  const { data: earned } = await client.from("grades").select("assessment_id").eq("organization_id", org).in("child_id", ids).limit(20000);
+  const earnedIds = [...new Set(((earned ?? []) as { assessment_id: string }[]).map(row => row.assessment_id))];
+  const columns = "id,subject_id,title,kind,max_score,weight,due_date,term_id";
+  let sectionQuery = client.from("assessments").select(columns).eq("organization_id", org).eq("section_id", sectionId);
+  let earnedQuery = client.from("assessments").select(columns).eq("organization_id", org).in("id", earnedIds.length ? earnedIds : ["00000000-0000-0000-0000-000000000000"]);
+  if (term) { sectionQuery = sectionQuery.eq("term_id", term.id); earnedQuery = earnedQuery.eq("term_id", term.id); }
+  const [sectionAssessments, earnedAssessments] = await Promise.all([sectionQuery, earnedQuery]);
+  const assessments = [...new Map([...(sectionAssessments.data ?? []), ...(earnedAssessments.data ?? [])].map(row => [row.id as string, row])).values()] as Assessment[];
   const assessmentIds = assessments.length ? assessments.map(item => item.id) : ["00000000-0000-0000-0000-000000000000"];
   const from = term?.starts_on ?? "1900-01-01", to = term?.ends_on ?? "2999-12-31";
   const [gradeRows, attendanceRows, behaviorRows] = await Promise.all([

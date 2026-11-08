@@ -4,7 +4,7 @@ import { canManage } from "../../lib/operations";
 import { riyadhToday } from "../../lib/tasks";
 import { Icon, StackArt } from "../../components/icons";
 import { botBriefing } from "./assistant/actions";
-import { briefingItems } from "../../lib/bot-persona";
+import { briefingItems, withOrg } from "../../lib/bot-persona";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "لوحة التشغيل" };
 
@@ -128,7 +128,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
 
       {attention.length ? <section aria-labelledby="attention" className="card attention">
         <div className="section-head"><h2 id="attention">تحتاج انتباهك اليوم</h2><a className="view-all" href="/dashboard/assistant">اسأل المساعد<Icon name="arrowNext" /></a></div>
-        <ul className="bot-list">{attention.map((item, index) => <li key={index} className={`brief-${item.tone}`}><a href={`${item.href}?org=${encodeURIComponent(first!)}`}>{item.text}</a><span>{item.label}</span></li>)}</ul>
+        <ul className="bot-list">{attention.map((item, index) => <li key={index} className={`brief-${item.tone}`}><a href={withOrg(item.href, first!)}>{item.text}</a><span>{item.label}</span></li>)}</ul>
       </section> : null}
 
       <section aria-labelledby="orgs">

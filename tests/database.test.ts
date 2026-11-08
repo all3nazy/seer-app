@@ -102,6 +102,9 @@ beforeAll(async () => {
   const hardening = readdirSync("supabase/migrations").filter(name => name.endsWith("_hardening.sql"));
   if (hardening.length !== 1) throw new Error("Expected exactly one hardening migration");
   await db.exec(readFileSync(`supabase/migrations/${hardening[0]}`, "utf8"));
+  const lifecycle = readdirSync("supabase/migrations").filter(name => name.endsWith("_lifecycle_portal.sql"));
+  if (lifecycle.length !== 1) throw new Error("Expected exactly one lifecycle migration");
+  await db.exec(readFileSync(`supabase/migrations/${lifecycle[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -1369,5 +1372,56 @@ describe("automatic messages and pickup confirmation", () => {
   it("only the server claims messages for a provider", async () => {
     await as("authenticated", owner);
     await expect(db.exec("select * from public.claim_messages(10)")).rejects.toBeDefined();
+  });
+});
+
+describe("student lifecycle, portal and family messages", () => {
+  const dad = "40000000-0000-0000-0000-0000000000e2";
+  const kid = "40000000-0000-0000-0000-0000000000c9";
+  beforeEach(async () => {
+    await db.exec("reset role");
+    await db.exec(`delete from public.message_outbox; delete from public.message_settings; delete from public.attendance; delete from public.announcements;
+      insert into public.memberships(organization_id,user_id,role) values ('${orgA}','${staff}','staff') on conflict do nothing;
+      insert into public.children(id,organization_id,full_name) values ('${kid}','${orgA}','Lifecycle Kid') on conflict (id) do update set status='active';
+      insert into public.guardians(id,organization_id,full_name,phone) values ('${dad}','${orgA}','Dad','0500000888') on conflict (id) do nothing;
+      insert into public.child_guardians(organization_id,child_id,guardian_id,relationship) values ('${orgA}','${kid}','${dad}','father') on conflict do nothing;
+      insert into public.message_settings(organization_id,notify_daily_report) values ('${orgA}',true)`);
+  });
+  it("a withdrawn student keeps history but gets no new attendance and is not counted", async () => {
+    await as("authenticated", owner);
+    const before = (await rows(`select coalesce(sum(total),0)::int as n from public.section_enrollment('${orgA}')`))[0].n as number;
+    await as("authenticated", staff);
+    await expect(db.exec(`update public.children set status='withdrawn' where id='${kid}'`)).resolves.toBeDefined();
+    await as("authenticated", owner);
+    expect((await rows(`select status from public.children where id='${kid}'`))[0].status).toBe("active");
+    await db.exec(`update public.children set status='withdrawn' where id='${kid}'`);
+    expect((await rows(`select status_changed_at is not null as stamped from public.children where id='${kid}'`))[0].stamped).toBe(true);
+    expect((await rows(`select coalesce(sum(total),0)::int as n from public.section_enrollment('${orgA}')`))[0].n).toBe(before - 1);
+    await expect(db.exec(`insert into public.attendance(organization_id,child_id,attendance_date,status) values ('${orgA}','${kid}',(now() at time zone 'Asia/Riyadh')::date,'present')`)).rejects.toMatchObject({ code: "22023" });
+    await expect(db.exec(`update public.children set status='expelled' where id='${kid}'`)).rejects.toMatchObject({ code: "23514" });
+  });
+  it("the portal shows grades, behaviour and status; daily-report messages carry the guardian's portal link", async () => {
+    await as("authenticated", owner);
+    await db.exec(`insert into public.behavior_notes(organization_id,child_id,kind,category,note) values ('${orgA}','${kid}','positive','participation','Great work')`);
+    await db.exec(`insert into public.daily_reports(organization_id,child_id,report_date,mood) values ('${orgA}','${kid}',(now() at time zone 'Asia/Riyadh')::date,'happy')`);
+    const body = (await rows(`select body from public.message_outbox where kind='daily_report' and to_phone='0500000888'`))[0].body as string;
+    const token = body.match(/\/p\/([0-9a-f-]{36})/)![1];
+    await as("anon");
+    const portal = (await rows(`select public.family_portal('${token}') as p`))[0].p as { guardian: string; children: { status: string; grades: unknown[]; behavior: { note: string }[] }[] };
+    expect(portal.guardian).toBe("Dad");
+    expect(portal.children[0]).toMatchObject({ status: "active", grades: [], behavior: [{ note: "Great work" }] });
+  });
+  it("only managers send an announcement to families, once per guardian, with portal links", async () => {
+    await as("authenticated", owner);
+    const id = (await rows(`insert into public.announcements(organization_id,title,body,audience) values ('${orgA}','Trip','Bring a hat','families') returning id`))[0].id as string;
+    await as("authenticated", staff);
+    await expect(db.exec(`select public.send_announcement('${id}')`)).rejects.toMatchObject({ code: "P0002" });
+    await as("authenticated", owner);
+    const sent = (await rows(`select public.send_announcement('${id}') as n`))[0].n as number;
+    expect(sent).toBeGreaterThan(0);
+    expect((await rows(`select public.send_announcement('${id}') as n`))[0].n).toBe(0);
+    const message = (await rows(`select body from public.message_outbox where kind='announcement' and to_phone='0500000888'`))[0].body as string;
+    expect(message).toContain("Bring a hat");
+    expect(message).toMatch(/\/p\/[0-9a-f-]{36}/);
   });
 });

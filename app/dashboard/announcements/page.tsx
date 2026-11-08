@@ -1,6 +1,6 @@
 import { loadOrgContext } from "../../../lib/org-context";
 import { OrgSwitcher, OrgUnavailable } from "../../../components/org-unavailable";
-import { AnnouncementForm, DeleteAnnouncement } from "../../../components/family-forms";
+import { AnnouncementForm, DeleteAnnouncement, SendAnnouncement } from "../../../components/family-forms";
 import { sectionLabel } from "../../../lib/academics";
 import { audienceLabels, type Audience } from "../../../lib/family";
 import { whatsappLink } from "../../../lib/share";
@@ -33,7 +33,7 @@ export default async function AnnouncementsPage({ searchParams }: { searchParams
       <p>{row.body}</p>
       <div className="share-doc">
         <a className="btn btn-sm share-wa" href={whatsappLink(null, `📢 ${orgName}\n${row.title}\n\n${row.body}`)} target="_blank" rel="noopener noreferrer">مشاركة واتساب</a>
-        {manager ? <DeleteAnnouncement organizationId={org} id={row.id} /> : null}
+        {manager ? <span style={{ display: "inline-flex", gap: 8 }}>{row.audience !== "staff" ? <SendAnnouncement id={row.id} /> : null}<DeleteAnnouncement organizationId={org} id={row.id} /></span> : null}
       </div>
     </article>)}</div> : <p className="empty">ما فيه إعلانات بعد.</p>}
   </>;

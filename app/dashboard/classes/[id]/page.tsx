@@ -21,7 +21,7 @@ export default async function LiveClassPage({ params, searchParams }: { params: 
   const today = riyadhToday();
   const [sectionResult, studentsResult, membersResult, holidays] = await Promise.all([
     client.from("sections").select("id,name,capacity,homeroom_teacher_id,grade_levels(name)").eq("organization_id", org).eq("id", id).maybeSingle(),
-    client.from("children").select("id,full_name").eq("organization_id", org).eq("section_id", id).order("full_name").limit(500),
+    client.from("children").select("id,full_name").eq("organization_id", org).eq("status", "active").eq("section_id", id).order("full_name").limit(500),
     client.from("memberships").select("user_id,role,display_name").eq("organization_id", org),
     client.from("holidays").select("name,starts_on,ends_on").eq("organization_id", org).lte("starts_on", today).gte("ends_on", today).limit(1),
   ]);
