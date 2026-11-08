@@ -87,6 +87,9 @@ beforeAll(async () => {
   const hr = readdirSync("supabase/migrations").filter(name => name.endsWith("_staff_hr.sql"));
   if (hr.length !== 1) throw new Error("Expected exactly one staff HR migration");
   await db.exec(readFileSync(`supabase/migrations/${hr[0]}`, "utf8"));
+  const learning = readdirSync("supabase/migrations").filter(name => name.endsWith("_learning.sql"));
+  if (learning.length !== 1) throw new Error("Expected exactly one learning migration");
+  await db.exec(readFileSync(`supabase/migrations/${learning[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -1093,5 +1096,45 @@ describe("staff files, leave, attendance and payroll", () => {
     await as("authenticated", staff);
     expect(await rows("select * from public.payroll_lines")).toEqual([]);
     await expect(db.exec(`select public.generate_payroll('${orgA}','2026-02-01')`)).rejects.toMatchObject({ code: "42501" });
+  });
+});
+
+describe("subjects, timetable, grades and behaviour", () => {
+  let section: string; let subject: string;
+  beforeEach(async () => {
+    await db.exec("reset role");
+    await db.exec(`delete from public.subjects; delete from public.behavior_notes; delete from public.sections; delete from public.grade_levels;
+      insert into public.memberships(organization_id,user_id,role) values ('${orgA}','${staff}','staff') on conflict do nothing`);
+    await as("authenticated", owner);
+    const grade = (await rows(`insert into public.grade_levels(organization_id,name,sort_order,stage) values ('${orgA}','G1',1,'primary') returning id`))[0].id as string;
+    section = (await rows(`insert into public.sections(organization_id,grade_level_id,name) values ('${orgA}','${grade}','A') returning id`))[0].id as string;
+    subject = (await rows(`insert into public.subjects(organization_id,name,grade_level_id,weekly_periods) values ('${orgA}','Math','${grade}',5) returning id`))[0].id as string;
+  });
+  it("managers build the timetable; a teacher cannot be in two classes at once", async () => {
+    await as("authenticated", staff);
+    await expect(db.exec(`insert into public.timetable_slots(organization_id,section_id,weekday,period,subject_id) values ('${orgA}','${section}',0,1,'${subject}')`)).rejects.toMatchObject({ code: "42501" });
+    await as("authenticated", owner);
+    const grade = (await rows("select grade_level_id from public.sections limit 1"))[0].grade_level_id as string;
+    const section2 = (await rows(`insert into public.sections(organization_id,grade_level_id,name) values ('${orgA}','${grade}','B') returning id`))[0].id as string;
+    await db.exec(`insert into public.timetable_slots(organization_id,section_id,weekday,period,subject_id,teacher_id) values ('${orgA}','${section}',0,1,'${subject}','${staff}')`);
+    await expect(db.exec(`insert into public.timetable_slots(organization_id,section_id,weekday,period,subject_id,teacher_id) values ('${orgA}','${section2}',0,1,'${subject}','${staff}')`)).rejects.toMatchObject({ code: "23505" });
+    await expect(db.exec(`insert into public.timetable_slots(organization_id,section_id,weekday,period,subject_id) values ('${orgA}','${section}',0,1,'${subject}')`)).rejects.toMatchObject({ code: "23505" });
+    await expect(db.exec(`insert into public.timetable_slots(organization_id,section_id,weekday,period,subject_id,teacher_id) values ('${orgA}','${section2}',0,2,'${subject}','${outsider}')`)).rejects.toMatchObject({ code: "23503" });
+  });
+  it("teachers enter grades within the maximum; the grader is stamped", async () => {
+    await as("authenticated", staff);
+    const assessment = (await rows(`insert into public.assessments(organization_id,section_id,subject_id,title,max_score,weight) values ('${orgA}','${section}','${subject}','Quiz 1',20,10) returning id,created_by`))[0];
+    expect(assessment.created_by).toBe(staff);
+    expect(await rows(`insert into public.grades(organization_id,assessment_id,child_id,score) values ('${orgA}','${assessment.id}','${childA}',18) returning graded_by`)).toEqual([{ graded_by: staff }]);
+    await expect(db.exec(`update public.grades set score=25 where assessment_id='${assessment.id}'`)).rejects.toMatchObject({ code: "23514" });
+    await expect(db.exec(`update public.assessments set max_score=10 where id='${assessment.id}'`)).rejects.toMatchObject({ code: "23514" });
+    expect(await rows(`update public.grades set absent=true, score=5 where assessment_id='${assessment.id}' returning score`)).toEqual([{ score: null }]);
+    await as("authenticated", outsider);
+    expect(await rows("select * from public.grades")).toEqual([]);
+  });
+  it("behaviour points carry the sign of the note", async () => {
+    await as("authenticated", staff);
+    expect(await rows(`insert into public.behavior_notes(organization_id,child_id,kind,category,points) values ('${orgA}','${childA}','concern','conduct',3) returning points`)).toEqual([{ points: -3 }]);
+    expect(await rows(`insert into public.behavior_notes(organization_id,child_id,kind,category,points) values ('${orgA}','${childA}','positive','participation',-2) returning points`)).toEqual([{ points: 2 }]);
   });
 });

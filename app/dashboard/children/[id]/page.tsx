@@ -140,6 +140,7 @@ export default async function StudentFile({ params, searchParams }: { params: Pr
         <span className="pill">{statusLabels[item.status] ?? item.status}</span>
       </li>)}</ul> : <p className="hint">ما فيه طلبات تسجيل لهذا الطالب.</p>}
       {manager ? <p style={{ marginTop: 12 }}><Link href={`/dashboard/operations?org=${encodeURIComponent(org)}&entity=enrollments`}>إدارة التسجيل</Link></p> : null}
+      <p style={{ marginTop: 8 }}><Link href={`/dashboard/learning/report?org=${encodeURIComponent(org)}&child=${id}`}>الشهادة والدرجات</Link></p>
     </section>
   </div>;
 }

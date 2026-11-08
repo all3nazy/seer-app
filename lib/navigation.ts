@@ -22,6 +22,7 @@ export const navLinks: NavLink[] = [
   { href: "/dashboard/tasks", label: "لوحة المهام", short: "المهام", icon: "board", group: "admin", phone: false, exact: true },
   { href: "/dashboard/finance", label: "المالية", short: "المالية", icon: "wallet", group: "admin", phone: false },
   { href: "/dashboard/admissions", label: "القبول والتسجيل", short: "القبول", icon: "flag", group: "students", phone: false },
+  { href: "/dashboard/learning", label: "الدراسة والدرجات", short: "الدراسة", icon: "list", group: "students", phone: true },
   { href: "/dashboard/academics", label: "الهيكل الدراسي", short: "الصفوف", icon: "school", group: "students", phone: false },
   { href: "/dashboard/operations", label: "السجلات", short: "السجلات", icon: "folder", group: "admin", phone: false },
   { href: "/dashboard/staff", label: "الموظفين", short: "الموظفين", icon: "users", group: "admin", phone: false },
