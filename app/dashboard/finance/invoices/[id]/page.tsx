@@ -1,3 +1,4 @@
+import { shortLink } from "../../../../../lib/documents-server";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { loadOrgContext } from "../../../../../lib/org-context";
@@ -34,7 +35,7 @@ export default async function InvoicePage({ params, searchParams }: { params: Pr
     client.from("organization_profiles").select("legal_name").eq("organization_id", org).maybeSingle(),
     siteOrigin(),
   ]);
-  const link = `${origin}/d/${invoice.share_token}`;
+  const link = await shortLink(client, origin, `/d/${invoice.share_token}`);
   const lineRows = (lines.data ?? []) as InvoiceLine[];
   const paymentRows = (payments.data ?? []) as Payment[];
   const childOptions = ((kids.data ?? []) as { id: string; full_name: string }[]).map(row => ({ id: row.id, name: row.full_name }));

@@ -5,7 +5,7 @@ import { OrgUnavailable } from "../../../../../components/org-unavailable";
 import { FinanceDocument } from "../../../../../components/finance-document";
 import { DeleteQuoteLineButton, QuoteActions, QuoteLineForm, ShareDocument } from "../../../../../components/document-forms";
 import { PrintButton } from "../../../../../components/print-button";
-import { loadProfile } from "../../../../../lib/documents-server";
+import { loadProfile, shortLink } from "../../../../../lib/documents-server";
 import { quoteStatusLabels, quoteStatusTone, shareMessage, type DocLine, type QuoteStatus } from "../../../../../lib/documents";
 import { feeKindLabels, sar } from "../../../../../lib/finance";
 import { uuid } from "../../../../../lib/operations";
@@ -37,7 +37,7 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
   const recipient = payer?.full_name ?? quote.recipient_name;
   const phone = payer?.phone ?? quote.recipient_phone;
   const orgParam = encodeURIComponent(org);
-  const link = `${origin}/d/${quote.share_token}`;
+  const link = await shortLink(client, origin, `/d/${quote.share_token}`);
   return <div style={{ display: "grid", gap: 20 }}>
     <header className="page-head no-print" style={{ marginBottom: 0 }}><div>
       <p className="hint"><Link href={`/dashboard/finance/quotes?org=${orgParam}`}>عروض الأسعار</Link> / {quote.number ? `عرض رقم ${quote.number}` : "مسودة"}</p>

@@ -1,6 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { createSupabaseServerClient } from "../../../lib/supabase/server";
+import { createSupabaseServerClient, authUser } from "../../../lib/supabase/server";
 import { canManage, uuid, ValidationError } from "../../../lib/operations";
 import { dueDate, nameSearchPattern, rankMatches } from "../../../lib/bot-commands";
 import { attendanceLabels, isAttendanceStatus, riyadhToday, type AttendanceStatus } from "../../../lib/students";
@@ -18,7 +18,7 @@ export type BotResult<T = undefined> = { error?: string; data?: T };
 async function access(organizationId: string) {
   const org = uuid(organizationId);
   const client = await createSupabaseServerClient();
-  const { data: { user } } = await client.auth.getUser();
+  const { data: { user } } = await authUser(client);
   if (!user) return { error: "انتهت الجلسة. سجّل الدخول مجددًا." } as const;
   const { data: member } = await client.from("memberships").select("role").eq("organization_id", org).eq("user_id", user.id).maybeSingle();
   if (!member) return { error: "لا تملك صلاحية على هذه المنشأة." } as const;
@@ -120,7 +120,13 @@ export async function botBriefing(organizationId: string): Promise<BotResult<Bri
   try {
     const auth = await access(organizationId);
     if ("error" in auth) return { error: auth.error };
-    const { client, org, manager } = auth;
+    return await briefingFor(auth.client, auth.org, auth.user, auth.manager);
+  } catch (error) { return fail(error, "تعذر تجهيز الملخص الآن."); }
+}
+/** The briefing for a caller that already knows the session and role (the home page). */
+export async function briefingFor(client: Awaited<ReturnType<typeof createSupabaseServerClient>>, org: string, userId: string, manager: boolean): Promise<BotResult<Briefing>> {
+  try {
+    const auth = { user: userId };
     const today = riyadhToday();
     const head = (table: string) => client.from(table).select("id", { count: "exact", head: true }).eq("organization_id", org);
     const count = async (query: PromiseLike<{ count: number | null; error: unknown }>) => { const result = await query; return result.error ? null : result.count ?? 0; };

@@ -1,6 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { createSupabaseServerClient } from "../../../lib/supabase/server";
+import { createSupabaseServerClient, authUser } from "../../../lib/supabase/server";
 import { uuid, ValidationError } from "../../../lib/operations";
 import { isAttendanceStatus, riyadhToday } from "../../../lib/students";
 
@@ -15,7 +15,7 @@ export async function markAttendance(organizationId: string, childId: string, st
     const org = uuid(organizationId), child = uuid(childId);
     if (!isAttendanceStatus(status)) return { error: "اختر حالة صحيحة." };
     const client = await createSupabaseServerClient();
-    const { data: { user } } = await client.auth.getUser();
+    const { data: { user } } = await authUser(client);
     if (!user) return { error: "انتهت الجلسة. سجل الدخول مجددًا." };
     const day = riyadhToday();
     const { data: existing, error: readError } = await client.from("attendance").select("status").eq("organization_id", org).eq("child_id", child).eq("attendance_date", day).maybeSingle();

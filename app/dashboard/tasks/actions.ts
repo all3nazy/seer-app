@@ -1,6 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { createSupabaseServerClient } from "../../../lib/supabase/server";
+import { createSupabaseServerClient, authUser } from "../../../lib/supabase/server";
 import { canManage, uuid, ValidationError } from "../../../lib/operations";
 import { taskId, taskStatus, taskValues, type Task } from "../../../lib/tasks";
 
@@ -10,7 +10,7 @@ const columns = "id,title,notes,status,priority,due_date,completed_at,assignee_i
 // Each action re-checks the session and membership; RLS and the guard trigger enforce the same rules again in PostgreSQL.
 async function member(org: string, needsManager: boolean) {
   const client = await createSupabaseServerClient();
-  const { data: { user }, error } = await client.auth.getUser();
+  const { data: { user }, error } = await authUser(client);
   if (error || !user) return { error: "انتهت الجلسة. سجّل الدخول مجددًا." } as const;
   const { data, error: memberError } = await client.from("memberships").select("role").eq("organization_id", org).eq("user_id", user.id).maybeSingle();
   if (memberError || !data) return { error: "لا تملك صلاحية على هذه المنشأة." } as const;

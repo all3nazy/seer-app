@@ -2,6 +2,7 @@
 import { useRef, useState } from "react";
 import { getSupabaseBrowserClient } from "../../lib/supabase";
 import { Logo } from "../../components/icons";
+import { loginEmail } from "../../lib/login";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -17,11 +18,11 @@ export default function Login() {
     setBusy(true);
     setError("");
     try {
-      const { error: authError } = await getSupabaseBrowserClient().auth.signInWithPassword({ email: email.trim(), password });
+      const { error: authError } = await getSupabaseBrowserClient().auth.signInWithPassword({ email: loginEmail(email), password });
       if (authError) throw authError;
       window.location.assign("/dashboard");
     } catch {
-      setError("تعذر تسجيل الدخول. تحقق من البريد الإلكتروني وكلمة المرور، أو حاول لاحقًا.");
+      setError("تعذر تسجيل الدخول. تحقق من اسم المستخدم أو البريد وكلمة المرور.");
       setBusy(false);
       requestAnimationFrame(() => errorRef.current?.focus());
     }
@@ -33,8 +34,8 @@ export default function Login() {
       <h1 id="login-title">تسجيل الدخول</h1>
       <p id="login-description">أهلًا فيك. ادخل بحساب منشأتك.</p>
       <form method="post" onSubmit={signIn} className="login-form" aria-describedby="login-description" aria-busy={busy}>
-        <label htmlFor="email">البريد الإلكتروني</label>
-        <input id="email" name="email" type="email" dir="ltr" inputMode="email" required autoComplete="username" autoCapitalize="none" spellCheck={false} maxLength={254} value={email} onChange={event => setEmail(event.target.value)} readOnly={busy}/>
+        <label htmlFor="email">اسم المستخدم أو البريد الإلكتروني</label>
+        <input id="email" name="email" type="text" dir="ltr" inputMode="email" required autoComplete="username" autoCapitalize="none" spellCheck={false} maxLength={254} value={email} onChange={event => setEmail(event.target.value)} readOnly={busy}/>
         <label htmlFor="password">كلمة المرور</label>
         <div className="password-control">
           <input id="password" name="password" type={showPassword ? "text" : "password"} dir="ltr" required autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} readOnly={busy}/>
@@ -44,7 +45,7 @@ export default function Login() {
         <button type="submit" disabled={busy} className="primary-button">{busy ? "جارٍ التحقق…" : "دخول"}</button>
         <span role="status" className="sr-only">{busy ? "جارٍ تسجيل الدخول. يرجى الانتظار." : ""}</span>
       </form>
-      <p className="login-help"><a href="/auth/activate">تفعيل حساب جديد</a> — يلزم موافقة مسؤول المنصة للوصول إلى المنشأة.</p>
+      <p className="login-help">موظف جديد؟ اطلب من إدارتك «رابط الانضمام» على واتساب، وتختار منه اسم المستخدم وكلمة المرور. نسيت كلمة المرور؟ مديرك يقدر يعيّن لك واحدة جديدة.</p>
     </section>
   </main></>;
 }

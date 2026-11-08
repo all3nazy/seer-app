@@ -1,7 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createSupabaseServerClient } from "../../../lib/supabase/server";
+import { createSupabaseServerClient, authUser } from "../../../lib/supabase/server";
 import { canManage, uuid, ValidationError } from "../../../lib/operations";
 import { isIsoDate } from "../../../lib/students";
 import { lineValues } from "../../../lib/finance";
@@ -15,7 +15,7 @@ export type DocResult = { error?: string; success?: string };
 async function manager(organizationId: unknown) {
   const org = uuid(organizationId);
   const client = await createSupabaseServerClient();
-  const { data: { user } } = await client.auth.getUser();
+  const { data: { user } } = await authUser(client);
   if (!user) return { error: "انتهت الجلسة. سجّل الدخول مجددًا." } as const;
   const { data } = await client.from("memberships").select("role").eq("organization_id", org).eq("user_id", user.id).maybeSingle();
   if (!data || !canManage(data.role as string)) return { error: "المالية لمالك المنشأة أو مديرها." } as const;

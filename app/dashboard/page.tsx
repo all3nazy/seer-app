@@ -1,9 +1,11 @@
 import { redirect } from "next/navigation";
-import { createSupabaseServerClient, sessionUser } from "../../lib/supabase/server";
+import { requestMemberships, requestSession } from "../../lib/supabase/server";
 import { canManage } from "../../lib/operations";
 import { riyadhToday } from "../../lib/tasks";
 import { Icon, StackArt } from "../../components/icons";
-import { botBriefing } from "./assistant/actions";
+import { briefingFor } from "./assistant/actions";
+import { Suspense } from "react";
+import Link from "next/link";
 import { briefingItems, withOrg } from "../../lib/bot-persona";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "لوحة التشغيل" };
@@ -15,15 +17,19 @@ function greeting() {
 }
 
 export default async function Dashboard({ searchParams }: { searchParams: Promise<{ m?: string }> }) {
-  const supabase = await createSupabaseServerClient();
-  const user = await sessionUser(supabase);
+  const { client: supabase, user } = await requestSession();
   if (!user) redirect("/login");
   const loadMemberships = () => supabase.from("memberships")
     .select("organization_id,role,organizations(name,type)").eq("user_id", user.id);
-  // Joins any organization that invited this verified email. Takes no client input;
-  // failures (for example before the team migration) leave the page unchanged.
-  await supabase.rpc("claim_member_invitations");
-  let { data: memberships, error: membershipError } = await loadMemberships();
+  const shared = await requestMemberships();
+  let memberships: { organization_id: string; role: string; organizations: unknown }[] | null = shared.data;
+  let membershipError: unknown = shared.error || null;
+  if (!membershipError && memberships?.length === 0) {
+    // Only someone without an organization can have a pending email invitation to claim; checking it
+    // on every visit cost a round trip for everyone else.
+    await supabase.rpc("claim_member_invitations");
+    ({ data: memberships, error: membershipError } = await loadMemberships());
+  }
   if (!membershipError && memberships?.length === 0) {
     // This RPC accepts no client-provided email, tenant or role. PostgreSQL checks
     // the verified Auth email against an operator-approved invitation atomically.
@@ -85,8 +91,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const pct = (part: number, whole: number) => whole ? Math.round((part / whole) * 100) : 0;
   const first = organizations[0]?.id;
   // What needs attention today in the first organization: the same prioritised briefing the bot gives.
-  const briefing = first ? await botBriefing(first) : null;
-  const attention = briefing?.data ? briefingItems(briefing.data).filter(item => item.tone !== "ok").slice(0, 6) : [];
+  const firstMember = (memberships ?? [])[0];
   const email = user.email ?? "";
   const displayName = email.split("@")[0] || "أهلًا";
   const mainRole = roleNames[organizations[0]?.role ?? ""] ?? "عضو";
@@ -104,35 +109,32 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       <section className="welcome" aria-labelledby="welcome-title">
         <div>
           <h1 id="welcome-title">{greeting()}، {displayName}</h1>
-          <p>{open ? <>عندكم {n(open)} {open === 1 ? "مهمة مفتوحة" : "مهام مفتوحة"}{late ? <>، منها <a href={first ? `/dashboard/tasks?org=${encodeURIComponent(first)}` : "/dashboard/tasks"}>{n(late)} متأخرة</a></> : null}. وش ودّك تنجز اليوم؟</> : <>ما عندكم مهام مفتوحة. ابدأ يومك بمهمة جديدة.</>}</p>
-          <a className="primary-button" href={first ? `/dashboard/tasks?org=${encodeURIComponent(first)}` : "/dashboard/tasks"}>افتح المهام</a>
+          <p>{open ? <>عندكم {n(open)} {open === 1 ? "مهمة مفتوحة" : "مهام مفتوحة"}{late ? <>، منها <Link href={first ? `/dashboard/tasks?org=${encodeURIComponent(first)}` : "/dashboard/tasks"}>{n(late)} متأخرة</Link></> : null}. وش ودّك تنجز اليوم؟</> : <>ما عندكم مهام مفتوحة. ابدأ يومك بمهمة جديدة.</>}</p>
+          <Link className="primary-button" href={first ? `/dashboard/tasks?org=${encodeURIComponent(first)}` : "/dashboard/tasks"}>افتح المهام</Link>
         </div>
         <StackArt className="art" />
       </section>
       {membershipError ? <p role="alert">تعذر تحميل عضويات المنشآت. حاول مرة أخرى.</p> : null}
 
       <div className="stats">
-        <a className="stat sky" href={first ? `/dashboard/tasks?org=${encodeURIComponent(first)}` : "/dashboard/tasks"}>
+        <Link className="stat sky" href={first ? `/dashboard/tasks?org=${encodeURIComponent(first)}` : "/dashboard/tasks"}>
           <span className="tile-icon tone-sky"><Icon name="board" /></span>
           <span className="figure">{n(done)}<small>/{n(done + open)}</small></span>
           <span className="label">مهام منجزة</span>
           <span className="progress"><span style={{ width: `${pct(done, done + open)}%` }} /></span>
-        </a>
-        <a className="stat peach" href={first ? `/dashboard/admissions?org=${encodeURIComponent(first)}` : "/dashboard/admissions"}>
+        </Link>
+        <Link className="stat peach" href={first ? `/dashboard/admissions?org=${encodeURIComponent(first)}` : "/dashboard/admissions"}>
           <span className="tile-icon tone-coral"><Icon name="flag" /></span>
           <span className="figure">{n(pending)}</span>
           <span className="label">طلبات التحاق تنتظر المراجعة</span>
           <span className="progress coral"><span style={{ width: `${Math.min(100, pending * 10)}%` }} /></span>
-        </a>
+        </Link>
       </div>
 
-      {attention.length ? <section aria-labelledby="attention" className="card attention">
-        <div className="section-head"><h2 id="attention">تحتاج انتباهك اليوم</h2><a className="view-all" href="/dashboard/assistant">اسأل المساعد<Icon name="arrowNext" /></a></div>
-        <ul className="bot-list">{attention.map((item, index) => <li key={index} className={`brief-${item.tone}`}><a href={withOrg(item.href, first!)}>{item.text}</a><span>{item.label}</span></li>)}</ul>
-      </section> : null}
+      {first && firstMember ? <Suspense fallback={null}><Attention client={supabase} org={first} userId={user.id} manager={canManage(firstMember.role)} /></Suspense> : null}
 
       <section aria-labelledby="orgs">
-        <div className="section-head"><h2 id="orgs">منشآتك</h2><a className="view-all" href="/dashboard/operations">عرض الكل<Icon name="arrowNext" /></a></div>
+        <div className="section-head"><h2 id="orgs">منشآتك</h2><Link className="view-all" href="/dashboard/operations">عرض الكل<Icon name="arrowNext" /></Link></div>
         {organizations.length ? <div className="org-cards">{organizations.map((org, index) => <a key={org.id} className={`org-tile g${(index % 3) + 1}`} href={`/dashboard/tasks?${new URLSearchParams({ org: org.id })}`}>
           <h3>{org.name}</h3>
           <span className="badge">{roleNames[org.role] ?? "عضو"}</span>
@@ -145,7 +147,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       </section>
 
       <section aria-labelledby="upcoming">
-        <div className="section-head"><h2 id="upcoming">المهام القادمة</h2><a className="view-all" href="/dashboard/tasks">عرض الكل<Icon name="arrowNext" /></a></div>
+        <div className="section-head"><h2 id="upcoming">المهام القادمة</h2><Link className="view-all" href="/dashboard/tasks">عرض الكل<Icon name="arrowNext" /></Link></div>
         {upcoming.length ? <div className="table-wrap"><table className="data-table">
           <thead><tr><th>المهمة</th><th>المنشأة</th><th>المرحلة</th><th>التسليم</th><th>الحالة</th></tr></thead>
           <tbody>{upcoming.map(task => {
@@ -163,10 +165,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
 
       <section className="mobile-only" aria-labelledby="shortcuts"><h2 id="shortcuts" className="section-label">اختصارات</h2>
         <div className="tiles">
-          <a className="tile" href="/dashboard/tasks"><span className="tile-icon tone-plum"><Icon name="plus" /></span><span className="title">مهمة جديدة</span><span className="sub">أضفها ووزّعها</span></a>
-          <a className="tile" href="/dashboard/children"><span className="tile-icon tone-rose"><Icon name="child" /></span><span className="title">الأطفال</span><span className="sub">الملفات والبيانات</span></a>
-          <a className="tile" href="/dashboard/attendance"><span className="tile-icon tone-sun"><Icon name="clock" /></span><span className="title">الحضور</span><span className="sub">سجّل حضور اليوم</span></a>
-          <a className="tile" href="/dashboard/assistant"><span className="tile-icon tone-sky"><Icon name="spark" /></span><span className="title">المساعد</span><span className="sub">اسأل بالعربي</span></a>
+          <Link className="tile" href="/dashboard/tasks"><span className="tile-icon tone-plum"><Icon name="plus" /></span><span className="title">مهمة جديدة</span><span className="sub">أضفها ووزّعها</span></Link>
+          <Link className="tile" href="/dashboard/children"><span className="tile-icon tone-rose"><Icon name="child" /></span><span className="title">الأطفال</span><span className="sub">الملفات والبيانات</span></Link>
+          <Link className="tile" href="/dashboard/attendance"><span className="tile-icon tone-sun"><Icon name="clock" /></span><span className="title">الحضور</span><span className="sub">سجّل حضور اليوم</span></Link>
+          <Link className="tile" href="/dashboard/assistant"><span className="tile-icon tone-sky"><Icon name="spark" /></span><span className="title">المساعد</span><span className="sub">اسأل بالعربي</span></Link>
         </div>
       </section>
     </div>
@@ -176,13 +178,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         <span className="avatar" aria-hidden="true">{(email[0] ?? "س").toUpperCase()}</span>
         <strong dir="auto">{displayName}</strong>
         <span>{mainRole}</span>
-        <a className="btn-primary" href="/dashboard/settings">الملف</a>
+        <Link className="btn-primary" href="/dashboard/settings">الملف</Link>
       </div>
       <section className="calendar" aria-labelledby="cal-title">
         <header>
-          <a className="nav" href={`/dashboard?m=${shift(-1)}`} aria-label="الشهر السابق"><Icon name="arrowPrev" /></a>
+          <Link className="nav" href={`/dashboard?m=${shift(-1)}`} aria-label="الشهر السابق"><Icon name="arrowPrev" /></Link>
           <span id="cal-title">{new Intl.DateTimeFormat("ar-SA-u-ca-gregory", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${monthStart}T00:00:00Z`))}</span>
-          <a className="nav" href={`/dashboard?m=${shift(1)}`} aria-label="الشهر التالي"><Icon name="arrowNext" /></a>
+          <Link className="nav" href={`/dashboard?m=${shift(1)}`} aria-label="الشهر التالي"><Icon name="arrowNext" /></Link>
         </header>
         <table>
           <thead><tr>{["ح", "ن", "ث", "ر", "خ", "ج", "س"].map((day, index) => <th key={index} scope="col">{day}</th>)}</tr></thead>
@@ -202,4 +204,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       </section>
     </aside>
   </div>;
+}
+
+/** "Needs your attention" streams in after the page, so its queries never hold up the first paint. */
+async function Attention({ client, org, userId, manager }: { client: Awaited<ReturnType<typeof requestSession>>["client"]; org: string; userId: string; manager: boolean }) {
+  const briefing = await briefingFor(client, org, userId, manager);
+  const attention = briefing.data ? briefingItems(briefing.data).filter(item => item.tone !== "ok").slice(0, 6) : [];
+  if (!attention.length) return null;
+  return <section aria-labelledby="attention" className="card attention">
+    <div className="section-head"><h2 id="attention">تحتاج انتباهك اليوم</h2><Link className="view-all" href="/dashboard/assistant">اسأل المساعد<Icon name="arrowNext" /></Link></div>
+    <ul className="bot-list">{attention.map((item, index) => <li key={index} className={`brief-${item.tone}`}><Link href={withOrg(item.href, org)}>{item.text}</Link><span>{item.label}</span></li>)}</ul>
+  </section>;
 }

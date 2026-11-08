@@ -57,16 +57,17 @@ export function LiveClass(props: Props) {
     let timer: number | undefined;
     const refresh = () => { window.clearTimeout(timer); timer = window.setTimeout(() => startTransition(() => router.refresh()), 400); };
     let channel: ReturnType<ReturnType<typeof getSupabaseBrowserClient>["channel"]> | null = null;
+    let connected = false;
     try {
       const client = getSupabaseBrowserClient();
       const filterOrg = `organization_id=eq.${organizationId}`;
       channel = client.channel(`live-class-${organizationId}`)
         .on("postgres_changes", { event: "*", schema: "public", table: "attendance", filter: filterOrg }, refresh)
         .on("postgres_changes", { event: "*", schema: "public", table: "pickups", filter: filterOrg }, refresh)
-        .subscribe((status: string) => setLive(status === "SUBSCRIBED" ? "live" : status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED" ? "polling" : "connecting"));
+        .subscribe((status: string) => { connected = status === "SUBSCRIBED"; setLive(connected ? "live" : status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED" ? "polling" : "connecting"); });
     } catch { setLive("polling"); }
-    // Fallback and safety net: a quiet refresh every 30 seconds while the tab is visible.
-    const poll = window.setInterval(() => { if (document.visibilityState === "visible") startTransition(() => router.refresh()); }, 30_000);
+    // Fallback only: poll every 30 seconds while the live connection is down and the tab is visible.
+    const poll = window.setInterval(() => { if (!connected && document.visibilityState === "visible") startTransition(() => router.refresh()); }, 30_000);
     const onFocus = () => refresh();
     window.addEventListener("focus", onFocus);
     return () => { window.clearInterval(poll); window.clearTimeout(timer); window.removeEventListener("focus", onFocus); if (channel) void getSupabaseBrowserClient().removeChannel(channel); };
@@ -84,7 +85,8 @@ export function LiveClass(props: Props) {
     const result = await markAttendance(organizationId, childId, status);
     setSaving(null);
     if (result.error) notify(result.error, "error");
-    else { notify(`${names.get(childId) ?? "الطالب"}: ${attendanceLabels[status]}`, "info", "done"); startTransition(() => router.refresh()); }
+    // The live connection refreshes the view; only refresh here when it is not connected.
+    else { notify(`${names.get(childId) ?? "الطالب"}: ${attendanceLabels[status]}`, "info", "done"); if (live !== "live") startTransition(() => router.refresh()); }
   }
 
   const shown = seats.filter(seat => filter === "all" || seat.state === filter);
