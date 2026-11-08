@@ -78,6 +78,9 @@ beforeAll(async () => {
   const live = readdirSync("supabase/migrations").filter(name => name.endsWith("_live_classes.sql"));
   if (live.length !== 1) throw new Error("Expected exactly one live classes migration");
   await db.exec(readFileSync(`supabase/migrations/${live[0]}`, "utf8"));
+  const branded = readdirSync("supabase/migrations").filter(name => name.endsWith("_branded_documents.sql"));
+  if (branded.length !== 1) throw new Error("Expected exactly one branded documents migration");
+  await db.exec(readFileSync(`supabase/migrations/${branded[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -878,5 +881,96 @@ describe("live class history", () => {
     await db.exec("reset role");
     await db.exec(`delete from public.children where id='${childC}'`);
     expect(await rows(`select * from public.attendance_events where child_id='${childC}'`)).toEqual([]);
+  });
+});
+
+describe("branded documents and quotes", () => {
+  const guardianQ = "40000000-0000-0000-0000-0000000000b1";
+  beforeEach(async () => {
+    await db.exec("reset role");
+    await db.exec(`delete from public.quotes; delete from public.organization_profiles; delete from public.payments; delete from public.invoice_lines; delete from public.invoices;
+      insert into public.memberships(organization_id,user_id,role) values ('${orgA}','${staff}','staff') on conflict do nothing;
+      insert into public.guardians(id,organization_id,full_name,phone) values ('${guardianQ}','${orgA}','Quote Parent','0500000999') on conflict do nothing`);
+  });
+  async function draftQuote() {
+    await as("authenticated", owner);
+    const id = (await rows(`insert into public.quotes(organization_id,guardian_id,child_id,title,valid_until) values ('${orgA}','${guardianQ}','${childA}','Term fees','2030-01-01') returning id`))[0].id as string;
+    await db.exec(`insert into public.quote_lines(organization_id,quote_id,description,kind,quantity,unit_price,discount,vat_rate) values
+      ('${orgA}','${id}','Tuition','tuition',1,1000,100,15),('${orgA}','${id}','Meals','meals',2,50,0,15)`);
+    return id;
+  }
+  it("managers keep a validated profile; staff can read it but not change it", async () => {
+    await as("authenticated", owner);
+    await db.exec(`insert into public.organization_profiles(organization_id,legal_name,cr_number,vat_number,iban,brand_color) values ('${orgA}','School A LLC','1010101010','300000000000003','SA0380000000608010167519','#112233')`);
+    await expect(db.exec(`update public.organization_profiles set vat_number='123' where organization_id='${orgA}'`)).rejects.toMatchObject({ code: "23514" });
+    await expect(db.exec(`update public.organization_profiles set logo_data='data:image/svg+xml;base64,PHN2Zz4=' where organization_id='${orgA}'`)).rejects.toMatchObject({ code: "23514" });
+    await db.exec(`update public.organization_profiles set logo_data='data:image/png;base64,iVBORw0KGgo=' where organization_id='${orgA}'`);
+    await as("authenticated", staff);
+    expect(await rows("select legal_name from public.organization_profiles")).toEqual([{ legal_name: "School A LLC" }]);
+    await db.exec(`update public.organization_profiles set legal_name='Hacked' where organization_id='${orgA}'`);
+    await as("authenticated", outsider);
+    expect(await rows("select * from public.organization_profiles")).toEqual([]);
+    await as("authenticated", owner);
+    expect(await rows("select legal_name from public.organization_profiles")).toEqual([{ legal_name: "School A LLC" }]);
+  });
+  it("quotes total like invoices, number on sending, freeze, and convert once into an invoice", async () => {
+    const id = await draftQuote();
+    expect(await rows(`select subtotal,discount_total,vat_total,total,number,status from public.quotes where id='${id}'`)).toEqual([{ subtotal: "1100.00", discount_total: "100.00", vat_total: "150.00", total: "1150.00", number: null, status: "draft" }]);
+    await expect(db.exec(`update public.quotes set total=1 where id='${id}'`)).rejects.toMatchObject({ code: "42501" });
+    await db.exec(`update public.quotes set status='sent' where id='${id}'`);
+    expect((await rows(`select number from public.quotes where id='${id}'`))[0].number).toBe(1);
+    await expect(db.exec(`update public.quote_lines set unit_price=1 where quote_id='${id}'`)).rejects.toMatchObject({ code: "42501" });
+    await expect(db.exec(`update public.quotes set title='Changed' where id='${id}'`)).rejects.toMatchObject({ code: "42501" });
+    await expect(db.exec(`update public.quotes set status='invoiced' where id='${id}'`)).rejects.toMatchObject({ code: "42501" });
+    await expect(db.exec(`delete from public.quotes where id='${id}'`)).resolves.toBeDefined();
+    expect(await rows(`select count(*)::int as n from public.quotes where id='${id}'`)).toEqual([{ n: 1 }]);
+    await db.exec(`update public.quotes set status='accepted' where id='${id}'`);
+    const invoice = (await rows(`select public.quote_to_invoice('${id}', true) as id`))[0].id as string;
+    expect(await rows(`select status,amount_sar,number is not null as numbered,guardian_id from public.invoices where id='${invoice}'`)).toEqual([{ status: "issued", amount_sar: "1150.00", numbered: true, guardian_id: guardianQ }]);
+    expect(await rows(`select status,invoice_id from public.quotes where id='${id}'`)).toEqual([{ status: "invoiced", invoice_id: invoice }]);
+    await expect(db.exec(`select public.quote_to_invoice('${id}', true)`)).rejects.toMatchObject({ code: "23514" });
+    await as("authenticated", staff);
+    expect(await rows("select * from public.quotes")).toEqual([]);
+    await expect(db.exec(`select public.quote_to_invoice('${id}', true)`)).rejects.toMatchObject({ code: "P0002" });
+  });
+  it("share links show only sent documents, survive no tampering, and can be renewed by managers", async () => {
+    const id = await draftQuote();
+    const token = (await rows(`select share_token from public.quotes where id='${id}'`))[0].share_token as string;
+    await as("anon");
+    expect((await rows(`select public.shared_document('${token}') as d`))[0].d).toBeNull();
+    await as("authenticated", owner);
+    await db.exec(`update public.quotes set status='sent' where id='${id}'`);
+    await expect(db.exec(`update public.quotes set share_token=gen_random_uuid() where id='${id}'`)).rejects.toMatchObject({ code: "42501" });
+    await as("anon");
+    const shared = (await rows(`select public.shared_document('${token}') as d`))[0].d as { kind: string; document: { total: number; recipient: string }; lines: unknown[]; organization: { name: string } };
+    expect(shared.kind).toBe("quote");
+    expect(shared.document).toMatchObject({ total: 1150, recipient: "Quote Parent" });
+    expect(shared.lines).toHaveLength(2);
+    expect(typeof shared.organization.name).toBe("string");
+    await expect(db.exec(`select public.renew_share_token('quote','${id}')`)).rejects.toBeDefined();
+    await as("authenticated", staff);
+    await expect(db.exec(`select public.renew_share_token('quote','${id}')`)).rejects.toMatchObject({ code: "P0002" });
+    await as("authenticated", owner);
+    const fresh = (await rows(`select public.renew_share_token('quote','${id}') as t`))[0].t as string;
+    expect(fresh).not.toBe(token);
+    await as("anon");
+    expect((await rows(`select public.shared_document('${token}') as d`))[0].d).toBeNull();
+    expect((await rows(`select public.shared_document('${fresh}') as d`))[0].d).not.toBeNull();
+    await expect(db.exec("select * from public.quotes")).rejects.toBeDefined();
+  });
+  it("invoice links appear once issued and include payments", async () => {
+    await as("authenticated", owner);
+    const inv = (await rows(`insert into public.invoices(organization_id,guardian_id,child_id,amount_sar,status,title) values ('${orgA}','${guardianQ}','${childA}',0,'draft','Fees') returning id,share_token`))[0] as { id: string; share_token: string };
+    await db.exec(`insert into public.invoice_lines(organization_id,invoice_id,description,kind,quantity,unit_price,vat_rate) values ('${orgA}','${inv.id}','Books','books',1,200,15)`);
+    await as("anon");
+    expect((await rows(`select public.shared_document('${inv.share_token}') as d`))[0].d).toBeNull();
+    await as("authenticated", owner);
+    await db.exec(`update public.invoices set status='issued' where id='${inv.id}'`);
+    await db.exec(`insert into public.payments(organization_id,invoice_id,amount,method,paid_on) values ('${orgA}','${inv.id}',100,'mada',(now() at time zone 'Asia/Riyadh')::date)`);
+    await as("anon");
+    const shared = (await rows(`select public.shared_document('${inv.share_token}') as d`))[0].d as { kind: string; document: { total: number; paid_total: number }; payments: unknown[] };
+    expect(shared).toMatchObject({ kind: "invoice", document: { total: 230, paid_total: 100 } });
+    expect(shared.payments).toHaveLength(1);
+    expect((await rows(`select public.shared_document('00000000-0000-0000-0000-000000000000') as d`))[0].d).toBeNull();
   });
 });

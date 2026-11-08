@@ -5,6 +5,9 @@ import { OrgUnavailable } from "../../../../../components/org-unavailable";
 import { DeleteLineButton, DeletePaymentButton, InvoiceActions, InvoiceHeaderForm, InvoiceLineForm, PaymentForm } from "../../../../../components/finance-forms";
 import { balance, feeKindLabels, invoiceLabel, invoiceStatusLabels, invoiceStatusTone, lineNet, paymentMethodLabels, sar, type Invoice, type InvoiceLine, type Payment } from "../../../../../lib/finance";
 import { uuid } from "../../../../../lib/operations";
+import { ShareDocument } from "../../../../../components/document-forms";
+import { shareMessage } from "../../../../../lib/documents";
+import { siteOrigin } from "../../../../../lib/origin";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "فاتورة" };
@@ -15,19 +18,23 @@ export default async function InvoicePage({ params, searchParams }: { params: Pr
   try { id = uuid(rawId); } catch { notFound(); }
   const context = await loadOrgContext(requestedOrg);
   if ("error" in context) return <OrgUnavailable reason={context.error} />;
-  const { client, org, manager } = context;
+  const { client, org, orgName, manager } = context;
   if (!manager) return <section className="card"><h1>فاتورة</h1><p>المالية لمسؤول المنشأة فقط.</p></section>;
-  const { data, error } = await client.from("invoices").select("id,number,title,status,guardian_id,child_id,issue_date,due_date,notes,vat_borne_by_state,subtotal,discount_total,vat_total,vat_relief,amount_sar,paid_total,created_at").eq("organization_id", org).eq("id", id).maybeSingle();
+  const { data, error } = await client.from("invoices").select("id,number,title,status,guardian_id,child_id,issue_date,due_date,notes,vat_borne_by_state,subtotal,discount_total,vat_total,vat_relief,amount_sar,paid_total,created_at,share_token").eq("organization_id", org).eq("id", id).maybeSingle();
   if (error) return <section className="card"><h1>تعذر تحميل الفاتورة</h1><p role="alert">أعد تحميل الصفحة.</p></section>;
   if (!data) notFound();
-  const invoice = data as Invoice;
-  const [lines, payments, items, kids, guardians] = await Promise.all([
+  const invoice = data as Invoice & { share_token: string };
+  const [lines, payments, items, kids, guardians, payer, profile, origin] = await Promise.all([
     client.from("invoice_lines").select("id,description,kind,quantity,unit_price,discount,vat_rate,fee_item_id").eq("organization_id", org).eq("invoice_id", id).order("sort_order").order("id"),
     client.from("payments").select("id,invoice_id,receipt_number,amount,method,paid_on,reference,notes,recorded_at,recorded_by").eq("organization_id", org).eq("invoice_id", id).order("receipt_number"),
     invoice.status === "draft" ? client.from("fee_items").select("id,name,kind,default_amount,vat_rate").eq("organization_id", org).eq("is_active", true).order("name") : Promise.resolve({ data: [] }),
     client.from("children").select("id,full_name").eq("organization_id", org).order("full_name").limit(1000),
     client.from("guardians").select("id,full_name").eq("organization_id", org).order("full_name").limit(1000),
+    invoice.guardian_id ? client.from("guardians").select("phone").eq("organization_id", org).eq("id", invoice.guardian_id).maybeSingle() : Promise.resolve({ data: null }),
+    client.from("organization_profiles").select("legal_name").eq("organization_id", org).maybeSingle(),
+    siteOrigin(),
   ]);
+  const link = `${origin}/d/${invoice.share_token}`;
   const lineRows = (lines.data ?? []) as InvoiceLine[];
   const paymentRows = (payments.data ?? []) as Payment[];
   const childOptions = ((kids.data ?? []) as { id: string; full_name: string }[]).map(row => ({ id: row.id, name: row.full_name }));
@@ -47,6 +54,13 @@ export default async function InvoicePage({ params, searchParams }: { params: Pr
       </div>
       <InvoiceActions organizationId={org} invoice={invoice} />
     </header>
+
+    {invoice.status === "issued" || invoice.status === "paid" ? <section className="card" aria-labelledby="share-title">
+      <h2 id="share-title">المشاركة مع ولي الأمر</h2>
+      <ShareDocument organizationId={org} kind="invoice" id={id} link={link} phone={(payer.data as { phone: string | null } | null)?.phone ?? null}
+        message={shareMessage({ kind: "invoice", organization: (profile.data as { legal_name: string | null } | null)?.legal_name ?? orgName, number: invoice.number, recipient: invoice.guardian_id ? guardianOptions.find(row => row.id === invoice.guardian_id)?.name ?? null : null, total: sar(invoice.amount_sar), link })} />
+      <p className="hint" style={{ marginTop: 10 }}>الرابط يعرض الفاتورة بهوية منشأتك مع المدفوعات والمتبقي ورقم الآيبان، بدون تسجيل دخول.</p>
+    </section> : null}
 
     {invoice.status === "draft" ? <section className="card"><details><summary>بيانات الفاتورة</summary><div style={{ marginTop: 12 }}><InvoiceHeaderForm organizationId={org} invoice={invoice} childrenOptions={childOptions} guardians={guardianOptions} /></div></details></section> : null}
 
