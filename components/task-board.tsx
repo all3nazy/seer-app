@@ -138,7 +138,7 @@ export function TaskBoard({ organizationId, manager, initialTasks, members = [],
             onDragEnd={() => { setDragging(null); setOver(null); }}>
             <div className="task-top">
               <span className={`tile-icon ${task.status === "done" ? "tone-leaf" : task.priority === "high" ? "tone-coral" : "tone-plum"}`} style={{ color: "#fff" }}><SunPhase step={index as 0 | 1 | 2 | 3} size={22} /></span>
-              <div className="body"><h3>{task.title}</h3>{task.notes ? <p>{task.notes}</p> : null}</div>
+              <div className="body"><h3><a href={`/dashboard/tasks/${task.id}?org=${encodeURIComponent(organizationId)}`} style={{ color: "inherit", textDecoration: "none" }}>{task.title}</a></h3>{task.notes ? <p>{task.notes}</p> : null}</div>
             </div>
             <div className="task-meta">
               {task.status === "done" ? <span className="status ok">منجزة</span> : null}
