@@ -4,7 +4,7 @@ export const auditEntityLabels: Record<string, string> = {
   organizations: "المنشأة", branches: "الفروع", children: "الطلاب", guardians: "أولياء الأمور", enrollments: "التسجيل",
   invoices: "الفواتير", tasks: "المهام", memberships: "الفريق", member_invitations: "دعوات الفريق",
   child_guardians: "روابط أولياء الأمور", child_health: "الملف الصحي", attendance: "الحضور",
-  academic_years: "السنوات الدراسية", academic_terms: "الفصول الدراسية", holidays: "الإجازات", grade_levels: "الصفوف", sections: "الشُعب", section_staff: "كادر الشُعب",
+  academic_years: "السنوات الدراسية", academic_terms: "الفصول الدراسية", holidays: "الإجازات", grade_levels: "الصفوف", sections: "الشُعب", section_staff: "كادر الشُعب", applications: "طلبات الالتحاق", admission_settings: "إعدادات القبول",
 };
 export const auditActionLabels: Record<string, string> = { INSERT: "إضافة", UPDATE: "تعديل", DELETE: "حذف" };
 export type AuditEvent = { id: number; actor_id: string | null; entity: string; record_id: string; action: string; created_at: string };
