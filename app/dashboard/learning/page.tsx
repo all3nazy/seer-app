@@ -72,7 +72,7 @@ export default async function LearningPage({ searchParams }: { searchParams: Pro
     </>;
   }
 
-  const { data: studentRows } = await client.from("children").select("id,full_name").eq("organization_id", org).eq("section_id", section!.id).order("full_name");
+  const { data: studentRows } = await client.from("children").select("id,full_name").eq("organization_id", org).eq("status", "active").eq("section_id", section!.id).order("full_name");
   const students = ((studentRows ?? []) as { id: string; full_name: string }[]).map(row => ({ id: row.id, name: row.full_name }));
 
   if (tab === "behavior") {

@@ -28,7 +28,7 @@ export default async function InvoicePage({ params, searchParams }: { params: Pr
     client.from("invoice_lines").select("id,description,kind,quantity,unit_price,discount,vat_rate,fee_item_id").eq("organization_id", org).eq("invoice_id", id).order("sort_order").order("id"),
     client.from("payments").select("id,invoice_id,receipt_number,amount,method,paid_on,reference,notes,recorded_at,recorded_by").eq("organization_id", org).eq("invoice_id", id).order("receipt_number"),
     invoice.status === "draft" ? client.from("fee_items").select("id,name,kind,default_amount,vat_rate").eq("organization_id", org).eq("is_active", true).order("name") : Promise.resolve({ data: [] }),
-    client.from("children").select("id,full_name").eq("organization_id", org).order("full_name").limit(1000),
+    client.from("children").select("id,full_name").eq("organization_id", org).eq("status", "active").order("full_name").limit(1000),
     client.from("guardians").select("id,full_name").eq("organization_id", org).order("full_name").limit(1000),
     invoice.guardian_id ? client.from("guardians").select("phone").eq("organization_id", org).eq("id", invoice.guardian_id).maybeSingle() : Promise.resolve({ data: null }),
     client.from("organization_profiles").select("legal_name").eq("organization_id", org).maybeSingle(),

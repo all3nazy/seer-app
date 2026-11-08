@@ -81,6 +81,7 @@ export type Briefing = {
   messages: { queued: number; failed: number } | null;
   dailyReports: { written: number } | null;
   trips: { running: number; done: number } | null;
+  unassigned?: number | null;
 };
 export type BriefItem = { text: string; tone: "alert" | "warn" | "ok"; href: string; label: string };
 
@@ -107,6 +108,7 @@ export function briefingItems(b: Briefing): BriefItem[] {
   if (b.invoices?.overdue) items.push({ tone: "alert", href: "/dashboard/finance", label: "المالية", text: `${n(b.invoices.overdue)} فاتورة تجاوزت موعدها، المتبقي ${b.invoices.overdueAmount.toLocaleString("ar-SA", { maximumFractionDigits: 2 })} ر.س.` });
   if (b.messages?.failed) items.push({ tone: "alert", href: "/dashboard/messages", label: "الرسائل", text: `${n(b.messages.failed)} رسالة تعذّر إرسالها، تحتاج مراجعة.` });
   if (b.messages?.queued) items.push({ tone: "warn", href: "/dashboard/messages", label: "الرسائل", text: `${n(b.messages.queued)} رسالة بانتظار الإرسال.` });
+  if (b.unassigned) items.push({ tone: "warn", href: "/dashboard/children?section=none", label: "الطلاب", text: `${n(b.unassigned)} طالب بدون فصل؛ ما يظهرون في الحضور اليومي والدرجات.` });
   if (b.trips?.running) items.push({ tone: "warn", href: "/dashboard/transport", label: "النقل", text: `${n(b.trips.running)} رحلة باص جارية الآن.` });
   if (b.dailyReports && a && b.dailyReports.written < a.present + a.late)
     items.push({ tone: "warn", href: "/dashboard/daily", label: "التقرير اليومي", text: `التقارير اليومية: ${n(b.dailyReports.written)} من ${n(a.present + a.late)} طفل حاضر.` });
@@ -114,6 +116,10 @@ export function briefingItems(b: Briefing): BriefItem[] {
   return items.sort((x, y) => rank[x.tone] - rank[y.tone]);
 }
 
+/** Adds the organization to a briefing link, whether or not it already has a query. */
+export function withOrg(href: string, org: string): string {
+  return `${href}${href.includes("?") ? "&" : "?"}org=${encodeURIComponent(org)}`;
+}
 export function briefingText(items: BriefItem[], hour: number): string {
   const alerts = items.filter(item => item.tone === "alert").length;
   const open = items.filter(item => item.tone !== "ok").length;

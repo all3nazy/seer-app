@@ -21,7 +21,7 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
     client.from("fee_items").select("id,name,kind,default_amount,vat_rate").eq("organization_id", org).eq("is_active", true).order("kind").order("name"),
     client.from("discounts").select("id,name,kind,value").eq("organization_id", org).eq("is_active", true).order("name"),
     client.from("guardians").select("id,full_name").eq("organization_id", org).order("full_name").limit(1000),
-    client.from("children").select("id,full_name").eq("organization_id", org).order("full_name").limit(1000),
+    client.from("children").select("id,full_name").eq("organization_id", org).eq("status", "active").order("full_name").limit(1000),
   ]);
   const guardianName = new Map(((guardians.data ?? []) as { id: string; full_name: string }[]).map(row => [row.id, row.full_name]));
   const rows = (quotes.data ?? []) as { id: string; number: number | null; status: QuoteStatus; title: string; total: number; guardian_id: string | null; recipient_name: string | null; valid_until: string | null }[];

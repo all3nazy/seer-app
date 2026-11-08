@@ -1,7 +1,7 @@
 "use client";
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { saveStudentHealth, saveStudentProfile, type ActionResult } from "../app/dashboard/children/actions";
+import { saveStudentHealth, saveStudentProfile, setStudentStatus, type ActionResult } from "../app/dashboard/children/actions";
 import { bloodTypes, genderLabels, genders, riyadhToday, type ChildHealth, type ChildProfile } from "../lib/students";
 import type { RecordOption } from "../lib/operations";
 import { notify } from "./feedback";
@@ -65,4 +65,26 @@ export function StudentHealthForm({ organizationId, childId, health }: { organiz
     </fieldset>
     <Result state={state} />
   </form>;
+}
+
+const studentStatusLabels: Record<string, string> = { active: "على رأس الدراسة", withdrawn: "منسحب", graduated: "متخرج" };
+/** Change a student's status with a confirmation; their history is kept. */
+export function StudentStatusControl({ organizationId, childId, status }: { organizationId: string; childId: string; status: string }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const change = (next: string, question: string) => {
+    if (!window.confirm(question)) return;
+    start(async () => {
+      const result = await setStudentStatus(organizationId, childId, next);
+      notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info");
+      if (!result.error) router.refresh();
+    });
+  };
+  return <div className="chip-row" style={{ alignItems: "center", gap: 8 }}>
+    <span className={`chip-soft ${status === "active" ? "ok" : status === "withdrawn" ? "rose" : "sky"}`}>{studentStatusLabels[status] ?? status}</span>
+    {status === "active" ? <>
+      <button type="button" className="btn btn-sm" disabled={pending} onClick={() => change("graduated", "تسجيل تخرّج الطالب؟ يبقى سجله، ويخرج من القوائم اليومية.")}>تخرّج</button>
+      <button type="button" className="btn btn-sm btn-danger" disabled={pending} onClick={() => change("withdrawn", "تسجيل انسحاب الطالب؟ يبقى سجله وفواتيره، ويخرج من الحضور والتسليم والباص وخطط الرسوم.")}>انسحاب</button>
+    </> : <button type="button" className="btn btn-sm" disabled={pending} onClick={() => change("active", "إرجاع الطالب لقائمة الدراسة؟")}>إرجاع للدراسة</button>}
+  </div>;
 }

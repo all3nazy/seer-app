@@ -11,22 +11,17 @@ import { botPersonas, type Stage } from "../lib/stage";
  */
 export function BotDock({ stage, organizations, supportPhone }: { stage: Stage; organizations: { id: string; name: string }[]; supportPhone: string }) {
   const [open, setOpen] = useState(false);
-  const [peek, setPeek] = useState(false);
   const path = usePathname();
   const persona = botPersonas[stage];
   const drawer = useRef<HTMLDivElement>(null);
   const launcher = useRef<HTMLButtonElement>(null);
-  // A short greeting bubble once per browser session, so the bot feels present without nagging.
-  useEffect(() => {
-    try {
-      if (sessionStorage.getItem("seer-bot-greeted")) return;
-      sessionStorage.setItem("seer-bot-greeted", "1");
-    } catch { return; }
-    const show = window.setTimeout(() => setPeek(true), 1200);
-    const hide = window.setTimeout(() => setPeek(false), 7000);
-    return () => { window.clearTimeout(show); window.clearTimeout(hide); };
-  }, []);
   useEffect(() => { setOpen(false); }, [path]);
+  // The phone top bar opens the assistant with an event, so no floating button covers the page.
+  useEffect(() => {
+    const openBot = () => setOpen(true);
+    window.addEventListener("seer:open-bot", openBot);
+    return () => window.removeEventListener("seer:open-bot", openBot);
+  }, []);
   useEffect(() => {
     if (!open) return;
     drawer.current?.querySelector<HTMLElement>("input,textarea,button")?.focus();
@@ -36,8 +31,7 @@ export function BotDock({ stage, organizations, supportPhone }: { stage: Stage; 
   }, [open]);
   if (path === "/dashboard/assistant") return null;
   return <>
-    {peek && !open ? <div className="bot-peek" role="status" onClick={() => { setPeek(false); setOpen(true); }}>{persona.greeting}</div> : null}
-    <button ref={launcher} type="button" className={`bot-launcher${open ? " is-open" : ""}`} onClick={() => { setPeek(false); setOpen(value => !value); }}
+    <button ref={launcher} type="button" className={`bot-launcher${open ? " is-open" : ""}`} onClick={() => setOpen(value => !value)}
       aria-expanded={open} aria-controls="bot-drawer" aria-label={open ? `إغلاق ${persona.name}` : `افتح ${persona.name}، ${persona.title}`}>
       <BotAvatar stage={stage} size={44} mood={open ? "happy" : "idle"} />
     </button>

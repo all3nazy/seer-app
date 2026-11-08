@@ -32,7 +32,7 @@ export default function Login() {
     <section className="card login-card" id="main-content" tabIndex={-1} aria-labelledby="login-title">
       <h1 id="login-title">تسجيل الدخول</h1>
       <p id="login-description">أهلًا فيك. ادخل بحساب منشأتك.</p>
-      <form onSubmit={signIn} className="login-form" aria-describedby="login-description" aria-busy={busy}>
+      <form method="post" onSubmit={signIn} className="login-form" aria-describedby="login-description" aria-busy={busy}>
         <label htmlFor="email">البريد الإلكتروني</label>
         <input id="email" name="email" type="email" dir="ltr" inputMode="email" required autoComplete="username" autoCapitalize="none" spellCheck={false} maxLength={254} value={email} onChange={event => setEmail(event.target.value)} readOnly={busy}/>
         <label htmlFor="password">كلمة المرور</label>

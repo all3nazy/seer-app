@@ -52,7 +52,7 @@ export async function botToday(organizationId: string, status: AttendanceStatus 
     const today = riyadhToday();
     const [summary, enrolled] = await Promise.all([
       auth.client.rpc("section_attendance_summary", { org: auth.org, from_day: today, to_day: today }),
-      auth.client.from("children").select("id", { count: "exact", head: true }).eq("organization_id", auth.org),
+      auth.client.from("children").select("id", { count: "exact", head: true }).eq("organization_id", auth.org).eq("status", "active"),
     ]);
     if (summary.error || enrolled.error) return { error: "تعذر قراءة الحضور الآن." };
     const counts = { present: 0, late: 0, absent: 0, excused: 0, pending: 0 };
@@ -70,7 +70,7 @@ export async function botToday(organizationId: string, status: AttendanceStatus 
     } else if (status === "pending" && counts.pending) {
       const { data: recorded } = await auth.client.from("attendance").select("child_id").eq("organization_id", auth.org).eq("attendance_date", today).limit(1000);
       const done = new Set((recorded ?? []).map(row => row.child_id as string));
-      const { data } = await auth.client.from("children").select("id,full_name,sections(name,grade_levels(name))").eq("organization_id", auth.org).order("full_name").limit(1000);
+      const { data } = await auth.client.from("children").select("id,full_name,sections(name,grade_levels(name))").eq("organization_id", auth.org).eq("status", "active").order("full_name").limit(1000);
       names = (data ?? []).filter(row => !done.has(row.id as string)).slice(0, 25)
         .map(row => ({ id: row.id as string, full_name: row.full_name as string, section: sectionName(row.sections as unknown as SectionJoin), at: null }));
     }
@@ -124,9 +124,9 @@ export async function botBriefing(organizationId: string): Promise<BotResult<Bri
     const today = riyadhToday();
     const head = (table: string) => client.from(table).select("id", { count: "exact", head: true }).eq("organization_id", org);
     const count = async (query: PromiseLike<{ count: number | null; error: unknown }>) => { const result = await query; return result.error ? null : result.count ?? 0; };
-    const [summary, enrolled, overdue, dueToday, mine, applications, leave, inquiries, invoices, queued, failed, reports, trips, kind] = await Promise.all([
+    const [summary, enrolled, overdue, dueToday, mine, applications, leave, inquiries, invoices, queued, failed, reports, trips, kind, unassigned] = await Promise.all([
       client.rpc("section_attendance_summary", { org, from_day: today, to_day: today }),
-      count(head("children")),
+      count(head("children").eq("status", "active")),
       count(head("tasks").neq("status", "done").lt("due_date", today)),
       count(head("tasks").neq("status", "done").eq("due_date", today)),
       count(head("tasks").neq("status", "done").eq("assignee_id", auth.user)),
@@ -139,6 +139,7 @@ export async function botBriefing(organizationId: string): Promise<BotResult<Bri
       count(head("daily_reports").eq("report_date", today)),
       client.from("transport_trips").select("finished_at").eq("organization_id", org).eq("trip_date", today).limit(200),
       client.from("organizations").select("type").eq("id", org).maybeSingle(),
+      manager ? count(head("children").eq("status", "active").is("section_id", null)) : null,
     ]);
     let attendance: Briefing["attendance"] = null;
     if (!summary.error && enrolled !== null) {
@@ -156,6 +157,7 @@ export async function botBriefing(organizationId: string): Promise<BotResult<Bri
       invoices: owed ? { overdue: owed.length, overdueAmount: Math.round(owed.reduce((sum, row) => sum + Number(row.amount_sar) - Number(row.paid_total), 0) * 100) / 100 } : null,
       messages: queued === null && failed === null ? null : { queued: queued ?? 0, failed: failed ?? 0 },
       dailyReports: young && reports !== null ? { written: reports } : null,
+      unassigned,
       trips: tripRows && tripRows.length ? { running: tripRows.filter(row => !row.finished_at).length, done: tripRows.filter(row => row.finished_at).length } : null,
     } };
   } catch (error) { return fail(error, "تعذر تجهيز الملخص الآن."); }

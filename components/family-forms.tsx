@@ -2,7 +2,7 @@
 import { useActionState, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveDailyReport } from "../app/dashboard/daily/actions";
-import { deleteAnnouncement, guardianPortalLink, saveAnnouncement } from "../app/dashboard/announcements/actions";
+import { deleteAnnouncement, guardianPortalLink, saveAnnouncement, sendAnnouncementToFamilies } from "../app/dashboard/announcements/actions";
 import { audienceLabels, audiences, meals, moodEmoji, moodLabels, moods, portalMessage, portionShort, portions, reportSummary, type DailyReport } from "../lib/family";
 import { whatsappLink } from "../lib/share";
 import { notify } from "./feedback";
@@ -64,6 +64,12 @@ export function DeleteAnnouncement({ organizationId, id }: { organizationId: str
   const router = useRouter();
   const [pending, start] = useTransition();
   return <button type="button" className="btn btn-sm btn-danger" disabled={pending} onClick={() => { if (window.confirm("حذف الإعلان؟")) start(async () => { const result = await deleteAnnouncement(organizationId, id); notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info"); router.refresh(); }); }}>حذف</button>;
+}
+
+/** Sends a family announcement to guardians as messages (WhatsApp/SMS), once per guardian. */
+export function SendAnnouncement({ id }: { id: string }) {
+  const [pending, start] = useTransition();
+  return <button type="button" className="btn btn-sm" disabled={pending} onClick={() => { if (window.confirm("إرسال الإعلان لأولياء الأمور برسالة مع رابط البوابة؟")) start(async () => { const result = await sendAnnouncementToFamilies(id); notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info", result.error ? undefined : "done"); }); }}>{pending ? "جارٍ الإرسال…" : "إرسال للأهالي"}</button>;
 }
 
 /** Managers send a guardian their private portal link over WhatsApp. */

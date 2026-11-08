@@ -45,7 +45,7 @@ export default async function TransportPage({ searchParams }: { searchParams: Pr
   </>;
 
   if (tab === "routes") {
-    const { data: kids } = manager ? await client.from("children").select("id,full_name").eq("organization_id", org).order("full_name").limit(1000) : { data: [] };
+    const { data: kids } = manager ? await client.from("children").select("id,full_name").eq("organization_id", org).eq("status", "active").order("full_name").limit(1000) : { data: [] };
     return <>{header}
       {manager ? <section className="card" style={{ marginBottom: 16 }}><details open={!routes.length}><summary><strong>مسار جديد</strong></summary><div style={{ marginTop: 12 }}><RouteForm organizationId={org} vehicles={vehicles.map(item => ({ id: item.id, name: item.name }))} staff={staff} /></div></details></section> : null}
       {routes.map(item => { const riders = stops.filter(stop => stop.route_id === item.id); return <section key={item.id} className="card" style={{ marginBottom: 14 }}>

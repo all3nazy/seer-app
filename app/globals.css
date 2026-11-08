@@ -756,3 +756,53 @@ button.chip-soft[aria-pressed="true"]{box-shadow:inset 0 0 0 1.5px currentColor}
 .bot-list li.brief-warn{border-inline-start:3px solid var(--sun)}
 .bot-list li.brief-ok{border-inline-start:3px solid var(--ok)}
 .attention{margin-bottom:16px}
+
+/* ===== Calm interface: nothing moves on its own; motion only answers what the person does ===== */
+.bot-launcher,.bot-avatar .bot-eye,.bot-thinking .bot-eye{animation:none!important}
+a.stat:hover,a.list-row:hover,a.tile:hover,.org-tile:hover,.sidebar .nav-link:hover,.bot-launcher:hover,.live-count:hover,.seat-face:hover,.bot-choices button:hover,.checkin:hover,.pay-method:hover{transform:none}
+.exchange,.feed-item,.bot-confirm{animation:none}
+.live-dot.live::after{animation:none;transform:scale(1.9);opacity:.25}
+.task.landed{animation:none}
+.sidebar .nav-link{padding:7px 12px;font-size:14.5px}
+.sidebar-nav{gap:12px}
+.attention .bot-list li{align-items:center;padding:10px 14px}
+.attention .bot-list li a{font-weight:600}
+
+/* ===== iPad portrait (701–1100px): a slim icon rail instead of the phone bar ===== */
+@media (min-width:701px) and (max-width:1100px){
+  .app{grid-template-columns:84px minmax(0,1fr)}
+  .sidebar{display:flex;position:sticky;top:12px;height:calc(100dvh - 24px);margin:12px;margin-inline-end:0;padding:12px 6px;flex-direction:column;gap:8px;overflow:hidden;border-radius:24px;border:1px solid var(--border);background:color-mix(in srgb,var(--surface) 90%,transparent);backdrop-filter:blur(16px);box-shadow:var(--shadow)}
+  .sidebar .nav-text,.sidebar .nav-group-label,.sidebar .logo,.rail-toggle{display:none}
+  .sidebar-head{justify-content:center;padding:4px 0 6px}
+  .sidebar .nav-link{justify-content:center;padding:10px}
+  .nav-group{padding-top:8px;border-top:1px dashed var(--border)}
+  .nav-group:first-child{border-top:0;padding-top:0}
+  .sidebar-tools{flex-direction:column}
+  .tabbar,.mobile-bar{display:none!important}
+  .main{padding:20px 20px 40px}
+  .bot-launcher{bottom:20px;left:20px}
+}
+.attention .bot-list li{flex-wrap:nowrap}
+.attention .bot-list li a{flex:1;min-width:0}
+.attention .bot-list li span{flex-shrink:0}
+/* Closed drawer is fully hidden (not just moved off-screen); phones open the bot from the top bar. */
+.bot-drawer{transition:transform .25s var(--ease),visibility 0s linear .25s}
+.bot-drawer:not(.is-open){visibility:hidden}
+.bot-drawer.is-open{visibility:visible;transition:transform .25s var(--ease),visibility 0s}
+.bar-bot{display:none}
+@media (max-width:700px){
+  .bot-launcher{display:none}
+  .bar-bot{display:inline-grid;place-items:center;width:42px;height:42px;padding:0;border-radius:14px;border:1px solid var(--border);background:var(--surface);cursor:pointer}
+}
+.portal-grades{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:6px}
+.portal-grades li{display:flex;justify-content:space-between;gap:12px;align-items:baseline;padding:8px 10px;border-radius:12px;background:var(--surface-2);font-size:14px}
+.portal-grades small{color:var(--text-3);white-space:nowrap}
+.my-week{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:10px}
+.my-day{padding:12px;border-radius:16px;background:var(--surface-2);border:1px solid transparent}
+.my-day.is-today{border-color:var(--primary);background:var(--tint-lilac)}
+.my-day ul{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:6px;font-size:14px}
+@media (min-width:1101px){
+  .sidebar .nav-link{padding:6px 12px}
+  .sidebar-nav{gap:10px;-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(to bottom,#000 calc(100% - 28px),transparent);padding-bottom:24px}
+}
+.portal-grades b{white-space:nowrap}

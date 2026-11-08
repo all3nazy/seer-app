@@ -59,7 +59,7 @@ export default function ActivateAccount() {
     <section className="card login-card" id="main-content" tabIndex={-1} aria-labelledby="activation-title">
       <h1 id="activation-title">تفعيل حساب جديد</h1>
       <p>تحقق من بريدك أولًا، ثم عيّن كلمة مرور خاصة بك. تفعيل الحساب لا يمنحك الوصول إلى منشأة؛ ربط الصلاحيات يتم بعد موافقة مسؤول المنصة.</p>
-      <form onSubmit={requestEmail} className="login-form" aria-busy={busy === "request"}>
+      <form method="post" onSubmit={requestEmail} className="login-form" aria-busy={busy === "request"}>
         <label htmlFor="activation-email">البريد الإلكتروني</label>
         <input id="activation-email" name="email" type="email" dir="ltr" inputMode="email" required autoComplete="email" autoCapitalize="none" spellCheck={false} maxLength={254} value={email} onChange={event => setEmail(event.target.value)} readOnly={busy !== null} />
         <button className="primary-button" disabled={busy !== null || cooldown > 0}>{busy === "request" ? "جارٍ طلب الرسالة…" : cooldown > 0 ? `يمكن إعادة الطلب بعد ${cooldown.toLocaleString("ar-SA")} ثانية` : "إرسال رسالة التفعيل"}</button>
@@ -67,7 +67,7 @@ export default function ActivateAccount() {
       {message ? <p role="status">{message}</p> : null}
       <h2>إكمال التفعيل أو استعادة الرابط</h2>
       <p id="activation-link-help">يمكنك نسخ رابط التفعيل الأصلي من الرسالة دون فتحه ولصقه هنا. إذا فتحت الرسالة وظهر خطأ اتصال، انسخ العنوان الكامل من شريط عنوان صفحة الخطأ وألصقه هنا بدلًا منه. لا ترسل أيًّا من الرابطين في الدردشة أو لأي شخص؛ يمنح صاحبه الوصول إلى حسابك.</p>
-      <form onSubmit={verifyLink} className="login-form" aria-busy={busy === "verify"}>
+      <form method="post" onSubmit={verifyLink} className="login-form" aria-busy={busy === "verify"}>
         <label htmlFor="activation-link">رابط التفعيل أو عنوان صفحة خطأ الاتصال</label>
         <input id="activation-link" name="confirmation-link" type="password" dir="ltr" required maxLength={8192} autoComplete="off" autoCapitalize="none" spellCheck={false} aria-describedby="activation-link-help" value={confirmationLink} onChange={event => setConfirmationLink(event.target.value)} readOnly={busy !== null} />
         <button className="primary-button" disabled={busy !== null || !confirmationLink.trim()}>{busy === "verify" ? "جارٍ التحقق…" : "تأكيد الرابط وإعداد كلمة المرور"}</button>

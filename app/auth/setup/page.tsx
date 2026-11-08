@@ -40,7 +40,7 @@ export default function AccountSetup() {
   return <main className="shell" id="main-content"><Logo /><section className="card" style={{maxWidth:480,margin:"40px auto"}}><h1>إعداد حسابك</h1><p>عيّن كلمة مرور خاصة بك. ربط الحساب بالمنشأة يتم بواسطة مسؤول المنصة.</p>
     {message&&<p ref={notice} tabIndex={-1} role="alert">{message}</p>}
     {!ready&&!message&&<p role="status">جارٍ التحقق من الدعوة…</p>}
-    {ready&&<form onSubmit={save} aria-busy={busy} className="operation-form"><label>كلمة المرور الجديدة<input dir="ltr" type="password" autoComplete="new-password" minLength={12} required value={password} onChange={e=>setPassword(e.target.value)} disabled={busy}/></label><label>تأكيد كلمة المرور<input dir="ltr" type="password" autoComplete="new-password" minLength={12} required value={confirmation} onChange={e=>setConfirmation(e.target.value)} disabled={busy}/></label><button disabled={busy}>{busy?"جارٍ الحفظ…":"حفظ كلمة المرور"}</button></form>}
+    {ready&&<form method="post" onSubmit={save} aria-busy={busy} className="operation-form"><label>كلمة المرور الجديدة<input dir="ltr" type="password" autoComplete="new-password" minLength={12} required value={password} onChange={e=>setPassword(e.target.value)} disabled={busy}/></label><label>تأكيد كلمة المرور<input dir="ltr" type="password" autoComplete="new-password" minLength={12} required value={confirmation} onChange={e=>setConfirmation(e.target.value)} disabled={busy}/></label><button disabled={busy}>{busy?"جارٍ الحفظ…":"حفظ كلمة المرور"}</button></form>}
     <p><a href="/login">العودة لتسجيل الدخول</a></p>
   </section></main>;
 }

@@ -24,7 +24,7 @@ export default async function PickupPage({ searchParams }: { searchParams: Promi
   const gradeRows = (grades.data ?? []) as { id: string; name: string }[];
   const sectionOptions = ((sections.data ?? []) as { id: string; name: string; grade_level_id: string }[]).map(item => ({ id: item.id, name: sectionLabel(item, gradeRows) }));
   const section = sectionOptions.some(item => item.id === params.section) ? params.section : undefined;
-  let kidsQuery = client.from("children").select("id,full_name").eq("organization_id", org);
+  let kidsQuery = client.from("children").select("id,full_name").eq("organization_id", org).eq("status", "active");
   if (section) kidsQuery = kidsQuery.eq("section_id", section);
   const { data: kids, error } = await kidsQuery.order("full_name").limit(500);
   const ids = ((kids ?? []) as { id: string }[]).map(kid => kid.id);

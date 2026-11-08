@@ -30,6 +30,10 @@ const paths = {
   school: "M3 21h18M5 21V10l7-5 7 5v11M9 21v-5h6v5M12 9v2",
   pickup: "M8 7a3 3 0 1 0 0-.01M5 21v-7l3-3 3 3M16 9a2.5 2.5 0 1 0 0-.01M14 21v-5l2-2 2 2v5M11 14h3",
   shield: "M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z",
+  bus: "M5 17V6a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v11M5 12h14M5 17h14M7 20v-3M17 20v-3M8 14.5h.01M16 14.5h.01",
+  send: "M21 3L10 14M21 3l-7 18-4-7-7-4z",
+  question: "M4 5h16v11h-7l-5 4v-4H4zM10 9a2 2 0 1 1 2.8 1.8c-.5.2-.8.7-.8 1.2M12 13.5v.01",
+  idcard: "M3 6h18v12H3zM8 10a2 2 0 1 0 0 .01M5.5 15a3 3 0 0 1 5 0M14 10h4M14 13h3",
 } as const;
 export type IconName = keyof typeof paths;
 export function Icon({ name, label }: { name: IconName; label?: string }) {

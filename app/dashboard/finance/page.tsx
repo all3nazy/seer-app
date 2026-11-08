@@ -24,7 +24,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
   const today = riyadhToday();
   const monthStart = `${today.slice(0, 8)}01`;
   const [childrenResult, guardiansResult] = await Promise.all([
-    client.from("children").select("id,full_name").eq("organization_id", org).order("full_name").limit(1000),
+    client.from("children").select("id,full_name").eq("organization_id", org).eq("status", "active").order("full_name").limit(1000),
     client.from("guardians").select("id,full_name").eq("organization_id", org).order("full_name").limit(1000),
   ]);
   const childName = new Map(((childrenResult.data ?? []) as { id: string; full_name: string }[]).map(row => [row.id, row.full_name]));
