@@ -739,3 +739,15 @@ button.chip-soft[aria-pressed="true"]{box-shadow:inset 0 0 0 1.5px currentColor}
 .r-on_bus{border-color:color-mix(in srgb,var(--sky) 50%,var(--border));background:var(--tint-sky)}.r-on_bus .rider-go{background:var(--sky)}
 .r-dropped{background:var(--tint-mint);opacity:.85}.r-absent{background:var(--tint-rose);opacity:.8}
 .portal-bus{display:flex;flex-direction:column;gap:4px;border-inline-start:4px solid var(--sky)}
+
+/* Online payments */
+.pay-now{max-width:820px;margin:0 auto 18px;padding:18px;border-radius:22px;background:var(--surface);border:1px solid var(--border);box-shadow:var(--shadow);text-align:center}
+.pay-now h2{margin:0 0 6px}
+.pay-methods{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:10px}
+.pay-method{min-height:52px;min-width:140px;padding:10px 18px;border-radius:16px;border:1.5px solid var(--border-strong);background:var(--surface);color:var(--text);font:inherit;font-weight:700;cursor:pointer;transition:transform .2s var(--spring),border-color .2s}
+.pay-method:hover{transform:translateY(-2px);border-color:var(--primary)}
+.pay-method.m-mada{background:#1F2B6C;color:#fff;border-color:transparent}.pay-method.m-apple_pay{background:#000;color:#fff;border-color:transparent}
+.pay-method.m-tabby{background:#3BFFC1;color:#000;border-color:transparent}.pay-method.m-tamara{background:#F7C5A8;color:#000;border-color:transparent}
+.pay-summary{display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center}.pay-summary strong{font-size:32px;color:var(--brand)}.pay-summary span{color:var(--text-2);font-size:13px}
+.pay-result{display:flex;flex-direction:column;gap:4px;text-align:center}.pay-result.ok{background:var(--tint-mint)}.pay-result.bad{background:var(--tint-rose)}
+.steps{margin:0;padding-inline-start:20px;display:grid;gap:8px}.steps code{font-size:12.5px}
