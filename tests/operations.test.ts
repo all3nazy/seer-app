@@ -32,7 +32,7 @@ describe("operation validation", () => {
   });
   it("accepts zero and maximum precision amounts with an optional guardian", () => {
     expect(operationValues("invoices", data({ amount_sar: "0", status: "draft" }))).toEqual({ amount_sar: 0, status: "draft", guardian_id: null });
-    expect(operationValues("invoices", data({ amount_sar: "9999999999.99", status: "issued", guardian_id: child })).amount_sar).toBe(9999999999.99);
+    expect(operationValues("invoices", data({ amount_sar: "9999999999.99", status: "draft", guardian_id: child })).amount_sar).toBe(9999999999.99);
   });
   it("requires a valid child for enrollment and restricts status choices", () => {
     expect(() => operationValues("enrollments", data({ status: "approved" }))).toThrow(ValidationError);

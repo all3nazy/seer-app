@@ -752,3 +752,7 @@ button.chip-soft[aria-pressed="true"]{box-shadow:inset 0 0 0 1.5px currentColor}
 .pay-result{display:flex;flex-direction:column;gap:4px;text-align:center}.pay-result.ok{background:var(--tint-mint)}.pay-result.bad{background:var(--tint-rose)}
 .steps{margin:0;padding-inline-start:20px;display:grid;gap:8px}.steps code{font-size:12.5px}
 .confirm-form{display:grid;gap:12px}.confirm-form input{font-size:20px;text-align:center;letter-spacing:2px}
+.bot-list li.brief-alert{border-inline-start:3px solid var(--danger)}
+.bot-list li.brief-warn{border-inline-start:3px solid var(--sun)}
+.bot-list li.brief-ok{border-inline-start:3px solid var(--ok)}
+.attention{margin-bottom:16px}

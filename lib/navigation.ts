@@ -7,7 +7,7 @@ import type { IconName } from "../components/icons";
  */
 export type NavGroup = "today" | "students" | "admin";
 export const navGroupLabels: Record<NavGroup, string> = { today: "اليوم", students: "الطلاب والدراسة", admin: "الإدارة" };
-export type NavLink = { href: string; label: string; short: string; icon: IconName; phone: boolean; group: NavGroup | null; tab?: boolean; exact?: boolean };
+export type NavLink = { href: string; label: string; short: string; icon: IconName; phone: boolean; group: NavGroup | null; tab?: boolean; exact?: boolean; managers?: boolean };
 export const navLinks: NavLink[] = [
   { href: "/dashboard", label: "لوحة التشغيل", short: "الرئيسية", icon: "home", group: "today", phone: true, tab: true, exact: true },
   { href: "/dashboard/my", label: "مهامي", short: "مهامي", icon: "check", group: "today", phone: true, tab: true },
@@ -19,17 +19,17 @@ export const navLinks: NavLink[] = [
   { href: "/dashboard/transport", label: "النقل", short: "النقل", icon: "pickup", group: "today", phone: true },
   { href: "/dashboard/children", label: "الطلاب", short: "الطلاب", icon: "child", group: "students", phone: true },
   { href: "/dashboard/classes", label: "متابعة الفصول", short: "الفصول", icon: "chart", group: "today", phone: true },
-  { href: "/dashboard/inquiries", label: "استفسارات الموظفين", short: "الاستفسارات", icon: "chat", group: "admin", phone: true },
+  { href: "/dashboard/inquiries", label: "استفسارات الموظفين", short: "الاستفسارات", icon: "chat", group: "admin", phone: true, managers: true },
   { href: "/dashboard/assistant", label: "المساعد", short: "المساعد", icon: "spark", group: null, phone: true },
   { href: "/dashboard/tasks", label: "لوحة المهام", short: "المهام", icon: "board", group: "admin", phone: false, exact: true },
-  { href: "/dashboard/finance", label: "المالية", short: "المالية", icon: "wallet", group: "admin", phone: false },
-  { href: "/dashboard/admissions", label: "القبول والتسجيل", short: "القبول", icon: "flag", group: "students", phone: false },
+  { href: "/dashboard/finance", label: "المالية", short: "المالية", icon: "wallet", group: "admin", phone: false, managers: true },
+  { href: "/dashboard/admissions", label: "القبول والتسجيل", short: "القبول", icon: "flag", group: "students", phone: false, managers: true },
   { href: "/dashboard/learning", label: "الدراسة والدرجات", short: "الدراسة", icon: "list", group: "students", phone: true },
-  { href: "/dashboard/academics", label: "الهيكل الدراسي", short: "الصفوف", icon: "school", group: "students", phone: false },
-  { href: "/dashboard/operations", label: "السجلات", short: "السجلات", icon: "folder", group: "admin", phone: false },
-  { href: "/dashboard/staff", label: "الموظفين", short: "الموظفين", icon: "users", group: "admin", phone: false },
-  { href: "/dashboard/team", label: "الفريق", short: "الفريق", icon: "users", group: "admin", phone: false },
-  { href: "/dashboard/audit", label: "سجل التدقيق", short: "التدقيق", icon: "shield", group: "admin", phone: false },
+  { href: "/dashboard/academics", label: "الهيكل الدراسي", short: "الصفوف", icon: "school", group: "students", phone: false, managers: true },
+  { href: "/dashboard/operations", label: "السجلات", short: "السجلات", icon: "folder", group: "admin", phone: false, managers: true },
+  { href: "/dashboard/staff", label: "الموظفين", short: "الموظفين", icon: "users", group: "admin", phone: false, managers: true },
+  { href: "/dashboard/team", label: "الفريق", short: "الفريق", icon: "users", group: "admin", phone: false, managers: true },
+  { href: "/dashboard/audit", label: "سجل التدقيق", short: "التدقيق", icon: "shield", group: "admin", phone: false, managers: true },
   { href: "/dashboard/settings", label: "الإعدادات", short: "الإعدادات", icon: "settings", group: null, phone: true },
 ];
 
@@ -39,4 +39,9 @@ export function matches(link: Pick<NavLink, "href" | "exact">, path: string): bo
 /** The computer-only section a path belongs to, if any. Task pages stay open on phones. */
 export function computerOnlySection(path: string): NavLink | undefined {
   return navLinks.find(link => !link.phone && matches(link, path));
+}
+
+/** Sections a member sees: managers see everything; staff do not see management sections. */
+export function visibleLinks(manager: boolean): NavLink[] {
+  return manager ? navLinks : navLinks.filter(link => !link.managers);
 }

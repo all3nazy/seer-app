@@ -43,10 +43,11 @@ export async function assistantStatus(client:SupabaseClient, organizationId:stri
   return parts.join(" ");
  }
  if(topic==="notifications") {
-  const pending=await count("enrollments","pending");
+  const pendingResult=manager?await client.from("applications").select("id",{count:"exact",head:true}).eq("organization_id",organizationId).in("status",["new","reviewing"]):{count:0,error:null};
+  const pending=number.format(pendingResult.count??0);
   const unpaid=manager?await count("invoices","issued"):null;
   const late=await tasks("overdue");
-  return `متابعات الآن: ${pending} طلبات تسجيل بانتظار الموافقة.${unpaid!==null?` و${unpaid} فواتير صادرة غير مسددة.`:""}${late?` و${number.format(late)} مهام متأخرة.`:""} هذه متابعة للحالات الحالية؛ لم تُرسل أي إشعارات.`;
+  return `متابعات الآن: ${pending} طلبات التحاق جديدة أو قيد المراجعة.${unpaid!==null?` و${unpaid} فواتير صادرة غير مسددة.`:""}${late?` و${number.format(late)} مهام متأخرة.`:""} وللصورة الكاملة قل «ملخص اليوم».`;
  }
  const total=await count(topic);
  if(topic==="invoices") return `إجمالي الفواتير: ${total}، الفواتير الصادرة غير المسددة: ${await count("invoices","issued")}.`;

@@ -5,6 +5,7 @@ import { canManage, uuid, ValidationError } from "../../../lib/operations";
 import { dueDate, nameSearchPattern, rankMatches } from "../../../lib/bot-commands";
 import { attendanceLabels, isAttendanceStatus, riyadhToday, type AttendanceStatus } from "../../../lib/students";
 import { markAttendance } from "../classes/actions";
+import type { Briefing } from "../../../lib/bot-persona";
 
 /**
  * What the bot can look up and do. Every call runs as the signed-in person under RLS, so the bot
@@ -21,7 +22,7 @@ async function access(organizationId: string) {
   if (!user) return { error: "انتهت الجلسة. سجّل الدخول مجددًا." } as const;
   const { data: member } = await client.from("memberships").select("role").eq("organization_id", org).eq("user_id", user.id).maybeSingle();
   if (!member) return { error: "لا تملك صلاحية على هذه المنشأة." } as const;
-  return { client, org, manager: canManage(member.role as string) } as const;
+  return { client, org, user: user.id, manager: canManage(member.role as string) } as const;
 }
 const fail = (error: unknown, fallback: string) => ({ error: error instanceof ValidationError ? error.message : fallback });
 
@@ -109,4 +110,53 @@ export async function botCreateTask(organizationId: string, title: string, due: 
     revalidatePath("/dashboard");
     return { data: "أُضيفت المهمة إلى لوحة المهام، وانحفظت في سجل التدقيق." };
   } catch (error) { return fail(error, "تعذر إضافة المهمة الآن."); }
+}
+
+/**
+ * The day at a glance for the bot's briefing. Every part is a count read in parallel under the
+ * person's own permissions; a part they cannot read is left out rather than failing the briefing.
+ */
+export async function botBriefing(organizationId: string): Promise<BotResult<Briefing>> {
+  try {
+    const auth = await access(organizationId);
+    if ("error" in auth) return { error: auth.error };
+    const { client, org, manager } = auth;
+    const today = riyadhToday();
+    const head = (table: string) => client.from(table).select("id", { count: "exact", head: true }).eq("organization_id", org);
+    const count = async (query: PromiseLike<{ count: number | null; error: unknown }>) => { const result = await query; return result.error ? null : result.count ?? 0; };
+    const [summary, enrolled, overdue, dueToday, mine, applications, leave, inquiries, invoices, queued, failed, reports, trips, kind] = await Promise.all([
+      client.rpc("section_attendance_summary", { org, from_day: today, to_day: today }),
+      count(head("children")),
+      count(head("tasks").neq("status", "done").lt("due_date", today)),
+      count(head("tasks").neq("status", "done").eq("due_date", today)),
+      count(head("tasks").neq("status", "done").eq("assignee_id", auth.user)),
+      manager ? count(head("applications").in("status", ["new", "reviewing"])) : null,
+      manager ? count(head("leave_requests").eq("status", "pending")) : null,
+      manager ? count(head("inquiries").eq("status", "open")) : null,
+      manager ? client.from("invoices").select("amount_sar,paid_total").eq("organization_id", org).eq("status", "issued").lt("due_date", today).limit(1000) : null,
+      manager ? count(head("message_outbox").eq("status", "queued")) : null,
+      manager ? count(head("message_outbox").eq("status", "failed").gte("created_at", new Date(Date.now() - 3 * 86400_000).toISOString())) : null,
+      count(head("daily_reports").eq("report_date", today)),
+      client.from("transport_trips").select("finished_at").eq("organization_id", org).eq("trip_date", today).limit(200),
+      client.from("organizations").select("type").eq("id", org).maybeSingle(),
+    ]);
+    let attendance: Briefing["attendance"] = null;
+    if (!summary.error && enrolled !== null) {
+      const counts = { present: 0, late: 0, absent: 0, excused: 0 };
+      for (const row of (summary.data ?? []) as { status: string; total: number }[]) if (isAttendanceStatus(row.status)) counts[row.status] += Number(row.total);
+      attendance = { ...counts, total: enrolled, pending: Math.max(enrolled - counts.present - counts.late - counts.absent - counts.excused, 0) };
+    }
+    const owed = invoices && !invoices.error ? (invoices.data ?? []) as { amount_sar: number; paid_total: number }[] : null;
+    const tripRows = !trips.error ? (trips.data ?? []) as { finished_at: string | null }[] : null;
+    const young = kind.data?.type === "nursery" || kind.data?.type === "kindergarten";
+    return { data: {
+      manager, attendance,
+      tasks: overdue === null ? null : { overdue, dueToday: dueToday ?? 0, mine: mine ?? 0 },
+      applications, leave, inquiries,
+      invoices: owed ? { overdue: owed.length, overdueAmount: Math.round(owed.reduce((sum, row) => sum + Number(row.amount_sar) - Number(row.paid_total), 0) * 100) / 100 } : null,
+      messages: queued === null && failed === null ? null : { queued: queued ?? 0, failed: failed ?? 0 },
+      dailyReports: young && reports !== null ? { written: reports } : null,
+      trips: tripRows && tripRows.length ? { running: tripRows.filter(row => !row.finished_at).length, done: tripRows.filter(row => row.finished_at).length } : null,
+    } };
+  } catch (error) { return fail(error, "تعذر تجهيز الملخص الآن."); }
 }

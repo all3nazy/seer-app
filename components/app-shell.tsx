@@ -7,12 +7,12 @@ import { SoundToggle, ThemeToggle } from "./preferences";
 import { FeedbackLayer } from "./feedback";
 import SignOutButton from "./sign-out-button";
 import { BotDock } from "./bot-dock";
-import { computerOnlySection, matches, navGroupLabels, navLinks, type NavGroup } from "../lib/navigation";
+import { computerOnlySection, matches, navGroupLabels, navLinks, visibleLinks, type NavGroup } from "../lib/navigation";
 import { patternUrl, type Stage } from "../lib/stage";
 
-type ShellProps = { children: React.ReactNode; stage: Stage; organizations: { id: string; name: string }[]; supportPhone: string };
+type ShellProps = { children: React.ReactNode; stage: Stage; organizations: { id: string; name: string }[]; supportPhone: string; manager?: boolean };
 
-export function AppShell({ children, stage, organizations, supportPhone }: ShellProps) {
+export function AppShell({ children, stage, organizations, supportPhone, manager = true }: ShellProps) {
   const path = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   useEffect(() => { try { setCollapsed(localStorage.getItem("seer-sidebar") === "rail"); } catch { /* storage unavailable */ } }, []);
@@ -21,7 +21,7 @@ export function AppShell({ children, stage, organizations, supportPhone }: Shell
   const fullOnly = computerOnlySection(path);
   const tabs = navLinks.filter(link => link.tab);
   const inMore = !tabs.some(link => matches(link, path));
-  const groups = (Object.keys(navGroupLabels) as NavGroup[]).map(group => ({ group, links: navLinks.filter(link => link.group === group) }));
+  const groups = (Object.keys(navGroupLabels) as NavGroup[]).map(group => ({ group, links: visibleLinks(manager).filter(link => link.group === group) }));
   const settings = navLinks.find(link => link.href === "/dashboard/settings")!;
   return <div className={`app stage-${stage}${collapsed ? " is-rail" : ""}`}>
     <div className="stage-pattern" aria-hidden="true" style={{ WebkitMaskImage: patternUrl(stage), maskImage: patternUrl(stage) }} />

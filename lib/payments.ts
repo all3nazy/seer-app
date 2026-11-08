@@ -5,7 +5,7 @@ export const providerLabels: Record<Provider, string> = { none: "غير مفعّ
 export const payMethods = ["mada", "visa_master", "apple_pay", "stc_pay", "tabby", "tamara"] as const;
 export type PayMethod = (typeof payMethods)[number];
 export const payMethodLabels: Record<PayMethod, string> = { mada: "مدى", visa_master: "فيزا / ماستركارد", apple_pay: "Apple Pay", stc_pay: "STC Pay", tabby: "تابي (قسّمها على ٤)", tamara: "تمارا (ادفع لاحقًا)" };
-export const intentStatusLabels: Record<string, string> = { initiated: "بدأت", paid: "مدفوعة", failed: "فشلت", cancelled: "ملغاة", expired: "منتهية" };
+export const intentStatusLabels: Record<string, string> = { initiated: "بدأت", paid: "مدفوعة", needs_review: "تحتاج مراجعة", failed: "فشلت", cancelled: "ملغاة", expired: "منتهية" };
 /** Live gateways the server can already settle once their keys are set. */
 export const liveReady: Provider[] = ["moyasar"];
 export function paymentSettingsValues(data: FormData) {

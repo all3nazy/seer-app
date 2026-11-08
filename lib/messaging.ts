@@ -13,15 +13,14 @@ export const toggles = [
 ] as const;
 /** Live providers the dispatcher can already call once their keys are in the server environment. */
 export const dispatchReady: MessageProvider[] = ["taqnyat", "whatsapp_cloud"];
+/**
+ * What a school may change: the channel and which messages go out. The provider account, sender
+ * name and link domain are platform settings (they spend the platform's paid accounts and shape
+ * the links families open), so they are set by the platform team, not from the school's page.
+ */
 export function messageSettingsValues(data: FormData) {
-  const provider = String(data.get("provider") ?? "manual");
-  if (!messageProviders.includes(provider as MessageProvider)) throw new Error("مزوّد غير صالح.");
-  const site = String(data.get("site_url") ?? "").trim().replace(/\/+$/, "");
-  if (!/^https:\/\/[a-z0-9.-]+(:\d+)?$/.test(site)) throw new Error("رابط المنصة يبدأ بـ https:// وبدون مسار.");
-  const sender = String(data.get("sender_name") ?? "").trim();
-  if (sender && (sender.length < 2 || sender.length > 40)) throw new Error("اسم المرسل من ٢ إلى ٤٠ حرفًا.");
   return {
-    provider, channel: data.get("channel") === "sms" ? "sms" : "whatsapp", sender_name: sender || null, site_url: site,
+    channel: data.get("channel") === "sms" ? "sms" : "whatsapp",
     ...Object.fromEntries(toggles.map(([key]) => [key, data.get(key) === "on"])),
   };
 }

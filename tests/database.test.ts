@@ -99,6 +99,9 @@ beforeAll(async () => {
   const messaging = readdirSync("supabase/migrations").filter(name => name.endsWith("_messaging.sql"));
   if (messaging.length !== 1) throw new Error("Expected exactly one messaging migration");
   await db.exec(readFileSync(`supabase/migrations/${messaging[0]}`, "utf8"));
+  const hardening = readdirSync("supabase/migrations").filter(name => name.endsWith("_hardening.sql"));
+  if (hardening.length !== 1) throw new Error("Expected exactly one hardening migration");
+  await db.exec(readFileSync(`supabase/migrations/${hardening[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -1226,23 +1229,53 @@ describe("online payments foundation", () => {
     expect(await rows("select count(*)::int as n from public.payments")).toEqual([{ n: 0 }]);
     expect((await rows(`select paid_total from public.invoices where id='${invoice.id}'`))[0].paid_total).toBe("0.00");
     await as("anon");
-    await expect(db.exec(`select private.settle_online_payment('${started.intent}','x',1150,true)`)).rejects.toBeDefined();
+    await expect(db.exec(`select private.settle_online_payment('${started.intent}','x',1150,'SAR',true,true,null,'${"a".repeat(64)}')`)).rejects.toBeDefined();
     await expect(db.exec("select * from public.payment_intents")).rejects.toBeDefined();
   });
-  it("a verified live payment is recorded once in the ledger and pays the invoice", async () => {
+  it("a live payment is recorded once, only with the school's own webhook secret, in SAR and live mode", async () => {
+    const hash = "b".repeat(64);
+    const settle = async (intent: string, amount: number, opts: { currency?: string; live?: boolean; ok?: boolean; hash?: string } = {}) =>
+      (await rows(`select private.settle_online_payment('${intent}','pay_${intent.slice(0, 8)}',${amount},'${opts.currency ?? "SAR"}',${opts.live ?? true},${opts.ok ?? true},null,'${opts.hash ?? hash}') as r`))[0].r as string;
+    await as("authenticated", staff);
+    await expect(db.exec(`select public.set_payment_webhook_secret('${orgA}','moyasar','${hash}')`)).rejects.toMatchObject({ code: "42501" });
     await as("authenticated", owner);
     await db.exec(`insert into public.payment_settings(organization_id,provider,mode,methods,is_enabled) values ('${orgA}','moyasar','live','{mada,tabby}',true)`);
+    await db.exec(`select public.set_payment_webhook_secret('${orgA}','moyasar','${hash}')`);
+    expect((await rows(`select public.payment_webhook_configured('${orgA}') as p`))[0].p).toEqual(["moyasar"]);
     await as("anon");
+    const first = (await rows(`select public.start_online_payment('${invoice.share_token}','mada') as r`))[0].r as { intent: string };
     const started = (await rows(`select public.start_online_payment('${invoice.share_token}','tabby') as r`))[0].r as { intent: string };
     await expect(db.exec(`select public.finish_sandbox_payment('${invoice.share_token}','${started.intent}',true)`)).rejects.toMatchObject({ code: "42501" });
     await db.exec("reset role");
-    await expect(db.exec(`select private.settle_online_payment('${started.intent}','pay_1',999,true)`)).rejects.toMatchObject({ code: "23514" });
-    const payment = (await rows(`select private.settle_online_payment('${started.intent}','pay_1',1150,true) as p`))[0].p as string;
-    expect((await rows(`select private.settle_online_payment('${started.intent}','pay_1',1150,true) as p`))[0].p).toBe(payment);
-    expect(await rows(`select method,amount,reference from public.payments`)).toEqual([{ method: "tabby", amount: "1150.00", reference: "pay_1" }]);
+    expect((await rows(`select status from public.payment_intents where id='${first.intent}'`))[0].status).toBe("cancelled");
+    expect(await settle(started.intent, 1150, { hash: "c".repeat(64) })).toBe("unauthorized");
+    expect(await settle(started.intent, 1150, { live: false })).toBe("needs_review");
+    await db.exec(`update public.payment_intents set status='initiated' where id='${started.intent}'`);
+    expect(await settle(started.intent, 1150, { currency: "USD" })).toBe("needs_review");
+    await db.exec(`update public.payment_intents set status='initiated' where id='${started.intent}'`);
+    expect(await settle(started.intent, 999)).toBe("needs_review");
+    await db.exec(`update public.payment_intents set status='initiated' where id='${started.intent}'`);
+    expect(await rows("select count(*)::int as n from public.payments")).toEqual([{ n: 0 }]);
+    expect(await settle(started.intent, 1150)).toBe("recorded");
+    expect(await settle(started.intent, 1150)).toBe("already");
+    expect(await rows(`select method,amount,reference from public.payments`)).toEqual([{ method: "tabby", amount: "1150.00", reference: `pay_${started.intent.slice(0, 8)}` }]);
     expect((await rows(`select status from public.invoices where id='${invoice.id}'`))[0].status).toBe("paid");
+    // The cancelled attempt was paid too (second tab): the money is held for review, never lost or double-booked.
+    expect(await settle(first.intent, 1150)).toBe("needs_review");
+    expect(await rows("select count(*)::int as n from public.payments")).toEqual([{ n: 1 }]);
     await as("anon");
     expect((await rows(`select public.shared_document('${invoice.share_token}') as d`))[0].d).toMatchObject({ pay: null });
+  });
+  it("test-mode gateway payments never reach the books", async () => {
+    await as("authenticated", owner);
+    await db.exec(`insert into public.payment_settings(organization_id,provider,mode,methods,is_enabled) values ('${orgA}','moyasar','test','{mada}',true)`);
+    await db.exec(`select public.set_payment_webhook_secret('${orgA}','moyasar','${"d".repeat(64)}')`);
+    await as("anon");
+    const started = (await rows(`select public.start_online_payment('${invoice.share_token}','mada') as r`))[0].r as { intent: string };
+    await db.exec("reset role");
+    expect((await rows(`select private.settle_online_payment('${started.intent}','t1',1150,'SAR',false,true,null,'${"d".repeat(64)}') as r`))[0].r).toBe("test");
+    expect(await rows("select count(*)::int as n from public.payments")).toEqual([{ n: 0 }]);
+    expect((await rows(`select status from public.invoices where id='${invoice.id}'`))[0].status).toBe("issued");
   });
 });
 
@@ -1267,7 +1300,11 @@ describe("automatic messages and pickup confirmation", () => {
     await db.exec(`update public.attendance set status='late' where child_id='${childA}'`);
     await db.exec(`update public.attendance set status='absent' where child_id='${childA}'`);
     const queued = await rows(`select kind,to_phone,status from public.message_outbox where to_phone='0500000999' order by created_at`);
-    expect(queued).toEqual([{ kind: "absence", to_phone: "0500000999", status: "queued" }, { kind: "late", to_phone: "0500000999", status: "queued" }]);
+    // Each correction cancels the message still waiting; the absence comes back when it is re-marked.
+    expect(queued).toEqual([{ kind: "late", to_phone: "0500000999", status: "skipped" }, { kind: "absence", to_phone: "0500000999", status: "queued" }]);
+    await db.exec(`update public.attendance set status='present' where child_id='${childA}'`);
+    expect(await rows(`select kind,status from public.message_outbox where to_phone='0500000999' order by kind`)).toEqual([{ kind: "absence", status: "skipped" }, { kind: "late", status: "skipped" }]);
+    await db.exec(`update public.attendance set status='absent' where child_id='${childA}'`);
     await expect(db.exec(`insert into public.message_outbox(organization_id,to_phone,kind,body) values ('${orgA}','0500000000','custom','hi')`)).rejects.toMatchObject({ code: "42501" });
     const id = (await rows("select id from public.message_outbox limit 1"))[0].id as string;
     await db.exec(`select public.mark_message('${id}','sent')`);
@@ -1275,6 +1312,30 @@ describe("automatic messages and pickup confirmation", () => {
     await as("authenticated", outsider);
     expect(await rows("select * from public.message_outbox")).toEqual([]);
     await expect(db.exec(`select public.mark_message('${id}','queued')`)).rejects.toMatchObject({ code: "P0002" });
+    await as("authenticated", staff);
+    await expect(db.exec(`select public.mark_message('${id}','queued')`)).rejects.toMatchObject({ code: "22023" });
+  });
+  it("staff never see private links; settings for provider, sender and links stay with the platform", async () => {
+    await db.exec(`insert into public.message_settings(organization_id) values ('${orgA}')`);
+    await as("authenticated", staff);
+    await db.exec(`insert into public.pickups(organization_id,child_id,guardian_id) values ('${orgA}','${childA}','${mum}')`);
+    expect((await rows("select kind from public.message_outbox order by kind")).map(row => row.kind)).toEqual(["pickup"]);
+    await as("authenticated", owner);
+    expect((await rows("select kind from public.message_outbox order by kind")).map(row => row.kind)).toEqual(["pickup", "pickup_confirm"]);
+    await expect(db.exec(`update public.message_settings set provider='taqnyat' where organization_id='${orgA}'`)).rejects.toMatchObject({ code: "42501" });
+    await expect(db.exec(`update public.message_settings set site_url='https://evil.example' where organization_id='${orgA}'`)).rejects.toMatchObject({ code: "42501" });
+    await db.exec(`update public.message_settings set notify_bus=true where organization_id='${orgA}'`);
+    await expect(db.exec(`insert into public.message_outbox(organization_id,to_phone,kind,body) values ('${orgA}','0599999999','custom','spam')`)).rejects.toMatchObject({ code: "42501" });
+    await db.exec(`insert into public.message_outbox(organization_id,to_phone,kind,body) values ('${orgA}','0500000999','custom','hello')`);
+    await db.exec("reset role");
+    expect((await rows("select count(*)::int as n from public.audit_events where entity='message_settings'"))[0].n).toBeGreaterThan(0);
+  });
+  it("undoing a pickup cancels its waiting messages", async () => {
+    await db.exec(`insert into public.message_settings(organization_id) values ('${orgA}')`);
+    await as("authenticated", owner);
+    const pickup = (await rows(`insert into public.pickups(organization_id,child_id,guardian_id) values ('${orgA}','${childA}','${mum}') returning id`))[0].id as string;
+    await db.exec(`delete from public.pickups where id='${pickup}'`);
+    expect((await rows("select distinct status from public.message_outbox")).map(row => row.status)).toEqual(["skipped"]);
   });
   it("a pickup sends a confirmation link the receiver confirms with their ID number", async () => {
     await db.exec(`insert into public.message_settings(organization_id) values ('${orgA}')`);

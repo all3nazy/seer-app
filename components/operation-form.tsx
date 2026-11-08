@@ -22,7 +22,7 @@ function ReferenceSelect({ name, label, options, required = false, value }: { na
 }
 function RecordEditor({ organizationId, entity, childrenOptions, branches, guardians, record }: Omit<FormProps, "records"> & { record?: OperationRecord }) {
   const [state, action, pending] = useActionState(saveOperation, {});
-  const statuses = entity === "enrollments" ? ["pending", "approved", "rejected", "withdrawn"] : ["draft", "issued", "paid", "void"];
+  const statuses = entity === "enrollments" ? ["pending", "approved", "rejected", "withdrawn"] : ["draft", "void"];
   return <form action={action} className="operation-form">
     <input type="hidden" name="organization_id" value={organizationId} />
     <input type="hidden" name="entity" value={entity} />
@@ -33,6 +33,7 @@ function RecordEditor({ organizationId, entity, childrenOptions, branches, guard
       {entity === "children" || entity === "guardians" ? <label>الاسم الكامل<input name="full_name" required maxLength={120} defaultValue={record?.full_name ?? ""} /></label> : null}
       {entity === "children" ? <label>تاريخ الميلاد (اختياري)<input type="date" name="date_of_birth" max={new Date().toISOString().slice(0, 10)} defaultValue={record?.date_of_birth ?? ""} /></label> : null}
       {entity === "guardians" ? <label>الهاتف (اختياري)<input type="tel" name="phone" maxLength={16} defaultValue={record?.phone ?? ""} dir="ltr" /></label> : null}
+      {entity === "guardians" ? <label>رقم الهوية أو الإقامة (لتأكيد الاستلام)<input name="national_id" inputMode="numeric" maxLength={10} defaultValue={record?.national_id ?? ""} dir="ltr" /></label> : null}
       {entity === "enrollments" ? <>
         <ReferenceSelect name="child_id" label="الطفل" options={childrenOptions} required value={record?.child_id} />
         <ReferenceSelect name="branch_id" label="الفرع (اختياري)" options={branches} value={record?.branch_id} />

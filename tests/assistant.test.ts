@@ -92,10 +92,9 @@ describe("assistant authorization and aggregate queries",()=>{
  it("does not query financial alerts for staff",async()=>{
   const {client,calls}=fakeClient({role:"staff"});
   const text=await assistantStatus(client,"org-a","notifications");
-  expect(text).toContain("لم تُرسل أي إشعارات");
-  expect(calls.map(call=>call.table)).toEqual(["memberships","enrollments","tasks"]);
-  expect(calls[1].filters).toEqual({organization_id:"org-a",status:"pending"});
-  expect(calls[2].filters).toMatchObject({organization_id:"org-a","status!=":"done"});
+  expect(text).toContain("ملخص اليوم");
+  expect(calls.map(call=>call.table)).toEqual(["memberships","tasks"]);
+  expect(calls[1].filters).toMatchObject({organization_id:"org-a","status!=":"done"});
  });
  it("loads aggregate financial states for managers and scopes every query",async()=>{
   const {client,calls}=fakeClient({role:"admin"});
