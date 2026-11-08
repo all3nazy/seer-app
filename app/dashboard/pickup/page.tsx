@@ -9,7 +9,7 @@ import { memberName, relationshipLabels, type Member, type Relationship } from "
 export const dynamic = "force-dynamic";
 export const metadata = { title: "تسليم الطلاب" };
 
-type Pickup = { id: string; child_id: string; picked_by_name: string; picked_at: string; handed_by: string | null; note: string | null };
+type Pickup = { id: string; child_id: string; picked_by_name: string; picked_at: string; handed_by: string | null; note: string | null; pickup_confirmations: { confirmed_at: string | null; verified: boolean } | { confirmed_at: string | null; verified: boolean }[] | null };
 
 export default async function PickupPage({ searchParams }: { searchParams: Promise<{ org?: string; section?: string }> }) {
   const params = await searchParams;
@@ -32,7 +32,7 @@ export default async function PickupPage({ searchParams }: { searchParams: Promi
     client.from("attendance").select("child_id,status").eq("organization_id", org).eq("attendance_date", today).in("child_id", ids),
     client.from("child_guardians").select("child_id,relationship,guardians(id,full_name,phone)").eq("organization_id", org).in("child_id", ids),
     client.from("authorized_pickups").select("id,child_id,full_name,relationship,phone").eq("organization_id", org).eq("is_active", true).in("child_id", ids),
-    client.from("pickups").select("id,child_id,picked_by_name,picked_at,handed_by,note").eq("organization_id", org).eq("pickup_date", today).in("child_id", ids),
+    client.from("pickups").select("id,child_id,picked_by_name,picked_at,handed_by,note,pickup_confirmations(confirmed_at,verified)").eq("organization_id", org).eq("pickup_date", today).in("child_id", ids),
     client.from("child_health").select("child_id,allergies,conditions").eq("organization_id", org).in("child_id", ids),
     client.from("memberships").select("user_id,role,display_name").eq("organization_id", org),
   ]) : Array.from({ length: 6 }, () => ({ data: [], error: null }));
@@ -78,7 +78,8 @@ export default async function PickupPage({ searchParams }: { searchParams: Promi
           const handedBy = memberRows.find(member => member.user_id === record.handed_by);
           return <li key={kid.id}>
             <span><strong>{kid.full_name}</strong>
-              <span className="hint" style={{ display: "block" }}>استلمه {record.picked_by_name} · {new Date(record.picked_at).toLocaleTimeString("ar-SA", { timeZone: "Asia/Riyadh", hour: "numeric", minute: "2-digit" })} · سلّمه {memberName(handedBy, record.handed_by === userId)}{record.note ? ` · ${record.note}` : ""}</span></span>
+              <span className="hint" style={{ display: "block" }}>استلمه {record.picked_by_name} · {new Date(record.picked_at).toLocaleTimeString("ar-SA", { timeZone: "Asia/Riyadh", hour: "numeric", minute: "2-digit" })} · سلّمه {memberName(handedBy, record.handed_by === userId)}{record.note ? ` · ${record.note}` : ""}</span>
+              {(() => { const c = Array.isArray(record.pickup_confirmations) ? record.pickup_confirmations[0] : record.pickup_confirmations; return c ? <span className={`chip-soft ${c.confirmed_at ? "ok" : "coral"}`} style={{ marginTop: 4 }}>{c.confirmed_at ? (c.verified ? "✓ أكّد بالهوية" : "✓ أكّد") : "بانتظار تأكيد المستلم"}</span> : null; })()}</span>
             {manager || (record.handed_by === userId && Date.parse(record.picked_at) > recent) ? <UndoPickupButton organizationId={org} pickupId={record.id} /> : null}
           </li>;
         })}</ul>

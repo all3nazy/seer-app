@@ -96,6 +96,9 @@ beforeAll(async () => {
   const online = readdirSync("supabase/migrations").filter(name => name.endsWith("_online_payments.sql"));
   if (online.length !== 1) throw new Error("Expected exactly one online payments migration");
   await db.exec(readFileSync(`supabase/migrations/${online[0]}`, "utf8"));
+  const messaging = readdirSync("supabase/migrations").filter(name => name.endsWith("_messaging.sql"));
+  if (messaging.length !== 1) throw new Error("Expected exactly one messaging migration");
+  await db.exec(readFileSync(`supabase/migrations/${messaging[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -1240,5 +1243,70 @@ describe("online payments foundation", () => {
     expect((await rows(`select status from public.invoices where id='${invoice.id}'`))[0].status).toBe("paid");
     await as("anon");
     expect((await rows(`select public.shared_document('${invoice.share_token}') as d`))[0].d).toMatchObject({ pay: null });
+  });
+});
+
+describe("automatic messages and pickup confirmation", () => {
+  const mum = "40000000-0000-0000-0000-0000000000e1";
+  beforeEach(async () => {
+    await db.exec("reset role");
+    await db.exec(`delete from public.message_outbox; delete from public.message_settings; delete from public.pickups; delete from public.attendance; delete from public.authorized_pickups;
+      insert into public.memberships(organization_id,user_id,role) values ('${orgA}','${staff}','staff') on conflict do nothing;
+      insert into public.guardians(id,organization_id,full_name,phone,national_id) values ('${mum}','${orgA}','Mum','0500000999','1012345678') on conflict (id) do update set phone='0500000999', national_id='1012345678';
+      insert into public.child_guardians(organization_id,child_id,guardian_id,relationship) values ('${orgA}','${childA}','${mum}','mother') on conflict do nothing`);
+  });
+  const today = async () => (await rows("select (now() at time zone 'Asia/Riyadh')::date::text as d"))[0].d as string;
+  it("nothing is queued until the school turns messages on; then absences queue once per guardian", async () => {
+    await as("authenticated", staff);
+    await db.exec(`insert into public.attendance(organization_id,child_id,attendance_date,status) values ('${orgA}','${childA}','${await today()}','absent')`);
+    await db.exec("reset role");
+    expect(await rows("select count(*)::int as n from public.message_outbox")).toEqual([{ n: 0 }]);
+    await db.exec(`delete from public.attendance; insert into public.message_settings(organization_id) values ('${orgA}')`);
+    await as("authenticated", staff);
+    await db.exec(`insert into public.attendance(organization_id,child_id,attendance_date,status) values ('${orgA}','${childA}','${await today()}','absent')`);
+    await db.exec(`update public.attendance set status='late' where child_id='${childA}'`);
+    await db.exec(`update public.attendance set status='absent' where child_id='${childA}'`);
+    const queued = await rows(`select kind,to_phone,status from public.message_outbox where to_phone='0500000999' order by created_at`);
+    expect(queued).toEqual([{ kind: "absence", to_phone: "0500000999", status: "queued" }, { kind: "late", to_phone: "0500000999", status: "queued" }]);
+    await expect(db.exec(`insert into public.message_outbox(organization_id,to_phone,kind,body) values ('${orgA}','0500000000','custom','hi')`)).rejects.toMatchObject({ code: "42501" });
+    const id = (await rows("select id from public.message_outbox limit 1"))[0].id as string;
+    await db.exec(`select public.mark_message('${id}','sent')`);
+    expect((await rows(`select status,sent_by from public.message_outbox where id='${id}'`))[0]).toEqual({ status: "sent", sent_by: staff });
+    await as("authenticated", outsider);
+    expect(await rows("select * from public.message_outbox")).toEqual([]);
+    await expect(db.exec(`select public.mark_message('${id}','queued')`)).rejects.toMatchObject({ code: "P0002" });
+  });
+  it("a pickup sends a confirmation link the receiver confirms with their ID number", async () => {
+    await db.exec(`insert into public.message_settings(organization_id) values ('${orgA}')`);
+    await as("authenticated", staff);
+    const pickup = (await rows(`insert into public.pickups(organization_id,child_id,guardian_id) values ('${orgA}','${childA}','${mum}') returning id`))[0].id as string;
+    await db.exec("reset role");
+    const link = (await rows(`select body from public.message_outbox where kind='pickup_confirm'`))[0].body as string;
+    const token = link.match(/\/c\/([0-9a-f-]{36})/)![1];
+    await as("anon");
+    expect((await rows(`select public.pickup_confirmation_view('${token}') as v`))[0].v).toMatchObject({ child: "Private Child A", picked_by: "Mum", confirmed_at: null });
+    expect((await rows(`select public.confirm_pickup('${token}','123') as r`))[0].r).toBe("invalid");
+    expect((await rows(`select public.confirm_pickup('${token}','1099999999') as r`))[0].r).toBe("mismatch");
+    expect((await rows(`select public.confirm_pickup('${token}','١٠١٢٣٤٥٦٧٨') as r`))[0].r).toBe("confirmed");
+    expect((await rows(`select public.confirm_pickup('${token}','1012345678') as r`))[0].r).toBe("already");
+    await as("authenticated", staff);
+    expect(await rows(`select verified,confirmed_at is not null as done,failed_attempts from public.pickup_confirmations where pickup_id='${pickup}'`)).toEqual([{ verified: true, done: true, failed_attempts: 1 }]);
+    await expect(db.exec("select token from public.pickup_confirmations")).rejects.toBeDefined();
+    await as("anon");
+    expect((await rows("select public.confirm_pickup(gen_random_uuid(),'1012345678') as r"))[0].r).toBe("not_found");
+  });
+  it("five wrong IDs lock the link", async () => {
+    await db.exec(`insert into public.message_settings(organization_id) values ('${orgA}')`);
+    await as("authenticated", staff);
+    await db.exec(`insert into public.pickups(organization_id,child_id,guardian_id) values ('${orgA}','${childA}','${mum}')`);
+    await db.exec("reset role");
+    const token = ((await rows(`select body from public.message_outbox where kind='pickup_confirm'`))[0].body as string).match(/\/c\/([0-9a-f-]{36})/)![1];
+    await as("anon");
+    for (let i = 0; i < 5; i++) await db.exec(`select public.confirm_pickup('${token}','1099999999')`);
+    expect((await rows(`select public.confirm_pickup('${token}','1012345678') as r`))[0].r).toBe("locked");
+  });
+  it("only the server claims messages for a provider", async () => {
+    await as("authenticated", owner);
+    await expect(db.exec("select * from public.claim_messages(10)")).rejects.toBeDefined();
   });
 });

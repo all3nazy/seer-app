@@ -14,6 +14,7 @@ export const navLinks: NavLink[] = [
   { href: "/dashboard/attendance", label: "الحضور", short: "الحضور", icon: "clock", group: "today", phone: true, tab: true },
   { href: "/dashboard/pickup", label: "تسليم الطلاب", short: "التسليم", icon: "pickup", group: "today", phone: true, tab: true },
   { href: "/dashboard/daily", label: "التقرير اليومي", short: "التقرير", icon: "calendar", group: "today", phone: true },
+  { href: "/dashboard/messages", label: "الرسائل", short: "الرسائل", icon: "chat", group: "today", phone: true },
   { href: "/dashboard/announcements", label: "الإعلانات", short: "الإعلانات", icon: "bell", group: "today", phone: true },
   { href: "/dashboard/transport", label: "النقل", short: "النقل", icon: "pickup", group: "today", phone: true },
   { href: "/dashboard/children", label: "الطلاب", short: "الطلاب", icon: "child", group: "students", phone: true },
