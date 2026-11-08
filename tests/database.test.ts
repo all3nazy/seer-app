@@ -125,8 +125,8 @@ beforeAll(async () => {
   const teaching = readdirSync("supabase/migrations").filter(name => name.endsWith("_teaching_notifications.sql"));
   if (teaching.length !== 1) throw new Error("Expected exactly one teaching notifications migration");
   await db.exec(readFileSync(`supabase/migrations/${teaching[0]}`, "utf8"));
-  const pushJobs = readdirSync("supabase/migrations").filter(name => name.endsWith("_push_jobs.sql"));
-  if (pushJobs.length !== 1) throw new Error("Expected exactly one push jobs migration");
+  const pushJobs = readdirSync("supabase/migrations").filter(name => name.endsWith("_push_health.sql"));
+  if (pushJobs.length !== 1) throw new Error("Expected exactly one push and health migration");
   await db.exec(readFileSync(`supabase/migrations/${pushJobs[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
@@ -1587,5 +1587,43 @@ describe("push keys and one-time push jobs", () => {
     await db.exec(`insert into public.tasks(organization_id,title,assignee_id) values ('${orgA}','Push check','${staff}')`);
     await as("authenticated", staff);
     expect((await rows("select count(*)::int as n from public.notifications where title like '%Push check%'"))[0].n).toBe(1);
+  });
+});
+
+describe("system health: error log, checks and repairs", () => {
+  it("records errors once per kind with private details masked, and reopens a resolved error that recurs", async () => {
+    await as("anon");
+    const route = "/p/06d4dd6e-3d4b-48dd-a45e-acb72b55cc88?x=1";
+    await db.exec(`select public.log_error('client','Cannot read id 06d4dd6e-3d4b-48dd-a45e-acb72b55cc88 for sara@example.com phone 0501234567','${route}')`);
+    await db.exec(`select public.log_error('client','Cannot read id 11111111-3d4b-48dd-a45e-acb72b55cc88 for ali@example.com phone 0559999999','/p/22222222-3d4b-48dd-a45e-acb72b55cc88')`);
+    await db.exec("reset role");
+    const rowsNow = await rows("select fingerprint,message,route,count,status from public.system_errors where kind='client'");
+    expect(rowsNow).toHaveLength(1);
+    expect(rowsNow[0]).toMatchObject({ message: "Cannot read id :id for :email phone #", route: "/p/:id", count: 2, status: "new" });
+    await db.exec(`insert into private.platform_admins(user_id) values ('${owner}') on conflict do nothing`);
+    await as("authenticated", staff);
+    expect(await rows("select * from public.system_errors")).toEqual([]);
+    await as("authenticated", owner);
+    await db.exec(`update public.system_errors set status='resolved', resolution='حدّث الصفحة' where fingerprint='${rowsNow[0].fingerprint}'`);
+    await as("anon");
+    expect((await rows(`select public.log_error('client','Cannot read id 06d4dd6e-3d4b-48dd-a45e-acb72b55cc88 for a@b.co phone 0501234567','${route}') as fix`))[0].fix).toBe("حدّث الصفحة");
+    await db.exec("reset role");
+    expect((await rows(`select status,regressed from public.system_errors where fingerprint='${rowsNow[0].fingerprint}'`))[0]).toEqual({ status: "new", regressed: true });
+  });
+  it("managers run checks and safe repairs; staff cannot", async () => {
+    await db.exec("reset role");
+    await db.exec(`insert into public.message_outbox(organization_id,to_phone,kind,body,status,claimed_at) values ('${orgA}','0500000123','custom','stuck','sending',now() - interval '1 hour')`);
+    await as("authenticated", staff);
+    await expect(db.exec(`select public.system_health('${orgA}')`)).rejects.toMatchObject({ code: "42501" });
+    await expect(db.exec(`select public.system_repair('${orgA}','messages_stuck')`)).rejects.toMatchObject({ code: "42501" });
+    await as("authenticated", owner);
+    const checks = (await rows(`select public.system_health('${orgA}') as h`))[0].h as { id: string; count: number; fixable: boolean }[];
+    expect(checks.find(item => item.id === "messages_stuck")).toMatchObject({ fixable: true });
+    expect(checks.find(item => item.id === "messages_stuck")!.count).toBeGreaterThan(0);
+    expect((await rows(`select public.system_repair('${orgA}','messages_stuck') as n`))[0].n).toBeGreaterThan(0);
+    await expect(db.exec(`select public.system_repair('${orgA}','children_no_section')`)).rejects.toMatchObject({ code: "22023" });
+    expect((await rows(`select check_id from public.list_repairs('${orgA}')`))[0].check_id).toBe("messages_stuck");
+    await db.exec("reset role");
+    expect((await rows("select private.self_heal() as n"))[0].n).toBeGreaterThanOrEqual(0);
   });
 });

@@ -243,3 +243,21 @@ export async function botRecordPickup(organizationId: string, childId: string, p
   const result = await recordPickup(organizationId, childId, person, "");
   return result.error ? { error: result.error } : { data: "تم التسليم وانحفظ بالوقت واسمك. وصل المستلم رابط تأكيد برقم هويته إذا كانت الرسائل مفعّلة." };
 }
+
+export type BotCheck = { id: string; label: string; count: number; fixable: boolean; hint: string; href: string };
+/** The system checks for managers: what needs attention and what can be repaired. */
+export async function botHealth(organizationId: string): Promise<BotResult<BotCheck[]>> {
+  try {
+    const auth = await access(organizationId);
+    if ("error" in auth) return { error: auth.error };
+    if (!auth.manager) return { error: "فحص النظام لمالك المنشأة أو مديرها." };
+    const { data, error } = await auth.client.rpc("system_health", { org: auth.org });
+    if (error) return { error: "تعذر الفحص الآن." };
+    return { data: (data ?? []) as BotCheck[] };
+  } catch (error) { return fail(error, "تعذر الفحص الآن."); }
+}
+export async function botRepair(organizationId: string, checkId: string): Promise<BotResult<string>> {
+  const { repairCheck } = await import("../health/actions");
+  const result = await repairCheck(organizationId, checkId);
+  return result.error ? { error: result.error } : { data: result.success ?? "تم." };
+}
