@@ -60,15 +60,15 @@ beforeAll(async () => {
   const admissions = readdirSync("supabase/migrations").filter(name => name.endsWith("_admissions.sql"));
   if (admissions.length !== 1) throw new Error("Expected exactly one admissions migration");
   await db.exec(readFileSync(`supabase/migrations/${admissions[0]}`, "utf8"));
-  const finance = readdirSync("supabase/migrations").filter(name => name.endsWith("_finance.sql"));
-  if (finance.length !== 1) throw new Error("Expected exactly one finance migration");
-  await db.exec(readFileSync(`supabase/migrations/${finance[0]}`, "utf8"));
   const summaries = readdirSync("supabase/migrations").filter(name => name.endsWith("_class_summaries.sql"));
   if (summaries.length !== 1) throw new Error("Expected exactly one class summaries migration");
   await db.exec(readFileSync(`supabase/migrations/${summaries[0]}`, "utf8"));
   const myWork = readdirSync("supabase/migrations").filter(name => name.endsWith("_my_work.sql"));
   if (myWork.length !== 1) throw new Error("Expected exactly one my work migration");
   await db.exec(readFileSync(`supabase/migrations/${myWork[0]}`, "utf8"));
+  const finance = readdirSync("supabase/migrations").filter(name => name.endsWith("_finance.sql"));
+  if (finance.length !== 1) throw new Error("Expected exactly one finance migration");
+  await db.exec(readFileSync(`supabase/migrations/${finance[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -612,6 +612,69 @@ describe("admissions", () => {
   });
 });
 
+describe("class summaries", () => {
+  it("count per section inside the tenant only", async () => {
+    await db.exec("reset role");
+    await db.exec(`delete from public.attendance; update public.children set section_id=null; delete from public.sections; delete from public.grade_levels`);
+    await as("authenticated", owner);
+    const grade = (await rows(`insert into public.grade_levels(organization_id,name,stage) values ('${orgA}','G1','primary') returning id`))[0].id;
+    const section = (await rows(`insert into public.sections(organization_id,grade_level_id,name,capacity) values ('${orgA}','${grade}','A',20) returning id`))[0].id;
+    await db.exec(`update public.children set section_id='${section}' where id='${childA}'`);
+    const day = new Date(Date.now() + 3 * 3600_000).toISOString().slice(0, 10);
+    await db.exec(`insert into public.attendance(organization_id,child_id,attendance_date,status) values ('${orgA}','${childA}','${day}','late')`);
+    expect(await rows(`select section_id,total::int from public.section_enrollment('${orgA}') where section_id is not null`)).toEqual([{ section_id: section, total: 1 }]);
+    expect(await rows(`select section_id,status,total::int from public.section_attendance_summary('${orgA}','${day}','${day}')`)).toEqual([{ section_id: section, status: "late", total: 1 }]);
+    await expect(db.exec(`select * from public.section_attendance_summary('${orgA}','2026-01-01','2026-06-01')`)).rejects.toMatchObject({ code: "22023" });
+    await as("authenticated", outsider);
+    expect(await rows(`select * from public.section_enrollment('${orgA}')`)).toEqual([]);
+    expect(await rows(`select * from public.section_attendance_summary('${orgA}','${day}','${day}')`)).toEqual([]);
+    await as("anon");
+    await expect(db.exec(`select * from public.section_enrollment('${orgA}')`)).rejects.toBeDefined();
+  });
+});
+
+describe("my work: task comments and inquiries", () => {
+  beforeEach(async () => {
+    await db.exec("reset role");
+    await db.exec(`delete from public.inquiry_replies; delete from public.inquiries; delete from public.task_comments; insert into public.memberships(organization_id,user_id,role) values ('${orgA}','${staff}','staff') on conflict do nothing`);
+  });
+  it("members comment on tasks as themselves; other tenants see nothing", async () => {
+    await as("authenticated", owner);
+    const task = (await rows(`insert into public.tasks(organization_id,title,assignee_id) values ('${orgA}','Prepare report','${staff}') returning id`))[0].id;
+    await as("authenticated", staff);
+    await db.exec(`insert into public.task_comments(organization_id,task_id,body) values ('${orgA}','${task}','Started')`);
+    expect(await rows(`select author_id,body from public.task_comments where task_id='${task}'`)).toEqual([{ author_id: staff, body: "Started" }]);
+    await expect(db.exec(`insert into public.task_comments(organization_id,task_id,body,author_id) values ('${orgA}','${task}','Forged','${owner}')`)).rejects.toThrow("permission denied");
+    await as("authenticated", outsider);
+    expect(await rows("select * from public.task_comments")).toEqual([]);
+    await expect(db.exec(`insert into public.task_comments(organization_id,task_id,body) values ('${orgA}','${task}','x')`)).rejects.toBeDefined();
+  });
+  it("inquiries are private to their author and managers, and replies drive the status", async () => {
+    await as("authenticated", staff);
+    const inquiry = (await rows(`insert into public.inquiries(organization_id,category,subject,body) values ('${orgA}','supplies','Markers','Need markers') returning id,author_id,status`))[0];
+    expect(inquiry).toMatchObject({ author_id: staff, status: "open" });
+    await as("authenticated", outsider);
+    expect(await rows("select * from public.inquiries")).toEqual([]);
+    await as("authenticated", owner);
+    expect(await rows("select subject from public.inquiries")).toEqual([{ subject: "Markers" }]);
+    await db.exec(`insert into public.inquiry_replies(organization_id,inquiry_id,body) values ('${orgA}','${inquiry.id}','Ordered')`);
+    expect(await rows(`select status from public.inquiries where id='${inquiry.id}'`)).toEqual([{ status: "answered" }]);
+    await as("authenticated", staff);
+    expect(await rows(`select body,author_id from public.inquiry_replies where inquiry_id='${inquiry.id}'`)).toEqual([{ body: "Ordered", author_id: owner }]);
+    await db.exec(`insert into public.inquiry_replies(organization_id,inquiry_id,body) values ('${orgA}','${inquiry.id}','Thanks, when?')`);
+    expect(await rows(`select status from public.inquiries where id='${inquiry.id}'`)).toEqual([{ status: "open" }]);
+    await expect(db.exec(`update public.inquiries set status='answered' where id='${inquiry.id}'`)).rejects.toMatchObject({ code: "42501" });
+    await db.exec(`update public.inquiries set status='closed' where id='${inquiry.id}'`);
+    await expect(db.exec(`insert into public.inquiry_replies(organization_id,inquiry_id,body) values ('${orgA}','${inquiry.id}','after close')`)).rejects.toBeDefined();
+  });
+  it("staff cannot read another member's inquiry", async () => {
+    await as("authenticated", owner);
+    await db.exec(`insert into public.inquiries(organization_id,subject,body) values ('${orgA}','Manager note','Private')`);
+    await as("authenticated", staff);
+    expect(await rows("select * from public.inquiries")).toEqual([]);
+  });
+});
+
 describe("finance", () => {
   beforeEach(async () => {
     await db.exec("reset role");
@@ -705,65 +768,5 @@ describe("finance plan invoices", () => {
     expect(invoices.every(row => row.status === "issued")).toBe(true);
     await as("authenticated", outsider);
     await expect(db.exec(`select public.generate_plan_invoices('${plan}','${section}',null,'2026-09-01')`)).rejects.toMatchObject({ code: "P0002" });
-describe("class summaries", () => {
-  it("count per section inside the tenant only", async () => {
-    await db.exec("reset role");
-    await db.exec(`delete from public.attendance; update public.children set section_id=null; delete from public.sections; delete from public.grade_levels`);
-    await as("authenticated", owner);
-    const grade = (await rows(`insert into public.grade_levels(organization_id,name,stage) values ('${orgA}','G1','primary') returning id`))[0].id;
-    const section = (await rows(`insert into public.sections(organization_id,grade_level_id,name,capacity) values ('${orgA}','${grade}','A',20) returning id`))[0].id;
-    await db.exec(`update public.children set section_id='${section}' where id='${childA}'`);
-    const day = new Date(Date.now() + 3 * 3600_000).toISOString().slice(0, 10);
-    await db.exec(`insert into public.attendance(organization_id,child_id,attendance_date,status) values ('${orgA}','${childA}','${day}','late')`);
-    expect(await rows(`select section_id,total::int from public.section_enrollment('${orgA}') where section_id is not null`)).toEqual([{ section_id: section, total: 1 }]);
-    expect(await rows(`select section_id,status,total::int from public.section_attendance_summary('${orgA}','${day}','${day}')`)).toEqual([{ section_id: section, status: "late", total: 1 }]);
-    await expect(db.exec(`select * from public.section_attendance_summary('${orgA}','2026-01-01','2026-06-01')`)).rejects.toMatchObject({ code: "22023" });
-    await as("authenticated", outsider);
-    expect(await rows(`select * from public.section_enrollment('${orgA}')`)).toEqual([]);
-    expect(await rows(`select * from public.section_attendance_summary('${orgA}','${day}','${day}')`)).toEqual([]);
-    await as("anon");
-    await expect(db.exec(`select * from public.section_enrollment('${orgA}')`)).rejects.toBeDefined();
-  });
-});
-
-describe("my work: task comments and inquiries", () => {
-  beforeEach(async () => {
-    await db.exec("reset role");
-    await db.exec(`delete from public.inquiry_replies; delete from public.inquiries; delete from public.task_comments; insert into public.memberships(organization_id,user_id,role) values ('${orgA}','${staff}','staff') on conflict do nothing`);
-  });
-  it("members comment on tasks as themselves; other tenants see nothing", async () => {
-    await as("authenticated", owner);
-    const task = (await rows(`insert into public.tasks(organization_id,title,assignee_id) values ('${orgA}','Prepare report','${staff}') returning id`))[0].id;
-    await as("authenticated", staff);
-    await db.exec(`insert into public.task_comments(organization_id,task_id,body) values ('${orgA}','${task}','Started')`);
-    expect(await rows(`select author_id,body from public.task_comments where task_id='${task}'`)).toEqual([{ author_id: staff, body: "Started" }]);
-    await expect(db.exec(`insert into public.task_comments(organization_id,task_id,body,author_id) values ('${orgA}','${task}','Forged','${owner}')`)).rejects.toThrow("permission denied");
-    await as("authenticated", outsider);
-    expect(await rows("select * from public.task_comments")).toEqual([]);
-    await expect(db.exec(`insert into public.task_comments(organization_id,task_id,body) values ('${orgA}','${task}','x')`)).rejects.toBeDefined();
-  });
-  it("inquiries are private to their author and managers, and replies drive the status", async () => {
-    await as("authenticated", staff);
-    const inquiry = (await rows(`insert into public.inquiries(organization_id,category,subject,body) values ('${orgA}','supplies','Markers','Need markers') returning id,author_id,status`))[0];
-    expect(inquiry).toMatchObject({ author_id: staff, status: "open" });
-    await as("authenticated", outsider);
-    expect(await rows("select * from public.inquiries")).toEqual([]);
-    await as("authenticated", owner);
-    expect(await rows("select subject from public.inquiries")).toEqual([{ subject: "Markers" }]);
-    await db.exec(`insert into public.inquiry_replies(organization_id,inquiry_id,body) values ('${orgA}','${inquiry.id}','Ordered')`);
-    expect(await rows(`select status from public.inquiries where id='${inquiry.id}'`)).toEqual([{ status: "answered" }]);
-    await as("authenticated", staff);
-    expect(await rows(`select body,author_id from public.inquiry_replies where inquiry_id='${inquiry.id}'`)).toEqual([{ body: "Ordered", author_id: owner }]);
-    await db.exec(`insert into public.inquiry_replies(organization_id,inquiry_id,body) values ('${orgA}','${inquiry.id}','Thanks, when?')`);
-    expect(await rows(`select status from public.inquiries where id='${inquiry.id}'`)).toEqual([{ status: "open" }]);
-    await expect(db.exec(`update public.inquiries set status='answered' where id='${inquiry.id}'`)).rejects.toMatchObject({ code: "42501" });
-    await db.exec(`update public.inquiries set status='closed' where id='${inquiry.id}'`);
-    await expect(db.exec(`insert into public.inquiry_replies(organization_id,inquiry_id,body) values ('${orgA}','${inquiry.id}','after close')`)).rejects.toBeDefined();
-  });
-  it("staff cannot read another member's inquiry", async () => {
-    await as("authenticated", owner);
-    await db.exec(`insert into public.inquiries(organization_id,subject,body) values ('${orgA}','Manager note','Private')`);
-    await as("authenticated", staff);
-    expect(await rows("select * from public.inquiries")).toEqual([]);
   });
 });
