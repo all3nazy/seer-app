@@ -16,3 +16,15 @@ export async function createSupabaseServerClient() {
     }
   });
 }
+
+/**
+ * The signed-in user for page rendering, from the verified access token. With asymmetric signing
+ * keys this is checked locally (no Auth round trip); otherwise supabase-js asks the Auth server,
+ * exactly as getUser() does. Writes still go through RLS, which checks the same token.
+ */
+export async function sessionUser(client: Awaited<ReturnType<typeof createSupabaseServerClient>>): Promise<{ id: string; email: string | undefined } | null> {
+  const { data, error } = await client.auth.getClaims();
+  const sub = data?.claims?.sub;
+  if (error || typeof sub !== "string") return null;
+  return { id: sub, email: typeof data?.claims?.email === "string" ? data.claims.email : undefined };
+}

@@ -66,6 +66,9 @@ beforeAll(async () => {
   const myWork = readdirSync("supabase/migrations").filter(name => name.endsWith("_my_work.sql"));
   if (myWork.length !== 1) throw new Error("Expected exactly one my work migration");
   await db.exec(readFileSync(`supabase/migrations/${myWork[0]}`, "utf8"));
+  const contacts = readdirSync("supabase/migrations").filter(name => name.endsWith("_member_contacts.sql"));
+  if (contacts.length !== 1) throw new Error("Expected exactly one member contacts migration");
+  await db.exec(readFileSync(`supabase/migrations/${contacts[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -669,5 +672,27 @@ describe("my work: task comments and inquiries", () => {
     await db.exec(`insert into public.inquiries(organization_id,subject,body) values ('${orgA}','Manager note','Private')`);
     await as("authenticated", staff);
     expect(await rows("select * from public.inquiries")).toEqual([]);
+  });
+});
+
+describe("member contacts", () => {
+  it("phones are private to the member and managers; only managers read contacts", async () => {
+    await db.exec("reset role");
+    await db.exec(`delete from public.member_phones; update auth.users set email='staff@example.com' where id='${staff}'; insert into public.memberships(organization_id,user_id,role) values ('${orgA}','${staff}','staff') on conflict do nothing`);
+    await as("authenticated", staff);
+    await db.exec(`insert into public.member_phones(organization_id,user_id,phone) values ('${orgA}','${staff}','+966500000002')`);
+    await expect(db.exec(`insert into public.member_phones(organization_id,user_id,phone) values ('${orgA}','${owner}','+966500000009')`)).rejects.toBeDefined();
+    await expect(db.exec(`update public.member_phones set phone='bad' where user_id='${staff}'`)).rejects.toBeDefined();
+    await expect(db.exec(`select * from public.member_contacts('${orgA}')`)).rejects.toMatchObject({ code: "42501" });
+    await as("authenticated", owner);
+    expect(await rows(`select email,phone from public.member_contacts('${orgA}') where user_id='${staff}'`)).toEqual([{ email: "staff@example.com", phone: "+966500000002" }]);
+    await db.exec(`insert into public.member_phones(organization_id,user_id,phone) values ('${orgA}','${owner}','+966500000001')`);
+    await as("authenticated", staff);
+    expect(await rows("select user_id from public.member_phones")).toEqual([{ user_id: staff }]);
+    await as("authenticated", outsider);
+    expect(await rows("select * from public.member_phones")).toEqual([]);
+    await expect(db.exec(`select * from public.member_contacts('${orgA}')`)).rejects.toMatchObject({ code: "42501" });
+    await as("anon");
+    await expect(db.exec(`select * from public.member_contacts('${orgA}')`)).rejects.toBeDefined();
   });
 });

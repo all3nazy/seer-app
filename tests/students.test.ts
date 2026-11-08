@@ -79,3 +79,19 @@ describe("admissions validation", async () => {
     expect(() => reviewValues(form({ status: "enrolled" }))).toThrow();
   });
 });
+
+describe("share links", async () => {
+  const { whatsappNumber, whatsappLink, mailtoLink, taskMessage } = await import("../lib/share");
+  it("normalises Saudi and international numbers for WhatsApp", () => {
+    expect(whatsappNumber("0501234567")).toBe("966501234567");
+    expect(whatsappNumber("+966 50 123 4567")).toBe("966501234567");
+    expect(whatsappNumber("00971501234567")).toBe("971501234567");
+    expect(whatsappNumber("abc")).toBeNull();
+    expect(whatsappLink(null, "hi")).toBe("https://wa.me/?text=hi");
+  });
+  it("builds a task message with the login link", () => {
+    const message = taskMessage({ organization: "روضة", title: "تقرير", due: null, link: "https://x/t", name: "نورة" });
+    expect(message.body).toContain("https://x/t");
+    expect(mailtoLink("a@b.c", message.subject, message.body)).toMatch(/^mailto:a%40b\.c\?subject=/);
+  });
+});

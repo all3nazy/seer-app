@@ -1,10 +1,11 @@
 import { redirect } from "next/navigation";
-import { createSupabaseServerClient } from "../../../lib/supabase/server";
+import { createSupabaseServerClient, sessionUser } from "../../../lib/supabase/server";
 import { supportLink } from "../../../lib/support";
 import { Icon } from "../../../components/icons";
 import { SoundSwitchRow, ThemeSwitchRow } from "../../../components/preferences";
 import SignOutButton from "../../../components/sign-out-button";
 import { MyNameForm } from "../../../components/my-name-form";
+import { MyPhoneForm } from "../../../components/my-phone-form";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "الإعدادات" };
@@ -12,10 +13,12 @@ const roleNames: Record<string, string> = { owner: "مالك", admin: "مدير"
 
 export default async function SettingsPage() {
   const supabase = await createSupabaseServerClient();
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (error || !user) redirect("/login");
+  const user = await sessionUser(supabase);
+  if (!user) redirect("/login");
   const { data: memberships } = await supabase.from("memberships").select("organization_id,role,display_name,organizations(name)").eq("user_id", user.id);
   const myName = (memberships ?? []).map(m => (m as { display_name?: string | null }).display_name).find(Boolean) ?? "";
+  const { data: phones } = await supabase.from("member_phones").select("phone").eq("user_id", user.id).limit(1);
+  const myPhone = phones?.[0]?.phone ?? "";
   const support = supportLink(process.env.SEER_SUPPORT_WHATSAPP ?? "");
   const email = user.email ?? "";
   return <div style={{ maxWidth: 640 }}>
@@ -26,6 +29,10 @@ export default async function SettingsPage() {
       <section aria-labelledby="me"><h2 id="me" className="section-label">اسمك في المنشأة</h2>
         <MyNameForm current={myName} />
         <p className="hint" style={{ marginTop: 8 }}>يظهر لزملائك في الفريق وعلى المهام المسندة لك.</p>
+      </section>
+      <section aria-labelledby="phone"><h2 id="phone" className="section-label">جوالك لاستلام المهام</h2>
+        <MyPhoneForm current={myPhone} />
+        <p className="hint" style={{ marginTop: 8 }}>تستخدمه الإدارة لإرسال المهام لك على واتساب. ما يظهر لزملائك.</p>
       </section>
       <section aria-labelledby="team-link"><h2 id="team-link" className="section-label">الفريق</h2>
         <div className="group"><a className="group-row" href="/dashboard/team"><span className="tile-icon tone-plum"><Icon name="users" /></span><span className="grow">أعضاء المنشأة والدعوات</span><Icon name="arrowNext" /></a></div>

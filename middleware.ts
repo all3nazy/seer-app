@@ -32,8 +32,10 @@ export async function middleware(request: NextRequest) {
       Object.entries(headers).forEach(([name, value]) => response.headers.set(name, value));
     }
   }});
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (request.nextUrl.pathname.startsWith("/dashboard") && (error || !user)) {
+  // Verified access-token claims: checked locally when the project uses asymmetric signing keys,
+  // otherwise supabase-js falls back to asking the Auth server, as getUser() did.
+  const { data, error } = await supabase.auth.getClaims();
+  if (request.nextUrl.pathname.startsWith("/dashboard") && (error || !data?.claims?.sub)) {
     const target = request.nextUrl.clone();
     target.pathname = "/login";
     target.search = "";

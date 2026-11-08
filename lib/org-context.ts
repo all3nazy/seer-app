@@ -1,5 +1,6 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
-import { createSupabaseServerClient } from "./supabase/server";
+import { createSupabaseServerClient, sessionUser } from "./supabase/server";
 import { canManage } from "./operations";
 
 export type OrgChoice = { id: string; name: string };
@@ -14,10 +15,11 @@ export type OrgContext = {
 };
 
 /** Signed-in user and the organization they chose (or their first one). Redirects to login without a session. */
-export async function loadOrgContext(requested?: string): Promise<OrgContext | { error: "load" | "none" }> {
+/** Deduplicated per request, so a page and its children share one lookup. */
+export const loadOrgContext = cache(async function loadOrgContext(requested?: string): Promise<OrgContext | { error: "load" | "none" }> {
   const client = await createSupabaseServerClient();
-  const { data: { user }, error } = await client.auth.getUser();
-  if (error || !user) redirect("/login");
+  const user = await sessionUser(client);
+  if (!user) redirect("/login");
   const { data, error: membershipError } = await client.from("memberships").select("organization_id,role,organizations(name)").eq("user_id", user.id);
   if (membershipError) return { error: "load" };
   const memberships = data ?? [];
@@ -28,4 +30,4 @@ export async function loadOrgContext(requested?: string): Promise<OrgContext | {
     client, userId: user.id, org: member.organization_id as string, orgName: name(member), role: member.role as string,
     manager: canManage(member.role as string), organizations: memberships.map(item => ({ id: item.organization_id as string, name: name(item) })),
   };
-}
+});

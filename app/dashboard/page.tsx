@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { createSupabaseServerClient } from "../../lib/supabase/server";
+import { createSupabaseServerClient, sessionUser } from "../../lib/supabase/server";
 import { canManage } from "../../lib/operations";
 import { riyadhToday } from "../../lib/tasks";
 import { Icon, StackArt } from "../../components/icons";
@@ -14,8 +14,8 @@ function greeting() {
 
 export default async function Dashboard({ searchParams }: { searchParams: Promise<{ m?: string }> }) {
   const supabase = await createSupabaseServerClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) redirect("/login");
+  const user = await sessionUser(supabase);
+  if (!user) redirect("/login");
   const loadMemberships = () => supabase.from("memberships")
     .select("organization_id,role,organizations(name,type)").eq("user_id", user.id);
   // Joins any organization that invited this verified email. Takes no client input;
