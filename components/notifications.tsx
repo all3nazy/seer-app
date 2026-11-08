@@ -1,10 +1,12 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { getSupabaseBrowserClient } from "../lib/supabase";
 import { Icon } from "./icons";
 import { notify } from "./feedback";
 
+// Both bells receive the same notification; show its pop-up once.
+const announced = new Set<string>();
 type Item = { id: string; kind: string; title: string; body: string | null; url: string | null; read_at: string | null; created_at: string };
 const ago = (iso: string) => {
   const minutes = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000));
@@ -19,6 +21,9 @@ export function NotificationBell({ userId }: { userId: string }) {
   const [items, setItems] = useState<Item[]>([]);
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
+  // The bell appears twice (sidebar and phone top bar); each needs its own realtime channel name,
+  // otherwise the second one reuses a channel that is already subscribed and fails.
+  const instance = useId().replace(/[^a-zA-Z0-9]/g, "");
   const load = useCallback(async () => {
     const { data } = await getSupabaseBrowserClient().from("notifications").select("id,kind,title,body,url,read_at,created_at").order("created_at", { ascending: false }).limit(20);
     setItems((data ?? []) as Item[]);
@@ -26,15 +31,15 @@ export function NotificationBell({ userId }: { userId: string }) {
   useEffect(() => {
     void load();
     const client = getSupabaseBrowserClient();
-    const channel = client.channel(`notifications-${userId}`)
+    const channel = client.channel(`notifications-${userId}-${instance}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` }, (payload: { new: unknown }) => {
         const item = payload.new as Item;
         setItems(current => [item, ...current.filter(row => row.id !== item.id)].slice(0, 20));
-        notify(item.title, "info");
+        if (!announced.has(item.id)) { announced.add(item.id); notify(item.title, "info"); }
       })
       .subscribe();
     return () => { void client.removeChannel(channel); };
-  }, [userId, load]);
+  }, [userId, load, instance]);
   useEffect(() => {
     if (!open) return;
     const close = (event: MouseEvent) => { if (box.current && !box.current.contains(event.target as Node)) setOpen(false); };

@@ -15,7 +15,7 @@ export function LiveRefresh({ organizationId }: { organizationId: string }) {
     let connected = false;
     try {
       const filter = `organization_id=eq.${organizationId}`;
-      channel = getSupabaseBrowserClient().channel(`classes-${organizationId}`)
+      channel = getSupabaseBrowserClient().channel(`classes-${organizationId}-${Math.random().toString(36).slice(2, 8)}`)
         .on("postgres_changes", { event: "*", schema: "public", table: "attendance", filter }, refresh)
         .on("postgres_changes", { event: "*", schema: "public", table: "pickups", filter }, refresh)
         .subscribe((status: string) => { connected = status === "SUBSCRIBED"; setLive(connected); });
