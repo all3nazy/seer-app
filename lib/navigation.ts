@@ -13,6 +13,8 @@ export const navLinks: NavLink[] = [
   { href: "/dashboard/my", label: "مهامي", short: "مهامي", icon: "check", group: "today", phone: true, tab: true },
   { href: "/dashboard/attendance", label: "الحضور", short: "الحضور", icon: "clock", group: "today", phone: true, tab: true },
   { href: "/dashboard/pickup", label: "تسليم الطلاب", short: "التسليم", icon: "pickup", group: "today", phone: true, tab: true },
+  { href: "/dashboard/daily", label: "التقرير اليومي", short: "التقرير", icon: "calendar", group: "today", phone: true },
+  { href: "/dashboard/announcements", label: "الإعلانات", short: "الإعلانات", icon: "bell", group: "today", phone: true },
   { href: "/dashboard/children", label: "الطلاب", short: "الطلاب", icon: "child", group: "students", phone: true },
   { href: "/dashboard/classes", label: "متابعة الفصول", short: "الفصول", icon: "chart", group: "today", phone: true },
   { href: "/dashboard/inquiries", label: "استفسارات الموظفين", short: "الاستفسارات", icon: "chat", group: "admin", phone: true },
