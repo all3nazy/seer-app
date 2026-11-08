@@ -15,6 +15,7 @@ export default async function MorePage() {
   const items = visibleLinks(manager).filter(link => !link.tab);
   return <div style={{ maxWidth: 640 }}>
     <header className="page-head"><div><h1>المزيد</h1><p>كل الأقسام. على الجوال تظهر أقسام العمل اليومي، والباقي على الكمبيوتر أو الآيباد.</p></div></header>
+    <a className="info-banner" href="/dashboard/settings#app" style={{ display: "block", marginBottom: 14, textDecoration: "none" }}>📲 ثبّت سِير على جهازك واختر أيقونته</a>
     <div className="group">
       {items.map(link => <Link key={link.href} className={`group-row${link.phone ? "" : " desktop-only"}`} href={link.href}>
         <span className="tile-icon tone-plum"><Icon name={link.icon} /></span><span className="grow">{link.label}</span><Icon name="arrowNext" />

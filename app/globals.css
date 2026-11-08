@@ -806,3 +806,12 @@ a.stat:hover,a.list-row:hover,a.tile:hover,.org-tile:hover,.sidebar .nav-link:ho
   .sidebar-nav{gap:10px;-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(to bottom,#000 calc(100% - 28px),transparent);padding-bottom:24px}
 }
 .portal-grades b{white-space:nowrap}
+/* Install the app and pick its icon */
+.install-steps{margin:0;padding-inline-start:20px;display:grid;gap:6px;color:var(--text-2)}
+.icon-picker{display:grid;gap:12px}
+.icon-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.icon-option{display:grid;justify-items:center;gap:6px;padding:14px 10px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);text-align:center;cursor:pointer;font:inherit}
+.icon-option img{border-radius:20px;box-shadow:var(--shadow)}
+.icon-option span{font-size:12px;color:var(--text-3);line-height:1.5}
+.icon-option.is-picked{border-color:var(--primary);background:var(--tint-lilac)}
+@media (max-width:520px){.icon-options{grid-template-columns:1fr}.icon-option{grid-template-columns:72px 1fr;justify-items:start;text-align:start;align-items:center}.icon-option img{grid-row:1/3;width:72px;height:72px}}
