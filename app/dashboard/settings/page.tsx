@@ -6,6 +6,9 @@ import { SoundSwitchRow, ThemeSwitchRow } from "../../../components/preferences"
 import SignOutButton from "../../../components/sign-out-button";
 import { MyNameForm } from "../../../components/my-name-form";
 import { MyPhoneForm } from "../../../components/my-phone-form";
+import { cookies } from "next/headers";
+import { InstallCard, IconPicker } from "../../../components/install-app";
+import { iconCookie, parseIconChoice } from "../../../lib/app-icons";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "الإعدادات" };
@@ -21,11 +24,21 @@ export default async function SettingsPage() {
   const myPhone = phones?.[0]?.phone ?? "";
   const support = supportLink(process.env.SEER_SUPPORT_WHATSAPP ?? "");
   const email = user.email ?? "";
+  const icon = parseIconChoice((await cookies()).get(iconCookie)?.value).choice;
   return <div style={{ maxWidth: 640 }}>
     <header className="page-head"><div><h1>الإعدادات</h1><p>حسابك وتفضيلات الواجهة.</p></div></header>
     <div className="stack">
       <div className="list-row"><span className="avatar" style={{ margin: 0, width: 48, height: 48, fontSize: 18 }} aria-hidden="true">{(email[0] ?? "س").toUpperCase()}</span>
         <span className="body"><span className="title" dir="ltr" style={{ textAlign: "end" }}>{email}</span><span className="sub">{(memberships ?? []).map(m => `${(m.organizations as unknown as { name: string } | null)?.name ?? "منشأة"} (${roleNames[m.role] ?? "عضو"})`).join("، ") || "غير مرتبط بمنشأة"}</span></span></div>
+      <section aria-labelledby="app" id="app"><h2 id="app-title" className="section-label">سِير على جهازك</h2>
+        <div className="card" style={{ display: "grid", gap: 14 }}>
+          <p style={{ margin: 0 }}>ثبّت سِير على الكمبيوتر أو الجوال أو الآيباد، ويفتح مثل التطبيق في نافذته الخاصة بأيقونته على الشاشة الرئيسية.</p>
+          <InstallCard />
+          <h3 style={{ margin: "6px 0 0", fontSize: 16 }}>أيقونة التطبيق</h3>
+          <IconPicker initial={icon} />
+          <p className="hint" style={{ margin: 0 }}>إذا كان سِير مثبّتًا: على الكمبيوتر وأندرويد تتحدّث الأيقونة تلقائيًا خلال يوم، وعلى الآيفون والآيباد احذف الأيقونة من الشاشة الرئيسية وأضفها مرة ثانية.</p>
+        </div>
+      </section>
       <section aria-labelledby="me"><h2 id="me" className="section-label">اسمك في المنشأة</h2>
         <MyNameForm current={myName} />
         <p className="hint" style={{ marginTop: 8 }}>يظهر لزملائك في الفريق وعلى المهام المسندة لك.</p>
