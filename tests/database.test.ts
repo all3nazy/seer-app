@@ -90,6 +90,9 @@ beforeAll(async () => {
   const learning = readdirSync("supabase/migrations").filter(name => name.endsWith("_learning.sql"));
   if (learning.length !== 1) throw new Error("Expected exactly one learning migration");
   await db.exec(readFileSync(`supabase/migrations/${learning[0]}`, "utf8"));
+  const transport = readdirSync("supabase/migrations").filter(name => name.endsWith("_transport.sql"));
+  if (transport.length !== 1) throw new Error("Expected exactly one transport migration");
+  await db.exec(readFileSync(`supabase/migrations/${transport[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -1136,5 +1139,47 @@ describe("subjects, timetable, grades and behaviour", () => {
     await as("authenticated", staff);
     expect(await rows(`insert into public.behavior_notes(organization_id,child_id,kind,category,points) values ('${orgA}','${childA}','concern','conduct',3) returning points`)).toEqual([{ points: -3 }]);
     expect(await rows(`insert into public.behavior_notes(organization_id,child_id,kind,category,points) values ('${orgA}','${childA}','positive','participation',-2) returning points`)).toEqual([{ points: 2 }]);
+  });
+});
+
+describe("transport routes and trips", () => {
+  let route: string;
+  const busParent = "40000000-0000-0000-0000-0000000000d1";
+  beforeEach(async () => {
+    await db.exec("reset role");
+    await db.exec(`delete from public.vehicles; delete from public.bus_routes; delete from private.guardian_portals;
+      insert into public.memberships(organization_id,user_id,role) values ('${orgA}','${staff}','staff') on conflict do nothing;
+      insert into public.guardians(id,organization_id,full_name) values ('${busParent}','${orgA}','Bus Parent') on conflict do nothing;
+      insert into public.child_guardians(organization_id,child_id,guardian_id,relationship) values ('${orgA}','${childA}','${busParent}','father') on conflict do nothing`);
+    await as("authenticated", owner);
+    const vehicle = (await rows(`insert into public.vehicles(organization_id,name,capacity) values ('${orgA}','Bus 1',14) returning id`))[0].id as string;
+    route = (await rows(`insert into public.bus_routes(organization_id,name,vehicle_id) values ('${orgA}','North','${vehicle}') returning id`))[0].id as string;
+    await db.exec(`insert into public.route_stops(organization_id,route_id,child_id,stop_name,stop_order) values ('${orgA}','${route}','${childA}','Gate 3',1)`);
+  });
+  const today = async () => (await rows("select (now() at time zone 'Asia/Riyadh')::date::text as d"))[0].d as string;
+  it("managers set up routes; staff run today's trip and mark students on the route only", async () => {
+    await as("authenticated", staff);
+    await expect(db.exec(`insert into public.bus_routes(organization_id,name) values ('${orgA}','South')`)).rejects.toMatchObject({ code: "42501" });
+    await expect(db.exec(`insert into public.transport_trips(organization_id,route_id,trip_date,direction) values ('${orgA}','${route}','2020-01-01','to_school')`)).rejects.toMatchObject({ code: "23514" });
+    const trip = (await rows(`insert into public.transport_trips(organization_id,route_id,trip_date,direction) values ('${orgA}','${route}','${await today()}','to_school') returning id,started_by`))[0];
+    expect(trip.started_by).toBe(staff);
+    expect(await rows(`insert into public.trip_events(organization_id,trip_id,child_id,event) values ('${orgA}','${trip.id}','${childA}','boarded') returning recorded_by`)).toEqual([{ recorded_by: staff }]);
+    await expect(db.exec(`insert into public.trip_events(organization_id,trip_id,child_id,event) values ('${orgA}','${trip.id}','${childA}','boarded')`)).rejects.toMatchObject({ code: "23505" });
+    await db.exec("reset role");
+    const stranger = (await rows(`insert into public.children(organization_id,full_name) values ('${orgA}','Walker') returning id`))[0].id as string;
+    await as("authenticated", staff);
+    await expect(db.exec(`insert into public.trip_events(organization_id,trip_id,child_id,event) values ('${orgA}','${trip.id}','${stranger}','boarded')`)).rejects.toMatchObject({ code: "23514" });
+    await db.exec(`update public.transport_trips set finished_at=now() where id='${trip.id}'`);
+    await expect(db.exec(`insert into public.trip_events(organization_id,trip_id,child_id,event) values ('${orgA}','${trip.id}','${childA}','dropped')`)).rejects.toMatchObject({ code: "23514" });
+    await as("authenticated", outsider);
+    expect(await rows("select * from public.trip_events")).toEqual([]);
+  });
+  it("the family portal shows today's bus events", async () => {
+    const trip = (await rows(`insert into public.transport_trips(organization_id,route_id,trip_date,direction) values ('${orgA}','${route}','${await today()}','to_home') returning id`))[0].id as string;
+    await db.exec(`insert into public.trip_events(organization_id,trip_id,child_id,event) values ('${orgA}','${trip}','${childA}','dropped')`);
+    const token = (await rows(`select public.guardian_portal_token('${busParent}') as t`))[0].t as string;
+    await as("anon");
+    const portal = (await rows(`select public.family_portal('${token}') as p`))[0].p as { children: { bus: { route: string; event: string }[] }[] };
+    expect(portal.children[0].bus).toMatchObject([{ route: "North", event: "dropped" }]);
   });
 });
