@@ -4,6 +4,7 @@ import { OrgSwitcher, OrgUnavailable } from "../../../components/org-unavailable
 import { holidayOn, sectionGenderLabels, type Section } from "../../../lib/academics";
 import { attendanceStatuses, isIsoDate, riyadhToday, type AttendanceStatus } from "../../../lib/students";
 import { memberName, type Member } from "../../../lib/team";
+import { LiveRefresh } from "../../../components/live-refresh";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "متابعة الفصول" };
@@ -65,7 +66,10 @@ export default async function ClassesPage({ searchParams }: { searchParams: Prom
   return <>
     <header className="page-head">
       <div><h1>متابعة الفصول</h1><p>{orgName} — {day === today ? `اليوم، ${arabicDay(day)}` : arabicDay(day)}</p></div>
-      <OrgSwitcher path="/dashboard/classes" current={org} organizations={organizations} extra={{ day }} />
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        {day === today ? <LiveRefresh organizationId={org} /> : null}
+        <OrgSwitcher path="/dashboard/classes" current={org} organizations={organizations} extra={{ day }} />
+      </div>
     </header>
     <form className="toolbar" style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "end", marginBottom: 18 }}>
       <input type="hidden" name="org" value={org} />
@@ -99,7 +103,8 @@ export default async function ClassesPage({ searchParams }: { searchParams: Prom
             const teacher = memberRows.find(member => member.user_id === section.homeroom_teacher_id);
             const over = section.capacity !== null && size > section.capacity;
             return <tr key={section.id}>
-              <td><Link href={`/dashboard/attendance?org=${orgParam}&day=${day}&section=${section.id}`}><strong>{gradeRows.find(grade => grade.id === section.grade_level_id)?.name} — {section.name}</strong></Link>
+              <td><Link href={day === today ? `/dashboard/classes/${section.id}?org=${orgParam}` : `/dashboard/attendance?org=${orgParam}&day=${day}&section=${section.id}`}><strong>{gradeRows.find(grade => grade.id === section.grade_level_id)?.name} — {section.name}</strong></Link>
+                {day === today ? <Link className="chip-soft ok" style={{ marginInlineStart: 8, textDecoration: "none" }} href={`/dashboard/classes/${section.id}?org=${orgParam}`}>مباشر</Link> : null}
                 <span className="hint" style={{ display: "block" }}>{[sectionGenderLabels[section.gender], teacher ? memberName(teacher, teacher.user_id === userId) : null].filter(Boolean).join(" · ")}</span></td>
               <td><span className={`chip-soft${over ? " rose" : ""}`}>{size.toLocaleString("ar-SA")}{section.capacity ? ` / ${section.capacity.toLocaleString("ar-SA")}` : ""}</span></td>
               <td>{c.present.toLocaleString("ar-SA")}</td><td>{c.late.toLocaleString("ar-SA")}</td><td>{c.absent.toLocaleString("ar-SA")}</td><td>{c.excused.toLocaleString("ar-SA")}</td>
