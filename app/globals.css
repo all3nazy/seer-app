@@ -751,3 +751,4 @@ button.chip-soft[aria-pressed="true"]{box-shadow:inset 0 0 0 1.5px currentColor}
 .pay-summary{display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center}.pay-summary strong{font-size:32px;color:var(--brand)}.pay-summary span{color:var(--text-2);font-size:13px}
 .pay-result{display:flex;flex-direction:column;gap:4px;text-align:center}.pay-result.ok{background:var(--tint-mint)}.pay-result.bad{background:var(--tint-rose)}
 .steps{margin:0;padding-inline-start:20px;display:grid;gap:8px}.steps code{font-size:12.5px}
+.confirm-form{display:grid;gap:12px}.confirm-form input{font-size:20px;text-align:center;letter-spacing:2px}
