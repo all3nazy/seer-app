@@ -81,6 +81,9 @@ beforeAll(async () => {
   const branded = readdirSync("supabase/migrations").filter(name => name.endsWith("_branded_documents.sql"));
   if (branded.length !== 1) throw new Error("Expected exactly one branded documents migration");
   await db.exec(readFileSync(`supabase/migrations/${branded[0]}`, "utf8"));
+  const family = readdirSync("supabase/migrations").filter(name => name.endsWith("_family_portal.sql"));
+  if (family.length !== 1) throw new Error("Expected exactly one family portal migration");
+  await db.exec(readFileSync(`supabase/migrations/${family[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -972,5 +975,60 @@ describe("branded documents and quotes", () => {
     expect(shared).toMatchObject({ kind: "invoice", document: { total: 230, paid_total: 100 } });
     expect(shared.payments).toHaveLength(1);
     expect((await rows(`select public.shared_document('00000000-0000-0000-0000-000000000000') as d`))[0].d).toBeNull();
+  });
+});
+
+describe("family portal, daily reports and announcements", () => {
+  const parent = "40000000-0000-0000-0000-0000000000c1";
+  const otherKid = "30000000-0000-0000-0000-0000000000c2";
+  beforeEach(async () => {
+    await db.exec("reset role");
+    await db.exec(`delete from public.daily_reports; delete from public.announcements; delete from private.guardian_portals;
+      insert into public.memberships(organization_id,user_id,role) values ('${orgA}','${staff}','staff') on conflict do nothing;
+      insert into public.guardians(id,organization_id,full_name) values ('${parent}','${orgA}','Portal Parent') on conflict do nothing;
+      insert into public.children(id,organization_id,full_name) values ('${otherKid}','${orgA}','Someone Else') on conflict do nothing;
+      insert into public.child_guardians(organization_id,child_id,guardian_id,relationship) values ('${orgA}','${childA}','${parent}','mother') on conflict do nothing`);
+  });
+  const today = async () => (await rows("select (now() at time zone 'Asia/Riyadh')::date::text as d"))[0].d as string;
+  it("staff write today's report once per child; past days are for managers; the author is stamped", async () => {
+    await as("authenticated", staff);
+    const day = await today();
+    expect(await rows(`insert into public.daily_reports(organization_id,child_id,report_date,mood,lunch,nap_minutes) values ('${orgA}','${childA}','${day}','happy','all',60) returning updated_by`)).toEqual([{ updated_by: staff }]);
+    await expect(db.exec(`insert into public.daily_reports(organization_id,child_id,report_date) values ('${orgA}','${childA}','${day}')`)).rejects.toMatchObject({ code: "23505" });
+    await expect(db.exec(`insert into public.daily_reports(organization_id,child_id,report_date) values ('${orgA}','${childA}','2020-01-01')`)).rejects.toMatchObject({ code: "42501" });
+    await expect(db.exec(`update public.daily_reports set mood='sad' where child_id='${childA}'`)).rejects.toMatchObject({ code: "23514" });
+    await as("authenticated", outsider);
+    expect(await rows("select * from public.daily_reports")).toEqual([]);
+  });
+  it("only managers publish announcements", async () => {
+    await as("authenticated", staff);
+    await expect(db.exec(`insert into public.announcements(organization_id,title,body) values ('${orgA}','Hi','Body')`)).rejects.toMatchObject({ code: "42501" });
+    await as("authenticated", owner);
+    expect(await rows(`insert into public.announcements(organization_id,title,body,audience) values ('${orgA}','Trip','Bring hats','families') returning created_by`)).toEqual([{ created_by: owner }]);
+    await as("authenticated", staff);
+    expect(await rows("select title from public.announcements")).toEqual([{ title: "Trip" }]);
+  });
+  it("a guardian's link shows only their own children and family announcements; managers can renew it", async () => {
+    await as("authenticated", owner);
+    const day = await today();
+    await db.exec(`insert into public.daily_reports(organization_id,child_id,report_date,mood) values ('${orgA}','${childA}','${day}','calm'),('${orgA}','${otherKid}','${day}','upset')`);
+    await db.exec(`insert into public.announcements(organization_id,title,body,audience) values ('${orgA}','Families','For parents','families'),('${orgA}','Staff only','Meeting','staff')`);
+    const token = (await rows(`select public.guardian_portal_token('${parent}') as t`))[0].t as string;
+    expect((await rows(`select public.guardian_portal_token('${parent}') as t`))[0].t).toBe(token);
+    await as("authenticated", staff);
+    await expect(db.exec(`select public.guardian_portal_token('${parent}')`)).rejects.toMatchObject({ code: "P0002" });
+    await expect(db.exec("select * from private.guardian_portals")).rejects.toBeDefined();
+    await as("anon");
+    const portal = (await rows(`select public.family_portal('${token}') as p`))[0].p as { guardian: string; children: { name: string; reports: { mood: string }[] }[]; announcements: { title: string }[] };
+    expect(portal.guardian).toBe("Portal Parent");
+    expect(portal.children.map(child => child.name)).toEqual(["Private Child A"]);
+    expect(portal.children[0].reports[0].mood).toBe("calm");
+    expect(portal.announcements.map(item => item.title)).toEqual(["Families"]);
+    expect((await rows("select public.family_portal(gen_random_uuid()) as p"))[0].p).toBeNull();
+    await as("authenticated", owner);
+    const fresh = (await rows(`select public.guardian_portal_token('${parent}', true) as t`))[0].t as string;
+    expect(fresh).not.toBe(token);
+    await as("anon");
+    expect((await rows(`select public.family_portal('${token}') as p`))[0].p).toBeNull();
   });
 });

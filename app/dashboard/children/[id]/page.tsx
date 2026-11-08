@@ -9,6 +9,7 @@ import { age, attendanceLabels, attendanceStatuses, attendanceTone, genderLabels
 import { relationshipLabels, type Relationship } from "../../../../lib/team";
 import { sectionLabel } from "../../../../lib/academics";
 import { AuthorizedPickupForm, AuthorizedToggle } from "../../../../components/pickup-forms";
+import { PortalLinkButton } from "../../../../components/family-forms";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "ملف الطالب" };
@@ -23,7 +24,7 @@ export default async function StudentFile({ params, searchParams }: { params: Pr
   try { id = uuid(rawId); } catch { notFound(); }
   const context = await loadOrgContext(requestedOrg);
   if ("error" in context) return <OrgUnavailable reason={context.error} />;
-  const { client, org, manager } = context;
+  const { client, org, orgName, manager } = context;
   const { data: child, error } = await client.from("children").select("id,full_name,date_of_birth,gender,national_id,branch_id,notes,created_at,section_id,photo_consent,photo_consent_at").eq("organization_id", org).eq("id", id).maybeSingle();
   if (error) return <section className="card"><h1>تعذر تحميل ملف الطالب</h1><p role="alert">أعد تحميل الصفحة أو حاول لاحقًا.</p></section>;
   if (!child) notFound();
@@ -82,7 +83,8 @@ export default async function StudentFile({ params, searchParams }: { params: Pr
       {links.length ? <ul className="records">{links.map(link => {
         const guardian = guardians.find(item => item.id === link.guardian_id);
         return <li key={link.guardian_id}><span>{guardian?.full_name ?? "ولي أمر"} <span className="chip-soft">{relationshipLabels[link.relationship as Relationship] ?? link.relationship}</span></span>
-          {guardian?.phone ? <a href={`tel:${guardian.phone}`} dir="ltr">{guardian.phone}</a> : null}</li>;
+          <span style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>{guardian?.phone ? <a href={`tel:${guardian.phone}`} dir="ltr">{guardian.phone}</a> : null}
+            {manager && guardian ? <PortalLinkButton guardianId={guardian.id} guardianName={guardian.full_name} phone={guardian.phone} organization={orgName} /> : null}</span></li>;
       })}</ul> : <p className="hint">ما فيه ولي أمر مربوط بهذا الطالب.</p>}
       {manager ? <details className="desktop-only" style={{ marginTop: 12 }}><summary>ربط ولي أمر أو إلغاء ربط</summary>
         <FamilyLinks organizationId={org} manager childrenOptions={[{ id, name: profile.full_name }]} guardians={guardians.map(item => ({ id: item.id, name: item.full_name }))} links={links} />
