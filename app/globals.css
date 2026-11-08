@@ -833,3 +833,10 @@ a.stat:hover,a.list-row:hover,a.tile:hover,.org-tile:hover,.sidebar .nav-link:ho
 .absence-form{display:grid;gap:10px}
 .absence-form label{display:grid;gap:4px;font-size:14px}
 .import-table tr.bad td{background:var(--tint-rose)}
+/* System health */
+.health-list{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.health-list li{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;background:var(--surface-2)}
+.health-list .grow{flex:1;min-width:0}
+.health-dot{width:10px;height:10px;border-radius:50%;background:var(--ok);flex-shrink:0}
+.health-list li.warn .health-dot{background:var(--sun)}
+.health-list li.info .health-dot{background:var(--sky)}

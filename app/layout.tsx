@@ -4,6 +4,7 @@ import "@fontsource-variable/alexandria/wght.css";
 import "./globals.css";
 import { iconCookie, iconFiles, parseIconChoice } from "../lib/app-icons";
 import { InstallRegistrar } from "../components/install-app";
+import { ErrorWatch } from "../components/error-watch";
 
 const description = "منصة عربية لإدارة عمليات المدارس الأهلية والحضانات: المهام والسجلات والمساعد في مكان واحد.";
 /** Icons follow the person's choice in Settings (a cookie), so the installed app shows it too. */
@@ -29,6 +30,6 @@ const themeScript = `try{var t=localStorage.getItem("seer-theme");if(t==="light"
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return <html lang="ar" dir="rtl" suppressHydrationWarning>
     <head><script dangerouslySetInnerHTML={{ __html: themeScript }} /></head>
-    <body>{children}<InstallRegistrar /></body>
+    <body>{children}<InstallRegistrar /><ErrorWatch /></body>
   </html>;
 }

@@ -7,7 +7,7 @@ import { classifyIntent, operationsLink, topicNames, type AssistantIntent, type 
 import { play } from "../lib/sound";
 import { parseCommand, type BotCommand } from "../lib/bot-commands";
 import { findGuide, isHowTo, type GuideEntry } from "../lib/bot-knowledge";
-import { botBriefing, botCompleteTask, botDecideLeave, botMyTasks, botPendingLeave, botPickupPeople, botRecordPickup, botUnread, botCreateTask, botFindSections, botFindStudents, botSetAttendance, botToday, type BotStudent } from "../app/dashboard/assistant/actions";
+import { botBriefing, botHealth, botRepair, botCompleteTask, botDecideLeave, botMyTasks, botPendingLeave, botPickupPeople, botRecordPickup, botUnread, botCreateTask, botFindSections, botFindStudents, botSetAttendance, botToday, type BotStudent } from "../app/dashboard/assistant/actions";
 import { briefingItems, briefingText, withOrg, dayGreeting, detectMood, empathyLead, notUnderstood, smallTalk, stripCourtesy } from "../lib/bot-persona";
 import { attendanceLabels, type AttendanceStatus } from "../lib/students";
 import { botPersonas, tipOfDay, type Stage } from "../lib/stage";
@@ -124,6 +124,19 @@ export function AssistantPanel({ organizations, supportPhone, stage = "school" }
           ],
         }) })),
         actions: [{ href: `/dashboard/staff?org=${orgParam}`, label: "الموظفين" }],
+      };
+    }
+    if (command.kind === "health") {
+      const result = await botHealth(org);
+      if (result.error) return { text: result.error };
+      const issues = (result.data ?? []).filter(check => check.count > 0);
+      if (!issues.length) return { text: "فحصت النظام: كل شيء سليم ✓ ما فيه رسائل عالقة ولا دفعات معلّقة ولا أخطاء جديدة.", actions: [{ href: `/dashboard/health?org=${orgParam}`, label: "صحة النظام" }] };
+      const fixable = issues.filter(check => check.fixable);
+      return {
+        text: `فحصت النظام: ${issues.length.toLocaleString("ar-SA")} بند يحتاج انتباه.${fixable.length ? " أقدر أصلح الآمن منها الحين:" : ""}`,
+        list: issues.map(check => ({ label: `${check.label}: ${check.count.toLocaleString("ar-SA")}`, sub: check.fixable ? "يُصلح تلقائيًا" : null, href: `${check.href}${check.href.includes("?") ? "&" : "?"}org=${orgParam}` })),
+        choices: fixable.map(check => ({ label: `إصلاح: ${check.label}`, pick: () => ({ text: `أصلح «${check.label}»؟`, confirm: { summary: check.label, run: () => botRepair(org, check.id) } }) })),
+        actions: [{ href: `/dashboard/health?org=${orgParam}`, label: "صحة النظام" }],
       };
     }
     if (command.kind === "unread") {
