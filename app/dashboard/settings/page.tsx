@@ -8,6 +8,7 @@ import { MyNameForm } from "../../../components/my-name-form";
 import { MyPhoneForm } from "../../../components/my-phone-form";
 import { cookies } from "next/headers";
 import { InstallCard, IconPicker } from "../../../components/install-app";
+import { ChangePassword } from "../../../components/change-password";
 import { iconCookie, parseIconChoice } from "../../../lib/app-icons";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +30,7 @@ export default async function SettingsPage() {
     <header className="page-head"><div><h1>الإعدادات</h1><p>حسابك وتفضيلات الواجهة.</p></div></header>
     <div className="stack">
       <div className="list-row"><span className="avatar" style={{ margin: 0, width: 48, height: 48, fontSize: 18 }} aria-hidden="true">{(email[0] ?? "س").toUpperCase()}</span>
-        <span className="body"><span className="title" dir="ltr" style={{ textAlign: "end" }}>{email}</span><span className="sub">{(memberships ?? []).map(m => `${(m.organizations as unknown as { name: string } | null)?.name ?? "منشأة"} (${roleNames[m.role] ?? "عضو"})`).join("، ") || "غير مرتبط بمنشأة"}</span></span></div>
+        <span className="body"><span className="title" dir="ltr" style={{ textAlign: "end" }}>{email.endsWith("@users.seer.local") ? email.split("@")[0] : email}</span><span className="sub">{(memberships ?? []).map(m => `${(m.organizations as unknown as { name: string } | null)?.name ?? "منشأة"} (${roleNames[m.role] ?? "عضو"})`).join("، ") || "غير مرتبط بمنشأة"}</span></span></div>
       <section aria-labelledby="app" id="app"><h2 id="app-title" className="section-label">سِير على جهازك</h2>
         <div className="card" style={{ display: "grid", gap: 14 }}>
           <p style={{ margin: 0 }}>ثبّت سِير على الكمبيوتر أو الجوال أو الآيباد، ويفتح مثل التطبيق في نافذته الخاصة بأيقونته على الشاشة الرئيسية.</p>
@@ -46,6 +47,9 @@ export default async function SettingsPage() {
       <section aria-labelledby="phone"><h2 id="phone" className="section-label">جوالك لاستلام المهام</h2>
         <MyPhoneForm current={myPhone} />
         <p className="hint" style={{ marginTop: 8 }}>تستخدمه الإدارة لإرسال المهام لك على واتساب. ما يظهر لزملائك.</p>
+      </section>
+      <section aria-labelledby="password-title"><h2 id="password-title" className="section-label">كلمة المرور</h2>
+        <ChangePassword />
       </section>
       <section aria-labelledby="team-link"><h2 id="team-link" className="section-label">الفريق</h2>
         <div className="group"><a className="group-row" href="/dashboard/team"><span className="tile-icon tone-plum"><Icon name="users" /></span><span className="grow">أعضاء المنشأة والدعوات</span><Icon name="arrowNext" /></a></div>

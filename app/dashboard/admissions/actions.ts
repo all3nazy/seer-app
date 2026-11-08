@@ -1,6 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { createSupabaseServerClient } from "../../../lib/supabase/server";
+import { createSupabaseServerClient, authUser } from "../../../lib/supabase/server";
 import { canManage, uuid, ValidationError } from "../../../lib/operations";
 import { reviewValues } from "../../../lib/admissions";
 
@@ -8,7 +8,7 @@ export type AdmissionResult = { error?: string; success?: string; childId?: stri
 
 async function managerClient(org: string) {
   const client = await createSupabaseServerClient();
-  const { data: { user }, error } = await client.auth.getUser();
+  const { data: { user }, error } = await authUser(client);
   if (error || !user) return { error: "انتهت الجلسة. سجل الدخول مجددًا." } as const;
   const { data: member, error: memberError } = await client.from("memberships").select("role").eq("organization_id", org).eq("user_id", user.id).maybeSingle();
   if (memberError || !canManage(member?.role)) return { error: "القبول لمسؤول المنشأة فقط." } as const;

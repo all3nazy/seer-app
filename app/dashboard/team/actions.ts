@@ -1,6 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { createSupabaseServerClient } from "../../../lib/supabase/server";
+import { createSupabaseServerClient, authUser } from "../../../lib/supabase/server";
 import { canManage, uuid, ValidationError } from "../../../lib/operations";
 import { displayName, inviteValues, isRole } from "../../../lib/team";
 
@@ -9,7 +9,7 @@ export type TeamResult = { error?: string; success?: string };
 // these checks give clear messages before the database rejects anything.
 async function session(org?: string) {
   const client = await createSupabaseServerClient();
-  const { data: { user }, error } = await client.auth.getUser();
+  const { data: { user }, error } = await authUser(client);
   if (error || !user) return { error: "انتهت الجلسة. سجّل الدخول مجددًا." } as const;
   if (!org) return { client, user, role: null } as const;
   const { data, error: memberError } = await client.from("memberships").select("role").eq("organization_id", org).eq("user_id", user.id).maybeSingle();
@@ -120,5 +120,45 @@ export async function setMyPhone(data: FormData): Promise<TeamResult> {
     }
     refresh();
     return { success: phone ? "حُفظ رقمك" : "حُذف رقمك" };
+  } catch (error) { return failure(error); }
+}
+
+export type JoinLinkResult = TeamResult & { link?: string };
+/** A join link for a new employee (/j/CODE). Admins invite staff; owners may also invite admins. */
+export async function createJoinLink(organizationId: string, role: string, name: string, uses: number): Promise<JoinLinkResult> {
+  try {
+    const org = uuid(organizationId);
+    if (role !== "staff" && role !== "admin") return { error: "اختر الدور." };
+    const auth = await session(org);
+    if ("error" in auth) return { error: auth.error };
+    const { data, error } = await auth.client.rpc("create_join_link", { org, invite_role: role, name: name.trim().slice(0, 80) || null, uses: Math.min(Math.max(Math.round(uses) || 1, 1), 50) });
+    if (error) return { error: error.code === "42501" ? (role === "admin" ? "دعوة المديرين للمالك فقط." : "الدعوة لمالك المنشأة أو مديرها.") : "تعذر إنشاء الرابط." };
+    revalidatePath("/dashboard/team");
+    const { siteOrigin } = await import("../../../lib/origin");
+    return { success: "جاهز. أرسل الرابط للموظف؛ يختار اسم مستخدم وكلمة مرور ويدخل مباشرة.", link: `${await siteOrigin()}/j/${data as string}` };
+  } catch (error) { return failure(error); }
+}
+export async function revokeJoinLink(organizationId: string, code: string): Promise<TeamResult> {
+  try {
+    const org = uuid(organizationId);
+    if (!/^[A-HJ-NP-Z2-9]{8}$/.test(code)) return { error: "رابط غير صالح." };
+    const auth = await session(org);
+    if ("error" in auth) return { error: auth.error };
+    const { error } = await auth.client.rpc("revoke_join_link", { org, link: code });
+    if (error) return { error: "الإلغاء لمالك المنشأة أو مديرها." };
+    revalidatePath("/dashboard/team");
+    return { success: "أُلغي الرابط." };
+  } catch (error) { return failure(error); }
+}
+/** Sets a new password for a member who forgot theirs; checked in the database by role. */
+export async function resetMemberPassword(organizationId: string, member: string, password: string): Promise<TeamResult> {
+  try {
+    const org = uuid(organizationId);
+    if (password.length < 8 || !/\d/.test(password) || !/\D/.test(password)) return { error: "كلمة المرور ٨ أحرف على الأقل وفيها أرقام وحروف." };
+    const auth = await session(org);
+    if ("error" in auth) return { error: auth.error };
+    const { error } = await auth.client.rpc("reset_member_password", { org, member: uuid(member), password });
+    if (error) return { error: error.code === "42501" ? "ما تقدر تغيّر كلمة مرور هذا العضو." : "تعذر التغيير." };
+    return { success: "تغيّرت كلمة المرور. أرسلها للموظف، ويقدر يغيّرها من الإعدادات." };
   } catch (error) { return failure(error); }
 }

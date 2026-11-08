@@ -40,7 +40,8 @@ export async function guardianPortalLink(guardianId: string, renew = false): Pro
     const client = await createSupabaseServerClient();
     const { data, error } = await client.rpc("guardian_portal_token", { guardian: uuid(guardianId), renew });
     if (error || !data) return { error: "رابط البوابة لمالك المنشأة أو مديرها." };
-    return { link: `${await siteOrigin()}/p/${data as string}`, success: renew ? "تجدّد الرابط، والقديم ما عاد يفتح." : undefined };
+    const { data: code } = await client.rpc("short_code", { target: `/p/${data as string}` });
+    return { link: `${await siteOrigin()}${typeof code === "string" ? `/s/${code}` : `/p/${data as string}`}`, success: renew ? "تجدّد الرابط، والقديم ما عاد يفتح." : undefined };
   } catch { return { error: "تعذر إنشاء الرابط." }; }
 }
 /** Queues the announcement as a message to every guardian concerned, each with their own portal link. */

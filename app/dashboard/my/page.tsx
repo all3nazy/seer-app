@@ -47,7 +47,7 @@ export default async function MyWorkPage({ searchParams }: { searchParams: Promi
   const upcoming = open.filter(task => !isOverdue(task, today) && task.due_date !== today);
   const done = rows.filter(task => task.status === "done").sort((a, b) => (b.completed_at ?? "").localeCompare(a.completed_at ?? "")).slice(0, 10);
   const head = await headers();
-  const link = `${head.get("x-forwarded-proto") ?? "https"}://${head.get("host") ?? "seer-app-psi.vercel.app"}/dashboard/my?org=${encodeURIComponent(org)}`;
+  const link = `${head.get("x-forwarded-proto") ?? "https"}://${head.get("host") ?? "seer-app-psi.vercel.app"}/m`;
   const orgParam = encodeURIComponent(org);
   const taskRow = (task: Task) => <Link key={task.id} className="list-row" href={`/dashboard/tasks/${task.id}?org=${orgParam}`}>
     <span className="body"><span className="title">{task.title}</span>

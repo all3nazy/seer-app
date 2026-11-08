@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createSupabaseServerClient } from "../../../../../lib/supabase/server";
+import { createSupabaseServerClient, authUser } from "../../../../../lib/supabase/server";
 import { canManage } from "../../../../../lib/operations";
 import { toCsv } from "../../../../../lib/audit";
 import { payrollCsvRows } from "../../../../../lib/hr";
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
   const client = await createSupabaseServerClient();
-  const { data: { user } } = await client.auth.getUser();
+  const { data: { user } } = await authUser(client);
   if (!user) return new NextResponse("Unauthorized", { status: 401 });
   const org = params.get("org") ?? "", month = params.get("month") ?? "";
   if (!/^\d{4}-\d{2}$/.test(month)) return new NextResponse("Bad month", { status: 400 });

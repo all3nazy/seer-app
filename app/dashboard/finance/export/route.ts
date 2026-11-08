@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createSupabaseServerClient } from "../../../../lib/supabase/server";
+import { createSupabaseServerClient, authUser } from "../../../../lib/supabase/server";
 import { canManage } from "../../../../lib/operations";
 import { toCsv } from "../../../../lib/audit";
 import { paymentMethodLabels, type PaymentMethod } from "../../../../lib/finance";
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
   const client = await createSupabaseServerClient();
-  const { data: { user }, error } = await client.auth.getUser();
+  const { data: { user }, error } = await authUser(client);
   if (error || !user) return new NextResponse("Unauthorized", { status: 401 });
   const org = params.get("org") ?? "";
   const { data: member } = await client.from("memberships").select("role").eq("organization_id", org).eq("user_id", user.id).maybeSingle();

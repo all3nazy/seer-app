@@ -7,6 +7,7 @@ import { TeamPanel } from "../../../components/team-panel";
 import { ShareButtons } from "../../../components/share-buttons";
 import { myTasksMessage } from "../../../lib/share";
 import { siteOrigin } from "../../../lib/origin";
+import { JoinLinkCreator, JoinLinkList, ResetPassword, type JoinLink } from "../../../components/join-links";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "الفريق" };
@@ -22,13 +23,19 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
   if (!mine || !isRole(mine.role)) return <section className="card"><h1>لا توجد منشأة مرتبطة</h1><p>اطلب من مسؤول المنصة ربط حسابك بمنشأة.</p></section>;
   const org = mine.organization_id as string;
   const name = (mine.organizations as unknown as { name: string } | null)?.name ?? "المنشأة";
-  const [membersResult, invitationsResult] = await Promise.all([
+  const manager = canManage(mine.role);
+  const none = Promise.resolve({ data: null, error: null });
+  const [membersResult, invitationsResult, contacts, joinLinks, logins, origin] = await Promise.all([
     client.from("memberships").select("user_id,role,display_name").eq("organization_id", org).order("joined_at"),
-    canManage(mine.role) ? client.rpc("list_member_invitations", { org }) : Promise.resolve({ data: null, error: null }),
+    manager ? client.rpc("list_member_invitations", { org }) : none,
+    manager ? client.rpc("member_contacts", { org }) : none,
+    manager ? client.rpc("list_join_links", { org }) : none,
+    manager ? client.rpc("member_logins", { org }) : none,
+    siteOrigin(),
   ]);
-  const contacts = canManage(mine.role) ? await client.rpc("member_contacts", { org }) : { data: null, error: null };
   const contactRows = (contacts.data ?? []) as { user_id: string; email: string | null; phone: string | null }[];
-  const myLink = `${await siteOrigin()}/dashboard/my?org=${encodeURIComponent(org)}`;
+  const loginOf = new Map(((logins.data ?? []) as { user_id: string; login: string }[]).map(row => [row.user_id, row.login]));
+  const myLink = `${origin}/m`;
   return <div style={{ maxWidth: 760 }}>
     <header className="page-head">
       <div><h1>الفريق</h1><p>أعضاء {name} وصلاحياتهم.</p></div>
@@ -36,6 +43,12 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
         {memberships.map(item => <Link key={item.organization_id} href={`/dashboard/team?org=${encodeURIComponent(item.organization_id)}`} aria-current={item.organization_id === org ? "page" : undefined}>{(item.organizations as unknown as { name: string } | null)?.name ?? "منشأة"}</Link>)}
       </nav> : null}
     </header>
+    {manager ? <section className="card" style={{ marginBottom: 24 }} aria-labelledby="join-title">
+      <h2 id="join-title">إضافة موظف برابط انضمام</h2>
+      <p className="hint" style={{ marginBottom: 12 }}>أرسل الرابط للموظف على واتساب: يختار اسم مستخدم وكلمة مرور ويدخل مباشرة، بدون بريد إلكتروني. الرابط صالح ٧ أيام.</p>
+      <JoinLinkCreator organizationId={org} organizationName={name} canInviteAdmins={mine.role === "owner"} />
+      <JoinLinkList organizationId={org} links={(joinLinks.data ?? []) as JoinLink[]} origin={origin} />
+    </section> : null}
     {membersResult.error ? <p role="alert" className="info-banner">تعذر تحميل الفريق. إذا كانت هذه أول مرة، يلزم تطبيق ترحيل قاعدة البيانات الخاص بالفريق.</p>
       : <TeamPanel key={org} organizationId={org} organizationName={name} me={user.id} myRole={mine.role}
         members={(membersResult.data ?? []) as Member[]} invitations={invitationsResult.error ? null : (invitationsResult.data ?? []) as Invitation[]} />}
@@ -46,8 +59,11 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
         const contact = contactRows.find(item => item.user_id === member.user_id);
         const message = myTasksMessage({ organization: name, link: myLink, name: member.display_name });
         return <li key={member.user_id} style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-          <span>{memberName(member)}<span className="hint" style={{ display: "block" }} dir="ltr">{[contact?.phone, contact?.email].filter(Boolean).join(" · ") || "—"}</span></span>
-          <ShareButtons compact phone={contact?.phone} email={contact?.email} subject={message.subject} body={message.body} />
+          <span>{memberName(member)}<span className="hint" style={{ display: "block" }} dir="ltr">{[loginOf.get(member.user_id) ? `دخول: ${loginOf.get(member.user_id)}` : null, contact?.phone].filter(Boolean).join(" · ") || "—"}</span></span>
+          <span style={{ display: "inline-flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <ShareButtons compact phone={contact?.phone} email={contact?.email && !contact.email.endsWith("@users.seer.local") ? contact.email : null} subject={message.subject} body={message.body} />
+            {(mine.role === "owner" && member.role !== "owner") || (mine.role === "admin" && member.role === "staff") ? <ResetPassword organizationId={org} memberId={member.user_id} memberName={memberName(member)} /> : null}
+          </span>
         </li>;
       })}</ul>
     </section> : null}

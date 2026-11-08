@@ -21,12 +21,26 @@ async function as(role: "authenticated" | "anon" | "service_role", user = "") {
   await db.exec(`set role ${role}`);
 }
 async function rows(sql: string) { return (await db.query<Record<string,unknown>>(sql)).rows; }
+/** The private token behind a link in a message, whether the link is long (/c/<uuid>) or short (/s/CODE). */
+async function linkToken(body: string, kind: "c" | "p"): Promise<string> {
+  const long = body.match(new RegExp(`/${kind}/([0-9a-f-]{36})`));
+  if (long) return long[1];
+  const code = body.match(/\/s\/([A-Za-z0-9]{10})/)![1];
+  const path = (await db.query<{ p: string }>("select public.resolve_short($1) as p", [code])).rows[0].p;
+  return path.split("/")[2];
+}
 
 beforeAll(async () => {
   await db.exec(`
     create role anon nologin; create role authenticated nologin; create role service_role nologin bypassrls;
     create schema auth;
-    create table auth.users(id uuid primary key, email_confirmed_at timestamptz, email text);
+    create table auth.users(id uuid primary key, email_confirmed_at timestamptz, email text, instance_id uuid, aud text, role text, encrypted_password text,
+      raw_app_meta_data jsonb, raw_user_meta_data jsonb, created_at timestamptz, updated_at timestamptz, confirmation_token text, recovery_token text, email_change_token_new text, email_change text);
+    create table auth.identities(provider_id text, user_id uuid, identity_data jsonb, provider text, last_sign_in_at timestamptz, created_at timestamptz, updated_at timestamptz);
+    -- Stand-ins for pgcrypto's bcrypt helpers, which embedded Postgres lacks.
+    create schema extensions;
+    create function extensions.gen_salt(kind text) returns text language sql as $$ select '$2a$06$' || md5(random()::text) $$;
+    create function extensions.crypt(password text, salt text) returns text language sql as $$ select 'hash:' || md5(password) $$;
     create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
     grant usage on schema public,auth to anon,authenticated,service_role;
     grant execute on function auth.uid() to anon,authenticated,service_role;
@@ -105,6 +119,9 @@ beforeAll(async () => {
   const lifecycle = readdirSync("supabase/migrations").filter(name => name.endsWith("_lifecycle_portal.sql"));
   if (lifecycle.length !== 1) throw new Error("Expected exactly one lifecycle migration");
   await db.exec(readFileSync(`supabase/migrations/${lifecycle[0]}`, "utf8"));
+  const staffAccess = readdirSync("supabase/migrations").filter(name => name.endsWith("_staff_access_links.sql"));
+  if (staffAccess.length !== 1) throw new Error("Expected exactly one staff access migration");
+  await db.exec(readFileSync(`supabase/migrations/${staffAccess[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -1346,7 +1363,7 @@ describe("automatic messages and pickup confirmation", () => {
     const pickup = (await rows(`insert into public.pickups(organization_id,child_id,guardian_id) values ('${orgA}','${childA}','${mum}') returning id`))[0].id as string;
     await db.exec("reset role");
     const link = (await rows(`select body from public.message_outbox where kind='pickup_confirm'`))[0].body as string;
-    const token = link.match(/\/c\/([0-9a-f-]{36})/)![1];
+    const token = await linkToken(link, "c");
     await as("anon");
     expect((await rows(`select public.pickup_confirmation_view('${token}') as v`))[0].v).toMatchObject({ child: "Private Child A", picked_by: "Mum", confirmed_at: null });
     expect((await rows(`select public.confirm_pickup('${token}','123') as r`))[0].r).toBe("invalid");
@@ -1364,7 +1381,7 @@ describe("automatic messages and pickup confirmation", () => {
     await as("authenticated", staff);
     await db.exec(`insert into public.pickups(organization_id,child_id,guardian_id) values ('${orgA}','${childA}','${mum}')`);
     await db.exec("reset role");
-    const token = ((await rows(`select body from public.message_outbox where kind='pickup_confirm'`))[0].body as string).match(/\/c\/([0-9a-f-]{36})/)![1];
+    const token = await linkToken((await rows(`select body from public.message_outbox where kind='pickup_confirm'`))[0].body as string, "c");
     await as("anon");
     for (let i = 0; i < 5; i++) await db.exec(`select public.confirm_pickup('${token}','1099999999')`);
     expect((await rows(`select public.confirm_pickup('${token}','1012345678') as r`))[0].r).toBe("locked");
@@ -1405,7 +1422,7 @@ describe("student lifecycle, portal and family messages", () => {
     await db.exec(`insert into public.behavior_notes(organization_id,child_id,kind,category,note) values ('${orgA}','${kid}','positive','participation','Great work')`);
     await db.exec(`insert into public.daily_reports(organization_id,child_id,report_date,mood) values ('${orgA}','${kid}',(now() at time zone 'Asia/Riyadh')::date,'happy')`);
     const body = (await rows(`select body from public.message_outbox where kind='daily_report' and to_phone='0500000888'`))[0].body as string;
-    const token = body.match(/\/p\/([0-9a-f-]{36})/)![1];
+    const token = await linkToken(body, "p");
     await as("anon");
     const portal = (await rows(`select public.family_portal('${token}') as p`))[0].p as { guardian: string; children: { status: string; grades: unknown[]; behavior: { note: string }[] }[] };
     expect(portal.guardian).toBe("Dad");
@@ -1422,6 +1439,64 @@ describe("student lifecycle, portal and family messages", () => {
     expect((await rows(`select public.send_announcement('${id}') as n`))[0].n).toBe(0);
     const message = (await rows(`select body from public.message_outbox where kind='announcement' and to_phone='0500000888'`))[0].body as string;
     expect(message).toContain("Bring a hat");
-    expect(message).toMatch(/\/p\/[0-9a-f-]{36}/);
+    expect(message).toMatch(/\/s\/[A-Za-z0-9]{10}/);
+  });
+});
+
+describe("staff join links, password resets and short links", () => {
+  it("only managers create join links; admins invite staff only", async () => {
+    await as("authenticated", staff);
+    await expect(db.exec(`select public.create_join_link('${orgA}','staff')`)).rejects.toMatchObject({ code: "42501" });
+    await as("authenticated", outsider);
+    await expect(db.exec(`select public.create_join_link('${orgA}','staff')`)).rejects.toMatchObject({ code: "42501" });
+    await expect(db.exec(`select public.create_join_link('${orgB}','admin')`)).rejects.toMatchObject({ code: "42501" });
+    expect((await rows(`select public.create_join_link('${orgB}','staff') as c`))[0].c).toMatch(/^[A-HJ-NP-Z2-9]{8}$/);
+  });
+  it("an employee joins with a username and password, once per link", async () => {
+    await as("authenticated", owner);
+    const code = (await rows(`select public.create_join_link('${orgA}','staff','Teacher Huda',1) as c`))[0].c as string;
+    expect((await rows(`select count(*)::int as n from public.list_join_links('${orgA}')`))[0].n).toBeGreaterThan(0);
+    await as("anon");
+    expect((await rows(`select public.join_link_view('${code.toLowerCase()}') as v`))[0].v).toMatchObject({ organization: expect.any(String), role: "staff", valid: true });
+    await expect(db.exec(`select public.join_with_code('${code}','huda','short')`)).rejects.toMatchObject({ code: "22023" });
+    await expect(db.exec(`select public.join_with_code('${code}','x','password1')`)).rejects.toMatchObject({ code: "22023" });
+    const email = (await rows(`select public.join_with_code('${code}','Huda.T','secret123') as e`))[0].e;
+    expect(email).toBe("huda.t@users.seer.local");
+    await expect(db.exec(`select public.join_with_code('${code}','other','secret123')`)).rejects.toMatchObject({ code: "P0002" });
+    await db.exec("reset role");
+    const user = (await rows(`select id, email_confirmed_at is not null as confirmed, encrypted_password like 'hash:%' as hashed from auth.users where email='huda.t@users.seer.local'`))[0];
+    expect(user).toMatchObject({ confirmed: true, hashed: true });
+    expect(await rows(`select role, display_name from public.memberships where user_id='${user.id}'`)).toEqual([{ role: "staff", display_name: "Teacher Huda" }]);
+    await as("authenticated", owner);
+    expect((await rows(`select login from public.member_logins('${orgA}') where user_id='${user.id}'`))[0].login).toBe("huda.t");
+    await db.exec(`select public.reset_member_password('${orgA}','${user.id}','newpass99')`);
+    await expect(db.exec(`select public.reset_member_password('${orgA}','${owner}','newpass99')`)).rejects.toMatchObject({ code: "42501" });
+    await as("authenticated", staff);
+    await expect(db.exec(`select public.reset_member_password('${orgA}','${user.id}','newpass99')`)).rejects.toMatchObject({ code: "42501" });
+  });
+  it("usernames are unique and links can be revoked", async () => {
+    await as("authenticated", owner);
+    const code = (await rows(`select public.create_join_link('${orgA}','staff',null,5) as c`))[0].c as string;
+    await as("anon");
+    await expect(db.exec(`select public.join_with_code('${code}','huda.t','secret123')`)).rejects.toMatchObject({ code: "23505" });
+    await as("authenticated", owner);
+    await db.exec(`select public.revoke_join_link('${orgA}','${code}')`);
+    await as("anon");
+    expect((await rows(`select public.join_link_view('${code}') as v`))[0].v).toMatchObject({ valid: false });
+  });
+  it("short links resolve for anyone and messages are shortened as they are queued", async () => {
+    const path = "/p/06d4dd6e-3d4b-48dd-a45e-acb72b55cc88";
+    await as("anon");
+    await expect(db.exec(`select public.short_code('${path}')`)).rejects.toBeDefined();
+    await as("authenticated", owner);
+    const code = (await rows(`select public.short_code('${path}') as c`))[0].c as string;
+    expect(code).toMatch(/^[A-Za-z0-9]{10}$/);
+    expect((await rows(`select public.short_code('${path}') as c`))[0].c).toBe(code);
+    await expect(db.exec(`select public.short_code('/dashboard/finance')`)).rejects.toMatchObject({ code: "22023" });
+    await as("anon");
+    expect((await rows(`select public.resolve_short('${code}') as p`))[0].p).toBe(path);
+    await db.exec("reset role");
+    await db.exec(`insert into public.message_outbox(organization_id,to_phone,kind,body) values ('${orgA}','0500000777','custom','See https://seer.example${path} now')`);
+    expect((await rows(`select body from public.message_outbox where to_phone='0500000777'`))[0].body).toBe(`See https://seer.example/s/${code} now`);
   });
 });

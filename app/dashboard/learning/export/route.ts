@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createSupabaseServerClient } from "../../../../lib/supabase/server";
+import { createSupabaseServerClient, authUser } from "../../../../lib/supabase/server";
 import { toCsv } from "../../../../lib/audit";
 import { gradesCsvRows, type Grade } from "../../../../lib/learning";
 
@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
   const client = await createSupabaseServerClient();
-  const { data: { user } } = await client.auth.getUser();
+  const { data: { user } } = await authUser(client);
   if (!user) return new NextResponse("Unauthorized", { status: 401 });
   const { data: assessment } = await client.from("assessments").select("id,title,max_score,section_id,organization_id").eq("id", params.get("assessment") ?? "").maybeSingle();
   if (!assessment) return new NextResponse("Not found", { status: 404 });
