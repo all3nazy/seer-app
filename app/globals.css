@@ -832,3 +832,4 @@ a.stat:hover,a.list-row:hover,a.tile:hover,.org-tile:hover,.sidebar .nav-link:ho
 @media (min-width:701px) and (max-width:1100px){.bell-panel{inset-inline-start:calc(100% + 8px);bottom:0}}
 .absence-form{display:grid;gap:10px}
 .absence-form label{display:grid;gap:4px;font-size:14px}
+.import-table tr.bad td{background:var(--tint-rose)}

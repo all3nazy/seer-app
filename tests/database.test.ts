@@ -125,6 +125,9 @@ beforeAll(async () => {
   const teaching = readdirSync("supabase/migrations").filter(name => name.endsWith("_teaching_notifications.sql"));
   if (teaching.length !== 1) throw new Error("Expected exactly one teaching notifications migration");
   await db.exec(readFileSync(`supabase/migrations/${teaching[0]}`, "utf8"));
+  const pushJobs = readdirSync("supabase/migrations").filter(name => name.endsWith("_push_jobs.sql"));
+  if (pushJobs.length !== 1) throw new Error("Expected exactly one push jobs migration");
+  await db.exec(readFileSync(`supabase/migrations/${pushJobs[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -1560,5 +1563,29 @@ describe("teaching permissions, notifications and absence notices", () => {
     expect((await rows("select title from public.notifications where kind='absence_notice'"))[0].title).toContain("Kid X");
     await as("anon");
     expect(((await rows(`select public.family_portal('${token}') as p`))[0].p as { children: { notices: unknown[] }[] }).children[0].notices).toHaveLength(1);
+  });
+});
+
+describe("push keys and one-time push jobs", () => {
+  it("keys are stored once with a bootstrap token; jobs are claimed once; notifications survive without push", async () => {
+    await db.exec("reset role");
+    await db.exec("insert into private.push_bootstrap(token) values ('bootstrap-token-0123456789abcdefghij')");
+    await as("anon");
+    await expect(db.exec("select public.init_push_keys('wrong-token-0123456789abcdefghijklmn','" + "P".repeat(80) + "','" + "K".repeat(40) + "')")).rejects.toMatchObject({ code: "42501" });
+    expect((await rows("select public.init_push_keys('bootstrap-token-0123456789abcdefghij','" + "P".repeat(80) + "','" + "K".repeat(40) + "') as ok"))[0].ok).toBe(true);
+    expect((await rows("select public.init_push_keys('bootstrap-token-0123456789abcdefghij','x','y') as ok"))[0].ok).toBe(false);
+    await expect(db.exec("select public.push_public_key()")).rejects.toBeDefined();
+    await as("authenticated", staff);
+    expect((await rows("select public.push_public_key() as k"))[0].k).toBe("P".repeat(80));
+    await expect(db.exec("select * from private.push_keys")).rejects.toBeDefined();
+    await db.exec("reset role");
+    await db.exec(`insert into private.push_jobs(nonce,payload) values ('job-1','{"title":"Hi","subscriptions":[]}')`);
+    await as("anon");
+    expect((await rows("select public.claim_push_job('job-1') as j"))[0].j).toMatchObject({ title: "Hi", public_key: "P".repeat(80) });
+    expect((await rows("select public.claim_push_job('job-1') as j"))[0].j).toBeNull();
+    await as("authenticated", owner);
+    await db.exec(`insert into public.tasks(organization_id,title,assignee_id) values ('${orgA}','Push check','${staff}')`);
+    await as("authenticated", staff);
+    expect((await rows("select count(*)::int as n from public.notifications where title like '%Push check%'"))[0].n).toBe(1);
   });
 });

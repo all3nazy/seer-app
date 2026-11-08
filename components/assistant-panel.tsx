@@ -7,7 +7,7 @@ import { classifyIntent, operationsLink, topicNames, type AssistantIntent, type 
 import { play } from "../lib/sound";
 import { parseCommand, type BotCommand } from "../lib/bot-commands";
 import { findGuide, isHowTo, type GuideEntry } from "../lib/bot-knowledge";
-import { botBriefing, botCreateTask, botFindSections, botFindStudents, botSetAttendance, botToday, type BotStudent } from "../app/dashboard/assistant/actions";
+import { botBriefing, botCompleteTask, botDecideLeave, botMyTasks, botPendingLeave, botPickupPeople, botRecordPickup, botUnread, botCreateTask, botFindSections, botFindStudents, botSetAttendance, botToday, type BotStudent } from "../app/dashboard/assistant/actions";
 import { briefingItems, briefingText, withOrg, dayGreeting, detectMood, empathyLead, notUnderstood, smallTalk, stripCourtesy } from "../lib/bot-persona";
 import { attendanceLabels, type AttendanceStatus } from "../lib/students";
 import { botPersonas, tipOfDay, type Stage } from "../lib/stage";
@@ -24,12 +24,12 @@ const suggestions: Suggestion[] = [
   { label: "ملخص اليوم", text: "ملخص اليوم" },
   { label: "مين غايب اليوم؟", text: "مين غايب اليوم؟" },
   { label: "مين متأخر؟", text: "مين متأخر؟" },
-  { label: "المهام", intent: { kind: "status", topic: "tasks" } },
+  { label: "مهامي", text: "مهامي" },
   { label: "الفصول الآن", text: "الفصول الآن" },
   { label: "المتابعات", intent: { kind: "status", topic: "notifications" } },
   { label: "نصيحة اليوم", text: "نصيحة اليوم" },
 ];
-const help = "أقدر أعطيك ملخص يومك وأولوياتك («ملخص اليوم»)، وأسجّل الحضور («سجّل ريم متأخرة»)، وأبحث عن طالب («وين سارة»)، وأعرض مين غايب أو متأخر اليوم، وأنشئ مهمة («أنشئ مهمة: تجهيز القاعة بكرة»)، وأفتح الفصل المباشر، وأعطيك ملخص المهام والتسجيل والفواتير حسب صلاحيتك، وأشرح لك أي قسم في المنصة («كيف أضيف موظف؟»، «وين ألقى رابط التسجيل؟»)، وأحوّلك للدعم إذا احتجت. أي تغيير أعرضه عليك أول، وما ينفّذ إلا بعد ما تضغط «تأكيد»، وينحفظ باسمك في سجل المنصة.";
+const help = "أقدر أعطيك ملخص يومك وأولوياتك («ملخص اليوم»)، وأعرض مهامك وأقفلها («مهامي»)، وأسلّم الطالب لولي أمره بتأكيد («سلّم ريم»)، وأعرض طلبات الإجازة وأعتمدها للمدير («الإجازات»)، وإشعاراتك الجديدة («الإشعارات»)، وأسجّل الحضور («سجّل ريم متأخرة»)، وأبحث عن طالب («وين سارة»)، وأعرض مين غايب أو متأخر اليوم، وأنشئ مهمة («أنشئ مهمة: تجهيز القاعة بكرة»)، وأفتح الفصل المباشر، وأعطيك ملخص المهام والتسجيل والفواتير حسب صلاحيتك، وأشرح لك أي قسم في المنصة («كيف أضيف موظف؟»، «وين ألقى رابط التسجيل؟»)، وأحوّلك للدعم إذا احتجت. أي تغيير أعرضه عليك أول، وما ينفّذ إلا بعد ما تضغط «تأكيد»، وينحفظ باسمك في سجل المنصة.";
 const time = (iso: string) => new Date(iso).toLocaleTimeString("ar-SA", { timeZone: "Asia/Riyadh", hour: "numeric", minute: "2-digit" });
 const riyadhHour = () => Number(new Intl.DateTimeFormat("en-US", { hour: "numeric", hourCycle: "h23", timeZone: "Asia/Riyadh" }).format(new Date()));
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -82,10 +82,57 @@ export function AssistantPanel({ organizations, supportPhone, stage = "school" }
       text: `${student.full_name}${student.section ? ` — ${student.section}` : " — بدون فصل"}.`,
       actions: [{ href: studentHref(student.id), label: "فتح الملف" }, { href: `/dashboard/pickup?org=${orgParam}`, label: "التسليم" }],
     }));
-    if (command.kind === "pickup") return withStudent(command.name, student => ({
-      text: `تسليم ${student.full_name} يحتاج تختار المستلم من أولياء أمره أو المصرّح لهم، عشان نتحقق من هويته. افتح صفحة التسليم وابحث عن الاسم.`,
-      actions: [{ href: `/dashboard/pickup?org=${orgParam}`, label: "صفحة التسليم" }, { href: studentHref(student.id), label: "ملف الطالب" }],
-    }));
+    if (command.kind === "pickup") return withStudent(command.name, async student => {
+      const people = await botPickupPeople(org, student.id);
+      if (people.error) return { text: people.error, actions: [{ href: `/dashboard/pickup?org=${orgParam}`, label: "صفحة التسليم" }] };
+      const list = people.data ?? [];
+      if (!list.length) return { text: `${student.full_name} ما له أولياء أمر أو مصرّح لهم مسجّلين. أضفهم من ملفه أولًا.`, actions: [{ href: studentHref(student.id), label: "ملف الطالب" }] };
+      return {
+        text: `مين بيستلم ${student.full_name}؟ تأكد من هويته قبل التسليم.`,
+        choices: list.map(person => ({ label: person.name, sub: person.relation, pick: () => ({
+          text: `أسلّم ${student.full_name} لـ${person.name} (${person.relation}) الآن؟`,
+          confirm: { summary: `تسليم ${student.full_name}`, run: () => botRecordPickup(org, student.id, person.key) },
+        }) })),
+        actions: [{ href: `/dashboard/pickup?org=${orgParam}`, label: "صفحة التسليم" }],
+      };
+    });
+    if (command.kind === "myTasks") {
+      const result = await botMyTasks(org);
+      if (result.error) return { text: result.error };
+      const tasks = result.data ?? [];
+      if (!tasks.length) return { text: "ما عندك مهام مفتوحة. يعطيك العافية 🌿", actions: [{ href: `/dashboard/my?org=${orgParam}`, label: "مهامي" }] };
+      return {
+        text: `عندك ${tasks.length.toLocaleString("ar-SA")} مهمة مفتوحة. اختر وحدة إذا خلصتها وأقفلها لك:`,
+        choices: tasks.map(task => ({ label: task.title, sub: task.due_date ? `موعدها ${task.due_date}` : "بدون موعد", pick: () => ({
+          text: `أقفل «${task.title}» كمنجزة؟`, confirm: { summary: task.title, run: () => botCompleteTask(org, task.id) },
+        }) })),
+        actions: [{ href: `/dashboard/my?org=${orgParam}`, label: "مهامي" }],
+      };
+    }
+    if (command.kind === "leave") {
+      const result = await botPendingLeave(org);
+      if (result.error) return { text: result.error };
+      const rows = result.data ?? [];
+      if (!rows.length) return { text: "ما فيه طلبات إجازة معلّقة. 👍", actions: [{ href: `/dashboard/staff?org=${orgParam}`, label: "الموظفين" }] };
+      return {
+        text: `فيه ${rows.length.toLocaleString("ar-SA")} طلب إجازة ينتظر قرارك:`,
+        choices: rows.map(row => ({ label: row.who, sub: `${row.starts_on}${row.ends_on !== row.starts_on ? ` ← ${row.ends_on}` : ""} · ${row.days.toLocaleString("ar-SA")} يوم`, pick: () => ({
+          text: `وش قرارك في إجازة ${row.who}؟`,
+          choices: [
+            { label: "اعتماد", pick: () => ({ text: `أعتمد إجازة ${row.who}؟`, confirm: { summary: `اعتماد إجازة ${row.who}`, run: () => botDecideLeave(org, row.id, true) } }) },
+            { label: "رفض", pick: () => ({ text: `أرفض إجازة ${row.who}؟`, confirm: { summary: `رفض إجازة ${row.who}`, run: () => botDecideLeave(org, row.id, false) } }) },
+          ],
+        }) })),
+        actions: [{ href: `/dashboard/staff?org=${orgParam}`, label: "الموظفين" }],
+      };
+    }
+    if (command.kind === "unread") {
+      const result = await botUnread(org);
+      if (result.error) return { text: result.error };
+      const rows = result.data ?? [];
+      if (!rows.length) return { text: "ما فيه إشعارات جديدة. كل شيء مقروء ✓" };
+      return { text: `عندك ${rows.length.toLocaleString("ar-SA")} إشعار جديد:`, list: rows.map(row => ({ label: row.title, sub: row.body, href: row.url ?? undefined })) };
+    }
     if (command.kind === "task") {
       if (!command.title) return { text: "وش عنوان المهمة؟ اكتب مثلًا: «أنشئ مهمة: تجهيز القاعة بكرة»." };
       const when = command.due === "today" ? " وموعدها اليوم" : command.due === "tomorrow" ? " وموعدها بكرة" : "";

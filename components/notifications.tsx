@@ -75,16 +75,19 @@ const urlBase64ToUint8Array = (value: string) => {
 };
 /** Turn push notifications on or off for this device. */
 export function PushToggle() {
-  const key = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "";
+  const [key, setKey] = useState("");
   const [state, setState] = useState<"unsupported" | "denied" | "on" | "off" | "loading">("loading");
   useEffect(() => {
     (async () => {
-      if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window) || !key) { setState("unsupported"); return; }
+      if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) { setState("unsupported"); return; }
+      const { data } = await getSupabaseBrowserClient().rpc("push_public_key");
+      if (typeof data !== "string" || !data) { setState("unsupported"); return; }
+      setKey(data);
       if (Notification.permission === "denied") { setState("denied"); return; }
       const registration = await navigator.serviceWorker.ready;
       setState((await registration.pushManager.getSubscription()) ? "on" : "off");
     })().catch(() => setState("unsupported"));
-  }, [key]);
+  }, []);
   const turnOn = async () => {
     setState("loading");
     try {

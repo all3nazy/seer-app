@@ -29,6 +29,7 @@ export const navLinks: NavLink[] = [
   { href: "/dashboard/operations", label: "السجلات", short: "السجلات", icon: "folder", group: "admin", phone: false, managers: true },
   { href: "/dashboard/staff", label: "الموظفين", short: "الموظفين", icon: "idcard", group: "admin", phone: false, managers: true },
   { href: "/dashboard/team", label: "الفريق", short: "الفريق", icon: "users", group: "admin", phone: false, managers: true },
+  { href: "/dashboard/reports", label: "تقارير الإدارة", short: "التقارير", icon: "chart", group: "admin", phone: true, managers: true },
   { href: "/dashboard/audit", label: "سجل التدقيق", short: "التدقيق", icon: "shield", group: "admin", phone: false, managers: true },
   { href: "/dashboard/settings", label: "الإعدادات", short: "الإعدادات", icon: "settings", group: null, phone: true },
 ];
