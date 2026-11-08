@@ -273,7 +273,9 @@ begin
   execute format('create policy %I on public.%I for select to authenticated using(private.can_manage_org(organization_id))', t || '_read', t);
   execute format('create policy %I on public.%I for insert to authenticated with check(private.can_manage_org(organization_id))', t || '_insert', t);
   execute format('create policy %I on public.%I for update to authenticated using(private.can_manage_org(organization_id)) with check(private.can_manage_org(organization_id))', t || '_update', t);
-  execute format('create policy %I on public.%I for delete to authenticated using(private.can_manage_org(organization_id))', t || '_delete', t);
+  if t <> 'payments' then
+   execute format('create policy %I on public.%I for delete to authenticated using(private.can_manage_org(organization_id))', t || '_delete', t);
+  end if;
   execute format('create trigger keep_record_tenant before update on public.%I for each row execute function private.keep_record_tenant()', t);
   execute format('create trigger audit_operation after insert or update or delete on public.%I for each row execute function private.audit_operation()', t);
   execute format('revoke truncate,references,trigger on public.%I from anon,authenticated', t);
@@ -291,7 +293,6 @@ grant insert(organization_id,guardian_id,child_id,amount_sar,status,due_date,tit
 grant update(guardian_id,child_id,amount_sar,status,due_date,title,notes,vat_borne_by_state) on public.invoices to authenticated;
 -- A payment can be removed only on the day it was recorded (to fix mistakes); refunds later
 -- need an explicit correction record, which a future migration can add.
-drop policy payments_delete on public.payments;
 create policy payments_delete on public.payments for delete to authenticated
  using(private.can_manage_org(organization_id) and recorded_at > now() - interval '1 day');
 -- 5) Generate a plan's installment invoices for every student in a grade or section, atomically,
