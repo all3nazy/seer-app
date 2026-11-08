@@ -579,3 +579,17 @@ button.chip-soft[aria-pressed="true"]{box-shadow:inset 0 0 0 1.5px currentColor}
 .feed-ok::after{background:var(--leaf)!important}.feed-coral::after{background:var(--coral)!important}.feed-rose::after{background:var(--rose)!important}.feed-sky::after{background:var(--sky)!important}
 @keyframes feed-in{from{opacity:0;transform:translateY(-4px)}}
 @media (prefers-reduced-motion:reduce){.live-dot.live::after,.seat.flash .seat-face,.feed-item,.seat-menu{animation:none}}
+
+/* Bot replies: lists, choices and confirmations */
+.bot-list{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.bot-list li{display:flex;justify-content:space-between;gap:10px;align-items:baseline;padding:8px 12px;border-radius:12px;background:var(--surface-2);font-size:14px}
+.bot-list li a{font-weight:600;color:var(--text);text-decoration:none}.bot-list li a:hover{color:var(--primary)}
+.bot-list li span{font-size:12px;color:var(--text-2);white-space:nowrap}
+.bot-choices{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.bot-choices button{display:flex;justify-content:space-between;gap:10px;align-items:center;text-align:start;padding:10px 14px;border-radius:14px;border:1px solid var(--border-strong);background:var(--surface);color:var(--text);font:inherit;cursor:pointer;transition:border-color .2s,transform .2s var(--spring)}
+.bot-choices button:hover{border-color:var(--primary);transform:translateX(-2px)}
+.bot-choices button span{font-size:12px;color:var(--text-2)}
+.bot-confirm{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px;padding:10px 12px;border-radius:14px;background:var(--tint-lilac);border:1px dashed var(--border-strong);animation:seat-menu-in .25s var(--spring)}
+.bot-confirm.ok{background:var(--tint-mint);border-style:solid;border-color:transparent;color:var(--text);font-weight:600}
+.bot-confirm.bad{background:var(--tint-rose);border-style:solid;border-color:transparent;color:var(--text)}
+.bot-confirm .btn-primary{background:var(--primary);color:var(--on-primary);border-color:transparent}.bot-confirm .btn-primary:hover{background:var(--primary-hover)}
