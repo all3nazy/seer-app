@@ -75,6 +75,9 @@ beforeAll(async () => {
   const finance = readdirSync("supabase/migrations").filter(name => name.endsWith("_finance.sql"));
   if (finance.length !== 1) throw new Error("Expected exactly one finance migration");
   await db.exec(readFileSync(`supabase/migrations/${finance[0]}`, "utf8"));
+  const live = readdirSync("supabase/migrations").filter(name => name.endsWith("_live_classes.sql"));
+  if (live.length !== 1) throw new Error("Expected exactly one live classes migration");
+  await db.exec(readFileSync(`supabase/migrations/${live[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -837,5 +840,43 @@ describe("finance plan invoices", () => {
     expect(invoices.every(row => row.status === "issued")).toBe(true);
     await as("authenticated", outsider);
     await expect(db.exec(`select public.generate_plan_invoices('${plan}','${section}',null,'2026-09-01')`)).rejects.toMatchObject({ code: "P0002" });
+  });
+});
+
+describe("live class history", () => {
+  const childC = "30000000-0000-0000-0000-00000000000c";
+  beforeEach(async () => {
+    await db.exec("reset role");
+    await db.exec(`delete from public.attendance; delete from public.attendance_events; insert into public.memberships(organization_id,user_id,role) values ('${orgA}','${staff}','staff') on conflict do nothing`);
+  });
+  it("every attendance change is logged with who made it, and members cannot write the log", async () => {
+    await as("authenticated", staff);
+    const today = (await rows("select (now() at time zone 'Asia/Riyadh')::date::text as d"))[0].d as string;
+    await db.exec(`insert into public.attendance(organization_id,child_id,attendance_date,status) values ('${orgA}','${childA}','${today}','absent')`);
+    await db.exec(`update public.attendance set status='late' where child_id='${childA}'`);
+    await db.exec(`update public.attendance set note='traffic' where child_id='${childA}'`);
+    expect(await rows("select from_status,to_status,actor_id from public.attendance_events order by id")).toEqual([
+      { from_status: null, to_status: "absent", actor_id: staff },
+      { from_status: "absent", to_status: "late", actor_id: staff },
+    ]);
+    await expect(db.exec(`insert into public.attendance_events(organization_id,child_id,attendance_date,to_status) values ('${orgA}','${childA}','${today}','present')`)).rejects.toMatchObject({ code: "42501" });
+    await expect(db.exec("delete from public.attendance_events")).rejects.toMatchObject({ code: "42501" });
+    await expect(db.exec("update public.attendance_events set to_status='present'")).rejects.toMatchObject({ code: "42501" });
+    await as("authenticated", outsider);
+    expect(await rows("select * from public.attendance_events")).toEqual([]);
+  });
+  it("removing an entry is logged, and deleting a child removes its history without failing", async () => {
+    await db.exec(`insert into public.children(id,organization_id,full_name) values ('${childC}','${orgA}','Temp Child')`);
+    await as("authenticated", owner);
+    const today = (await rows("select (now() at time zone 'Asia/Riyadh')::date::text as d"))[0].d as string;
+    await db.exec(`insert into public.attendance(organization_id,child_id,attendance_date,status) values ('${orgA}','${childC}','${today}','present')`);
+    await db.exec(`delete from public.attendance where child_id='${childC}'`);
+    expect(await rows(`select from_status,to_status from public.attendance_events where child_id='${childC}' order by id`)).toEqual([
+      { from_status: null, to_status: "present" }, { from_status: "present", to_status: null },
+    ]);
+    await db.exec(`insert into public.attendance(organization_id,child_id,attendance_date,status) values ('${orgA}','${childC}','${today}','late')`);
+    await db.exec("reset role");
+    await db.exec(`delete from public.children where id='${childC}'`);
+    expect(await rows(`select * from public.attendance_events where child_id='${childC}'`)).toEqual([]);
   });
 });
