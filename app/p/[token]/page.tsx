@@ -1,3 +1,4 @@
+import { AbsenceForm } from "../../../components/absence-notices";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createSupabaseServerClient } from "../../../lib/supabase/server";
@@ -14,7 +15,7 @@ type Report = { date: string; mood: Mood | null; breakfast: Portion | null; lunc
 type Portal = {
   guardian: string;
   organization: { name: string; type: string; legal_name: string | null; phone: string | null; brand_color: string; logo_data: string | null };
-  children: { name: string; section: string | null; today: AttendanceStatus | null; picked_up: { by: string; at: string } | null; attendance: Record<AttendanceStatus, number>; reports: Report[]; bus: { route: string; direction: "to_school" | "to_home"; event: "boarded" | "dropped" | "absent"; at: string }[]; pickup_people: { name: string; relationship: string }[];
+  children: { id: string; notices?: { from: string; to: string; reason: string | null; seen: boolean }[]; name: string; section: string | null; today: AttendanceStatus | null; picked_up: { by: string; at: string } | null; attendance: Record<AttendanceStatus, number>; reports: Report[]; bus: { route: string; direction: "to_school" | "to_home"; event: "boarded" | "dropped" | "absent"; at: string }[]; pickup_people: { name: string; relationship: string }[];
     status?: string; grades?: { subject: string; title: string; kind: string; score: number | null; max: number; absent: boolean; date: string }[];
     behavior?: { kind: "positive" | "concern"; category: string; note: string | null; points: number; at: string }[];
     bus_stop?: { route: string; stop: string | null; pickup_time: string | null; dropoff_time: string | null } | null }[];
@@ -64,6 +65,8 @@ export default async function FamilyPortalPage({ params }: { params: Promise<{ t
           {report.notes ? <li>{report.notes}</li> : null}
         </ul>
       </details>)}</div> : null}
+      {child.notices?.length ? <p className="hint">📩 {child.notices.map(notice => `غياب ${notice.from === notice.to ? notice.from : `${notice.from} ← ${notice.to}`}${notice.seen ? " (اطّلعت المدرسة ✓)" : ""}`).join(" · ")}</p> : null}
+      {child.status === "active" || !child.status ? <div className="no-print"><AbsenceForm token={token} childId={child.id} childName={child.name.split(" ")[0]} /></div> : null}
       {child.bus_stop ? <p className="hint">🚌 {child.bus_stop.route}{child.bus_stop.stop ? ` · محطة ${child.bus_stop.stop}` : ""}{child.bus_stop.pickup_time ? ` · الركوب ${child.bus_stop.pickup_time.slice(0, 5)}` : ""}{child.bus_stop.dropoff_time ? ` · العودة ${child.bus_stop.dropoff_time.slice(0, 5)}` : ""}</p> : null}
       {child.grades?.length ? <details className="portal-card"><summary><strong>📚 آخر الدرجات</strong></summary>
         <ul className="portal-grades">{child.grades.map((grade, index) => <li key={index}><span>{grade.subject} — {grade.title}</span><b dir="ltr">{grade.absent ? "غائب" : grade.score === null ? "—" : `${Number(grade.score).toLocaleString("ar-SA")} / ${Number(grade.max).toLocaleString("ar-SA")}`}</b></li>)}</ul>

@@ -815,3 +815,20 @@ a.stat:hover,a.list-row:hover,a.tile:hover,.org-tile:hover,.sidebar .nav-link:ho
 .icon-option span{font-size:12px;color:var(--text-3);line-height:1.5}
 .icon-option.is-picked{border-color:var(--primary);background:var(--tint-lilac)}
 @media (max-width:520px){.icon-options{grid-template-columns:1fr}.icon-option{grid-template-columns:72px 1fr;justify-items:start;text-align:start;align-items:center}.icon-option img{grid-row:1/3;width:72px;height:72px}}
+/* Notifications bell */
+.bell{position:relative}
+.bell-button{position:relative;display:inline-grid;place-items:center;width:40px;height:40px;padding:0;border-radius:14px;border:1px solid var(--border);background:var(--surface);color:var(--text-2);cursor:pointer}
+.bell-count{position:absolute;top:-6px;inset-inline-end:-6px;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:var(--danger);color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center}
+.bell-panel{position:absolute;z-index:60;bottom:calc(100% + 10px);inset-inline-start:0;width:min(360px,calc(100vw - 32px));max-height:min(70vh,520px);overflow:auto;padding:12px;border-radius:20px;border:1px solid var(--border);background:var(--surface);box-shadow:var(--shadow-lg)}
+.mobile-bar .bell-panel{bottom:auto;top:calc(100% + 10px);inset-inline-start:auto;inset-inline-end:-60px}
+.bell-head{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:2px 4px 8px}
+.bell-panel ul{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.bell-panel li a{display:grid;gap:2px;padding:10px;border-radius:14px;color:var(--text);text-decoration:none}
+.bell-panel li a:hover{background:var(--surface-2)}
+.bell-panel li.unread a{background:var(--tint-lilac)}
+.bell-panel li span{font-size:13px;color:var(--text-2)}
+.bell-panel li small{font-size:11px;color:var(--text-3)}
+.bell-foot{display:block;margin-top:8px;padding:8px 4px 0;border-top:1px solid var(--border);font-size:13px}
+@media (min-width:701px) and (max-width:1100px){.bell-panel{inset-inline-start:calc(100% + 8px);bottom:0}}
+.absence-form{display:grid;gap:10px}
+.absence-form label{display:grid;gap:4px;font-size:14px}
