@@ -95,3 +95,30 @@ export async function setMyName(data: FormData): Promise<TeamResult> {
     return { success: "حُفظ اسمك" };
   } catch (error) { return failure(error); }
 }
+
+/** Sets the signed-in member's phone in every organization they belong to; empty clears it. */
+export async function setMyPhone(data: FormData): Promise<TeamResult> {
+  try {
+    const raw = data.get("phone");
+    const phone = typeof raw === "string" ? raw.replace(/[\s-]/g, "") : "";
+    if (phone && !/^\+?[0-9]{8,15}$/.test(phone)) return { error: "رقم الجوال من ٨ إلى ١٥ رقمًا، ويمكن أن يبدأ بعلامة +." };
+    const access = await session();
+    if ("error" in access) return { error: access.error };
+    const { data: orgs, error: orgError } = await access.client.from("memberships").select("organization_id").eq("user_id", access.user.id);
+    if (orgError) return { error: "تعذر حفظ الرقم. حاول مجددًا." };
+    for (const { organization_id } of orgs ?? []) {
+      const mine = access.client.from("member_phones");
+      let error;
+      if (!phone) ({ error } = await mine.delete().eq("organization_id", organization_id).eq("user_id", access.user.id));
+      else {
+        const { data: existing } = await mine.select("user_id").eq("organization_id", organization_id).eq("user_id", access.user.id).maybeSingle();
+        ({ error } = existing
+          ? await access.client.from("member_phones").update({ phone }).eq("organization_id", organization_id).eq("user_id", access.user.id)
+          : await access.client.from("member_phones").insert({ organization_id, user_id: access.user.id, phone }));
+      }
+      if (error) return { error: "تعذر حفظ الرقم. حاول مجددًا." };
+    }
+    refresh();
+    return { success: phone ? "حُفظ رقمك" : "حُذف رقمك" };
+  } catch (error) { return failure(error); }
+}

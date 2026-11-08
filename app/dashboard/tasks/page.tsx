@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createSupabaseServerClient } from "../../../lib/supabase/server";
+import { createSupabaseServerClient, sessionUser } from "../../../lib/supabase/server";
 import { canManage } from "../../../lib/operations";
 import type { Task } from "../../../lib/tasks";
 import type { Member } from "../../../lib/team";
@@ -11,8 +11,8 @@ export const metadata = { title: "المهام" };
 
 export default async function TasksPage({ searchParams }: { searchParams: Promise<{ org?: string; q?: string }> }) {
   const client = await createSupabaseServerClient();
-  const { data: { user }, error } = await client.auth.getUser();
-  if (error || !user) redirect("/login");
+  const user = await sessionUser(client);
+  if (!user) redirect("/login");
   const { data: memberships, error: membershipError } = await client.from("memberships").select("organization_id,role,organizations(name)").eq("user_id", user.id);
   if (membershipError) return <><h1>تعذر تحميل المنشآت</h1><p role="alert">حاول مجددًا بعد قليل.</p></>;
   const params = await searchParams;
