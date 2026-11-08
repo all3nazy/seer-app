@@ -28,11 +28,14 @@ export default async function LiveClassPage({ params, searchParams }: { params: 
   if (!sectionResult.data && !sectionResult.error) notFound();
   const students = (studentsResult.data ?? []) as { id: string; full_name: string }[];
   const ids = students.length ? students.map(student => student.id) : ["00000000-0000-0000-0000-000000000000"];
-  const [attendance, pickups, events, health] = await Promise.all([
+  const [attendance, pickups, events, health, homeBus] = await Promise.all([
     client.from("attendance").select("child_id,status,recorded_at").eq("organization_id", org).eq("attendance_date", today).in("child_id", ids),
     client.from("pickups").select("child_id,picked_by_name,picked_at").eq("organization_id", org).eq("pickup_date", today).in("child_id", ids),
     client.from("attendance_events").select("id,child_id,from_status,to_status,actor_id,created_at").eq("organization_id", org).eq("attendance_date", today).in("child_id", ids).order("created_at", { ascending: false }).limit(200),
     client.from("child_health").select("child_id,allergies,conditions").eq("organization_id", org).in("child_id", ids),
+    // Boarding the home bus counts as leaving, like a hand-over.
+    client.from("trip_events").select("child_id,at,transport_trips!inner(trip_date,direction)").eq("organization_id", org).eq("event", "boarded")
+      .eq("transport_trips.trip_date", today).eq("transport_trips.direction", "to_home").in("child_id", ids),
   ]);
   const failed = sectionResult.error || studentsResult.error || attendance.error || pickups.error;
   const section = sectionResult.data as unknown as { id: string; name: string; capacity: number | null; homeroom_teacher_id: string | null; grade_levels: { name: string } | null } | null;
@@ -53,7 +56,7 @@ export default async function LiveClassPage({ params, searchParams }: { params: 
         capacity={section.capacity}
         students={students.map(student => ({ ...student, alert: alerts.has(student.id) }))}
         attendance={(attendance.data ?? []) as LiveAttendance[]}
-        pickups={(pickups.data ?? []) as LivePickup[]}
+        pickups={[...(pickups.data ?? []) as LivePickup[], ...((homeBus.data ?? []) as { child_id: string; at: string }[]).filter(row => !(pickups.data ?? []).some(p => p.child_id === row.child_id)).map(row => ({ child_id: row.child_id, picked_by_name: "باص المدرسة 🚌", picked_at: row.at }))]}
         events={(events.error ? [] : events.data ?? []) as LiveEvent[]}
         actors={actors}
         pickupHref={`/dashboard/pickup?org=${orgParam}`}

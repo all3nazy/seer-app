@@ -12,7 +12,8 @@ export type BotCommand =
   | { kind: "task"; title: string; due: "today" | "tomorrow" | null }
   | { kind: "today"; status: AttendanceStatus | "pending" | null }
   | { kind: "openClass"; name: string | null }
-  | { kind: "tip" };
+  | { kind: "tip" }
+  | { kind: "brief" };
 
 const norm = (value: string) => normalizeArabic(value).replace(/ئ/g, "ي").replace(/ؤ/g, "و").replace(/[؟?!.,،؛:«»"]/g, " ").replace(/\s+/g, " ").trim();
 
@@ -30,6 +31,8 @@ export function parseCommand(input: string): BotCommand | null {
   if (!q) return null;
   const words = q.split(" ");
 
+  // The day at a glance: "ملخص اليوم", "وش الوضع؟", "وش عندي اليوم", "ابدأ يومي", "وش فاتني".
+  if (/^(?:ملخص|الملخص|ملخص اليوم|ملخصي|ملخص يومي|تقرير اليوم|الوضع|وش الوضع|ايش الوضع|كيف الوضع|وش الجديد|ايش الجديد|وش فاتني|ايش فاتني|ابدا يومي|ابدي يومي|خلنا نبدا|الاولويات|وش الاولويات|اولوياتي|وش المطلوب(?: مني)?(?: اليوم)?|وش عندي(?: اليوم)?|ايش عندي(?: اليوم)?|وش علي(?: اليوم)?|طمني|طمنني|طمني على الوضع)(?: اليوم)?$/.test(q)) return { kind: "brief" };
   if (/^(?:نصيحه|فكره|اقتراح)(?: اليوم)?$|نصيحه اليوم|فكره اليوم/.test(q)) return { kind: "tip" };
 
   // Questions about today's attendance: "مين غايب اليوم؟", "كم متأخر", "مين ما تسجل".

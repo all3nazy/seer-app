@@ -94,8 +94,9 @@ export async function adjustPayrollLine(organizationId: string, lineId: string, 
   try {
     if (![bonus, deduction].every(value => Number.isFinite(value) && value >= 0 && value < 1e8)) return { error: "مبلغ غير صالح." };
     const db = await client();
-    const { error } = await db.from("payroll_lines").update({ bonus: Math.round(bonus * 100) / 100, other_deduction: Math.round(deduction * 100) / 100 }).eq("organization_id", uuid(organizationId)).eq("id", uuid(lineId));
+    const { data, error } = await db.from("payroll_lines").update({ bonus: Math.round(bonus * 100) / 100, other_deduction: Math.round(deduction * 100) / 100 }).eq("organization_id", uuid(organizationId)).eq("id", uuid(lineId)).select("id");
     if (error) return { error: "الرواتب المعتمدة ما تتعدّل." };
+    if (!data?.length) return { error: "تعديل الرواتب لمالك المنشأة أو مديرها." };
     revalidatePath("/dashboard/staff/payroll");
     return { success: "تم." };
   } catch { return { error: "تعذر التعديل." }; }
@@ -103,8 +104,9 @@ export async function adjustPayrollLine(organizationId: string, lineId: string, 
 export async function approvePayroll(organizationId: string, runId: string): Promise<HrResult> {
   try {
     const db = await client();
-    const { error } = await db.from("payroll_runs").update({ status: "approved" }).eq("organization_id", uuid(organizationId)).eq("id", uuid(runId));
+    const { data, error } = await db.from("payroll_runs").update({ status: "approved" }).eq("organization_id", uuid(organizationId)).eq("id", uuid(runId)).select("id");
     if (error) return { error: "تعذر الاعتماد." };
+    if (!data?.length) return { error: "اعتماد الرواتب لمالك المنشأة أو مديرها." };
     revalidatePath("/dashboard/staff/payroll");
     return { success: "اعتُمدت رواتب الشهر، وما عاد تتغير." };
   } catch { return { error: "تعذر الاعتماد." }; }

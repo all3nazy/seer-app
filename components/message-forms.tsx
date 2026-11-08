@@ -3,7 +3,7 @@ import { useActionState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { markMessage, saveMessageSettings } from "../app/dashboard/messages/actions";
 import { confirmPickup } from "../app/c/actions";
-import { messageProviderLabels, messageProviders, toggles } from "../lib/messaging";
+import { messageProviderLabels, toggles, type MessageProvider } from "../lib/messaging";
 import { whatsappLink } from "../lib/share";
 import { notify } from "./feedback";
 
@@ -14,10 +14,8 @@ export function MessageSettingsForm({ organizationId, settings }: { organization
   const on = (key: string) => settings ? Boolean(settings[key]) : !["notify_bus", "notify_daily_report"].includes(key);
   return <form action={action} className="composer">
     <input type="hidden" name="organization_id" value={organizationId} />
-    <label>طريقة الإرسال<select name="provider" defaultValue={String(settings?.provider ?? "manual")}>{messageProviders.map(item => <option key={item} value={item}>{messageProviderLabels[item]}</option>)}</select></label>
+    <p className="hint" style={{ gridColumn: "1/-1", margin: 0 }}>طريقة الإرسال: <strong>{messageProviderLabels[(settings?.provider as MessageProvider) ?? "manual"] ?? messageProviderLabels.manual}</strong>{settings?.sender_name ? ` · المرسل: ${settings.sender_name}` : ""}. ربط مزوّد الرسائل واسم المرسل يفعّلها فريق المنصة بعد الاشتراك، حمايةً لحساباتكم من الإساءة.</p>
     <label>القناة<select name="channel" defaultValue={String(settings?.channel ?? "whatsapp")}><option value="whatsapp">واتساب</option><option value="sms">رسالة نصية SMS</option></select></label>
-    <label>اسم المرسل (SMS)<input name="sender_name" maxLength={40} defaultValue={String(settings?.sender_name ?? "")} dir="auto" /></label>
-    <label>رابط المنصة<input name="site_url" dir="ltr" defaultValue={String(settings?.site_url ?? "https://seer-app-psi.vercel.app")} /></label>
     <fieldset className="quote-items" style={{ gridColumn: "1/-1" }}><legend>الرسائل التلقائية</legend>
       {toggles.map(([key, label]) => <label key={key} className="quote-check"><input type="checkbox" name={key} defaultChecked={on(key)} /> {label}</label>)}
     </fieldset>

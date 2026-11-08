@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "السجلات" };
 const pageSize = 25;
 const selections: Record<Entity, string> = {
-  branches: "id,name", children: "id,full_name,date_of_birth", guardians: "id,full_name,phone",
+  branches: "id,name", children: "id,full_name,date_of_birth", guardians: "id,full_name,phone,national_id",
   enrollments: "id,child_id,branch_id,status", invoices: "id,guardian_id,amount_sar,status",
 };
 type Organization = { name: string; type: string };

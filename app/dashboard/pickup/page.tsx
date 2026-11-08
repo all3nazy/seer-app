@@ -28,14 +28,18 @@ export default async function PickupPage({ searchParams }: { searchParams: Promi
   if (section) kidsQuery = kidsQuery.eq("section_id", section);
   const { data: kids, error } = await kidsQuery.order("full_name").limit(500);
   const ids = ((kids ?? []) as { id: string }[]).map(kid => kid.id);
-  const [attendance, links, authorized, pickups, health, members] = ids.length ? await Promise.all([
+  const [attendance, links, authorized, pickups, health, members, homeBus] = ids.length ? await Promise.all([
     client.from("attendance").select("child_id,status").eq("organization_id", org).eq("attendance_date", today).in("child_id", ids),
     client.from("child_guardians").select("child_id,relationship,guardians(id,full_name,phone)").eq("organization_id", org).in("child_id", ids),
     client.from("authorized_pickups").select("id,child_id,full_name,relationship,phone").eq("organization_id", org).eq("is_active", true).in("child_id", ids),
     client.from("pickups").select("id,child_id,picked_by_name,picked_at,handed_by,note,pickup_confirmations(confirmed_at,verified)").eq("organization_id", org).eq("pickup_date", today).in("child_id", ids),
     client.from("child_health").select("child_id,allergies,conditions").eq("organization_id", org).in("child_id", ids),
     client.from("memberships").select("user_id,role,display_name").eq("organization_id", org),
-  ]) : Array.from({ length: 6 }, () => ({ data: [], error: null }));
+    client.from("trip_events").select("child_id,transport_trips!inner(trip_date,direction)").eq("organization_id", org).eq("event", "boarded")
+      .eq("transport_trips.trip_date", today).eq("transport_trips.direction", "to_home").in("child_id", ids),
+  ]) : Array.from({ length: 7 }, () => ({ data: [], error: null }));
+  // Children who boarded the home bus have left; they are not waiting for a hand-over.
+  const onBus = new Set(((homeBus.data ?? []) as { child_id: string }[]).map(row => row.child_id));
   const statusOf = new Map(((attendance.data ?? []) as { child_id: string; status: string }[]).map(row => [row.child_id, row.status]));
   const pickedUp = new Map(((pickups.data ?? []) as Pickup[]).map(row => [row.child_id, row]));
   const alerts = new Set(((health.data ?? []) as { child_id: string; allergies: string | null; conditions: string | null }[]).filter(row => row.allergies || row.conditions).map(row => row.child_id));
@@ -49,7 +53,7 @@ export default async function PickupPage({ searchParams }: { searchParams: Promi
   }
   const rows = (kids ?? []) as { id: string; full_name: string }[];
   const absent = (id: string) => statusOf.get(id) === "absent" || statusOf.get(id) === "excused";
-  const waiting = rows.filter(kid => !pickedUp.has(kid.id) && !absent(kid.id));
+  const waiting = rows.filter(kid => !pickedUp.has(kid.id) && !absent(kid.id) && !onBus.has(kid.id));
   const done = rows.filter(kid => pickedUp.has(kid.id)).sort((a, b) => pickedUp.get(b.id)!.picked_at.localeCompare(pickedUp.get(a.id)!.picked_at));
   const away = rows.filter(kid => !pickedUp.has(kid.id) && absent(kid.id));
   const memberRows = (members.data ?? []) as Member[];

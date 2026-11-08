@@ -4,11 +4,12 @@ import { sendWith } from "../lib/message-dispatch";
 
 const form = (values: Record<string, string>) => { const data = new FormData(); for (const [k, v] of Object.entries(values)) data.set(k, v); return data; };
 describe("message settings", () => {
-  it("reads toggles and checks the site address", () => {
-    const values = messageSettingsValues(form({ provider: "manual", site_url: "https://seer-app-psi.vercel.app/", notify_absence: "on", confirm_pickup: "on" }));
-    expect(values).toMatchObject({ provider: "manual", channel: "whatsapp", site_url: "https://seer-app-psi.vercel.app", notify_absence: true, notify_late: false, confirm_pickup: true });
-    expect(() => messageSettingsValues(form({ provider: "manual", site_url: "http://x.com" }))).toThrow("https");
-    expect(() => messageSettingsValues(form({ provider: "pigeon", site_url: "https://x.com" }))).toThrow();
+  it("reads toggles and never lets a school set the provider, sender or link domain", () => {
+    const values = messageSettingsValues(form({ provider: "taqnyat", sender_name: "Spam", site_url: "https://evil.example", notify_absence: "on", confirm_pickup: "on" }));
+    expect(values).toMatchObject({ channel: "whatsapp", notify_absence: true, notify_late: false, confirm_pickup: true });
+    expect(values).not.toHaveProperty("provider");
+    expect(values).not.toHaveProperty("sender_name");
+    expect(values).not.toHaveProperty("site_url");
   });
 });
 describe("dispatch adapters", () => {

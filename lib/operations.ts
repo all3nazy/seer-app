@@ -14,6 +14,7 @@ export type OperationRecord = {
   full_name?: string;
   date_of_birth?: string | null;
   phone?: string | null;
+  national_id?: string | null;
   child_id?: string;
   branch_id?: string | null;
   guardian_id?: string | null;
@@ -60,7 +61,10 @@ export function operationValues(entity: Entity, data: FormData): Record<string, 
     case "guardians": {
       const phone = data.get("phone");
       if (phone && (typeof phone !== "string" || !/^\+?[0-9]{8,15}$/.test(phone))) throw new ValidationError("أدخل رقم هاتف من ٨ إلى ١٥ رقمًا؛ يمكن أن يبدأ بعلامة +.");
-      return { full_name: text(data, "full_name"), phone: typeof phone === "string" && phone ? phone : null };
+      const rawId = data.get("national_id");
+      const nid = typeof rawId === "string" ? rawId.replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).replace(/\s/g, "") : "";
+      if (nid && !/^[12]\d{9}$/.test(nid)) throw new ValidationError("رقم الهوية أو الإقامة ١٠ أرقام يبدأ بـ ١ أو ٢.");
+      return { full_name: text(data, "full_name"), phone: typeof phone === "string" && phone ? phone : null, national_id: nid || null };
     }
     case "enrollments": return {
       child_id: uuid(data.get("child_id")), branch_id: optionalId(data, "branch_id"),
@@ -69,7 +73,7 @@ export function operationValues(entity: Entity, data: FormData): Record<string, 
     case "invoices": {
       const raw = data.get("amount_sar");
       if (typeof raw !== "string" || !/^\d{1,10}(\.\d{1,2})?$/.test(raw)) throw new ValidationError("أدخل مبلغًا من صفر إلى ٩٬٩٩٩٬٩٩٩٬٩٩٩٫٩٩ ريال، بمنزلتين عشريتين كحد أقصى.");
-      return { guardian_id: optionalId(data, "guardian_id"), amount_sar: Number(raw), status: choice(data, "status", ["draft", "issued", "paid", "void"]) };
+      return { guardian_id: optionalId(data, "guardian_id"), amount_sar: Number(raw), status: choice(data, "status", ["draft", "void"]) };
     }
   }
 }

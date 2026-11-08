@@ -2,7 +2,7 @@
 import { useState, useTransition } from "react";
 import { useActionState, useEffect } from "react";
 import { finishSandbox, startPayment } from "../app/pay/actions";
-import { savePaymentSettings } from "../app/dashboard/finance/online/actions";
+import { savePaymentSettings, saveWebhookSecret } from "../app/dashboard/finance/online/actions";
 import { payMethodLabels, payMethods, providerLabels, providers, type PayMethod } from "../lib/payments";
 import { notify } from "./feedback";
 
@@ -58,4 +58,18 @@ export function MoyasarForm({ publishableKey, amountHalalas, description, intent
     return () => { css.remove(); script.remove(); };
   }, [publishableKey, amountHalalas, description, intent, callbackUrl, methods]);
   return <div className="moyasar-form" />;
+}
+
+/** Paste the gateway's webhook secret once; it is stored hashed and never shown again. */
+export function WebhookSecretForm({ organizationId, gateway, configured }: { organizationId: string; gateway: string; configured: boolean }) {
+  const [state, action, pending] = useActionState(saveWebhookSecret, {});
+  const [key, setKey] = useState(0);
+  useEffect(() => { if (state.success) { notify(state.success, "info", "done"); setKey(value => value + 1); } else if (state.error) notify(state.error, "error"); }, [state]);
+  return <form key={key} action={action} className="composer">
+    <input type="hidden" name="organization_id" value={organizationId} /><input type="hidden" name="gateway" value={gateway} />
+    <p className="hint" style={{ gridColumn: "1/-1", margin: 0 }}>{configured ? "✓ رمز الـWebhook محفوظ (مشفّر). تقدر تستبدله أو تزيله." : "ما فيه رمز محفوظ: إشعارات البوابة تُرفض حتى تضيفه."}</p>
+    <label style={{ gridColumn: "1/-1" }}>رمز الـWebhook (Secret Token) من لوحة البوابة<input name="secret" type="password" autoComplete="off" dir="ltr" maxLength={200} /></label>
+    {configured ? <label className="quote-check"><input type="checkbox" name="remove" /> إزالة الرمز</label> : null}
+    <button type="submit" className="btn-primary" disabled={pending}>{pending ? "جارٍ الحفظ…" : "حفظ الرمز"}</button>
+  </form>;
 }

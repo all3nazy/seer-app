@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { sendWith, type Outgoing } from "../../../../lib/message-dispatch";
+import { sameSecret } from "../../../../lib/payment-gateways";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET, url = process.env.NEXT_PUBLIC_SUPABASE_URL, serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!secret || !url || !serviceKey) return NextResponse.json({ error: "Dispatcher not configured" }, { status: 501 });
-  if (request.headers.get("authorization") !== `Bearer ${secret}`) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!sameSecret(request.headers.get("authorization") ?? "", `Bearer ${secret}`)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
   const { data: batch, error } = await admin.rpc("claim_messages", { batch: 50 });
   if (error) return NextResponse.json({ error: "Could not claim" }, { status: 500 });

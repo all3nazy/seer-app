@@ -7,7 +7,8 @@ import { classifyIntent, operationsLink, topicNames, type AssistantIntent, type 
 import { play } from "../lib/sound";
 import { parseCommand, type BotCommand } from "../lib/bot-commands";
 import { findGuide, isHowTo, type GuideEntry } from "../lib/bot-knowledge";
-import { botCreateTask, botFindSections, botFindStudents, botSetAttendance, botToday, type BotStudent } from "../app/dashboard/assistant/actions";
+import { botBriefing, botCreateTask, botFindSections, botFindStudents, botSetAttendance, botToday, type BotStudent } from "../app/dashboard/assistant/actions";
+import { briefingItems, briefingText, dayGreeting, detectMood, empathyLead, notUnderstood, smallTalk, stripCourtesy } from "../lib/bot-persona";
 import { attendanceLabels, type AttendanceStatus } from "../lib/students";
 import { botPersonas, tipOfDay, type Stage } from "../lib/stage";
 import { Icon } from "./icons";
@@ -16,23 +17,21 @@ type Action = { href: string; label: string; external?: boolean };
 /** A proposal waiting for the person's confirmation; nothing runs before they press it. */
 type Confirm = { summary: string; run: () => Promise<{ error?: string; data?: string }> };
 type Choice = { label: string; sub?: string | null; pick: () => Promise<Reply> | Reply };
-type Reply = { text: string; actions?: Action[]; confirm?: Confirm; choices?: Choice[]; list?: { label: string; sub?: string | null; href?: string }[] };
+type Reply = { text: string; actions?: Action[]; confirm?: Confirm; choices?: Choice[]; list?: { label: string; sub?: string | null; href?: string; tone?: "alert" | "warn" | "ok" }[] };
 type Thread = { id: number; topic?: AssistantTopic; question: string; reply: Reply | null; outcome?: { text: string; ok: boolean } | "running" | "cancelled" };
 type Suggestion = { label: string; intent?: AssistantIntent; text?: string };
 const suggestions: Suggestion[] = [
+  { label: "ملخص اليوم", text: "ملخص اليوم" },
   { label: "مين غايب اليوم؟", text: "مين غايب اليوم؟" },
   { label: "مين متأخر؟", text: "مين متأخر؟" },
-  { label: "وش عندي اليوم؟", intent: { kind: "status", topic: "tasks" } },
+  { label: "المهام", intent: { kind: "status", topic: "tasks" } },
   { label: "الفصول الآن", text: "الفصول الآن" },
   { label: "المتابعات", intent: { kind: "status", topic: "notifications" } },
   { label: "نصيحة اليوم", text: "نصيحة اليوم" },
 ];
-const help = "أقدر أسجّل الحضور («سجّل ريم متأخرة»)، وأبحث عن طالب («وين سارة»)، وأعرض مين غايب أو متأخر اليوم، وأنشئ مهمة («أنشئ مهمة: تجهيز القاعة بكرة»)، وأفتح الفصل المباشر، وأعطيك ملخص المهام والتسجيل والفواتير حسب صلاحيتك، وأشرح لك أي قسم في المنصة («كيف أضيف موظف؟»، «وين ألقى رابط التسجيل؟»)، وأحوّلك للدعم إذا احتجت. أي تغيير أعرضه عليك أول، وما ينفّذ إلا بعد ما تضغط «تأكيد»، وينحفظ باسمك في سجل المنصة.";
+const help = "أقدر أعطيك ملخص يومك وأولوياتك («ملخص اليوم»)، وأسجّل الحضور («سجّل ريم متأخرة»)، وأبحث عن طالب («وين سارة»)، وأعرض مين غايب أو متأخر اليوم، وأنشئ مهمة («أنشئ مهمة: تجهيز القاعة بكرة»)، وأفتح الفصل المباشر، وأعطيك ملخص المهام والتسجيل والفواتير حسب صلاحيتك، وأشرح لك أي قسم في المنصة («كيف أضيف موظف؟»، «وين ألقى رابط التسجيل؟»)، وأحوّلك للدعم إذا احتجت. أي تغيير أعرضه عليك أول، وما ينفّذ إلا بعد ما تضغط «تأكيد»، وينحفظ باسمك في سجل المنصة.";
 const time = (iso: string) => new Date(iso).toLocaleTimeString("ar-SA", { timeZone: "Asia/Riyadh", hour: "numeric", minute: "2-digit" });
-function greeting() {
-  const hour = Number(new Intl.DateTimeFormat("en-US", { hour: "numeric", hourCycle: "h23", timeZone: "Asia/Riyadh" }).format(new Date()));
-  return hour < 12 ? "صباح الخير" : "مساء الخير";
-}
+const riyadhHour = () => Number(new Intl.DateTimeFormat("en-US", { hour: "numeric", hourCycle: "h23", timeZone: "Asia/Riyadh" }).format(new Date()));
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export function AssistantPanel({ organizations, supportPhone, stage = "school" }: { organizations: { id: string; name: string }[]; supportPhone: string; stage?: Stage }) {
@@ -44,6 +43,7 @@ export function AssistantPanel({ organizations, supportPhone, stage = "school" }
   const [threads, setThreads] = useState<Thread[]>([]);
   const [activeTopic, setActiveTopic] = useState<AssistantTopic>();
   const nextId = useRef(0);
+  const lastQuestion = useRef("");
   const log = useRef<HTMLDivElement>(null);
   const supportUrl = supportLink(supportPhone);
   const replyTo = (id: number, reply: Reply) => { setThreads(items => items.map(item => item.id === id ? { ...item, reply } : item)); play("message"); };
@@ -63,6 +63,16 @@ export function AssistantPanel({ organizations, supportPhone, stage = "school" }
     if (command.kind === "tip") return { text: `💡 ${tipOfDay(stage)}` };
     if (!org) return { text: "حسابك غير مرتبط بمنشأة. تواصل مع مسؤول المنصة لإسناد الصلاحيات." };
     const orgParam = encodeURIComponent(org);
+    if (command.kind === "brief") {
+      const result = await botBriefing(org);
+      if (result.error || !result.data) return { text: result.error ?? "تعذر تجهيز الملخص الآن." };
+      const items = briefingItems(result.data);
+      return {
+        text: briefingText(items, riyadhHour()),
+        list: items.map(item => ({ label: item.text, sub: item.label, tone: item.tone, href: `${item.href}?org=${orgParam}` })),
+        actions: [{ href: `/dashboard?org=${orgParam}`, label: "لوحة التشغيل" }],
+      };
+    }
     if (command.kind === "attendance") return withStudent(command.name, student => ({
       text: `أسجّل ${student.full_name}${student.section ? ` (${student.section})` : ""}: «${attendanceLabels[command.status]}» لليوم؟`,
       confirm: { summary: `${student.full_name}: ${attendanceLabels[command.status]}`, run: () => botSetAttendance(org, student.id, command.status) },
@@ -133,8 +143,8 @@ export function AssistantPanel({ organizations, supportPhone, stage = "school" }
   }
   async function answer(intent: AssistantIntent): Promise<Reply> {
     if (intent.kind === "help") return { text: help };
-    if (intent.kind === "unknown") return supportReply("ما فهمت الطلب. جرّب «مين غايب اليوم؟» أو «سجّل ريم حاضرة» أو «كيف أضيف موظف؟». ما نفذت أي إجراء.");
-    if (intent.kind === "support") return supportReply("أكيد.");
+    if (intent.kind === "unknown") return supportReply(notUnderstood(lastQuestion.current, persona));
+    if (intent.kind === "support") return supportReply("أكيد، الدعم موجود لخدمتك.");
     if (!org) return { text: "حسابك غير مرتبط بمنشأة. تواصل مع مسؤول المنصة لإسناد الصلاحيات." };
     if (intent.kind === "mutation") return {
       text: intent.topic === "tasks" ? "لإنشاء مهمة قل لي «أنشئ مهمة: عنوانها» وأعرضها عليك للتأكيد، أو افتحها من لوحة المهام." : "هذا التعديل يصير من صفحته عشان تراجع القيم قبل الحفظ. الكتابة تحتاج صلاحية مالك أو مدير وتنحفظ في سجل التدقيق.",
@@ -148,7 +158,12 @@ export function AssistantPanel({ organizations, supportPhone, stage = "school" }
     return { text, actions };
   }
   /** Commands first, then "how do I…" questions about the platform, then the older topic questions. */
-  function route(text: string): { resolve: () => Promise<Reply> | Reply; topic?: AssistantTopic } {
+  function route(raw: string): { resolve: () => Promise<Reply> | Reply; topic?: AssistantTopic } {
+    lastQuestion.current = raw;
+    const social = smallTalk(raw, persona, riyadhHour());
+    if (social) return { resolve: () => ({ text: social }) };
+    // «السلام عليكم، مين غايب؟» → the greeting is answered in the tone, the request still runs.
+    const text = stripCourtesy(raw) || raw;
     const command = parseCommand(text);
     if (command) return { resolve: () => runCommand(command) };
     const entry = findGuide(text);
@@ -167,8 +182,10 @@ export function AssistantPanel({ organizations, supportPhone, stage = "school" }
     setThreads(items => [...items, { id, question: questionText, topic, reply: null }].slice(-30));
     if (topic) setActiveTopic(topic);
     try {
-      const [reply] = await Promise.all([routed.resolve(), wait(450)]);
-      replyTo(id, reply);
+      const [reply] = await Promise.all([routed.resolve(), wait(140)]);
+      // Acknowledge frustration or urgency before the answer, without changing what it says.
+      const lead = empathyLead(detectMood(questionText));
+      replyTo(id, lead && !reply.text.startsWith("آسف") ? { ...reply, text: `${lead} ${reply.text}` } : reply);
     } catch (error) {
       replyTo(id, { text: error instanceof Error ? error.message : "تعذر تنفيذ الاستعلام. حاول مجددًا." });
     } finally { locked.current = false; setBusy(false); }
@@ -193,12 +210,12 @@ export function AssistantPanel({ organizations, supportPhone, stage = "school" }
       </div>
     </div>
     <div className="messages" ref={log} role="log" aria-label="المحادثة" aria-live="polite" aria-busy={busy}>
-      {!threads.length ? <div className="answer"><p>{greeting()}. {help}</p></div> : null}
+      {!threads.length ? <div className="answer"><p>{dayGreeting(riyadhHour())}! {persona.greeting}</p><p>{help}</p></div> : null}
       {threads.map(thread => <article key={thread.id} className="exchange" aria-label={`سؤال: ${thread.question}`}>
         <p className="question">{thread.question}</p>
         <div className="answer">
           {thread.reply ? <><p>{thread.reply.text}</p>
-            {thread.reply.list?.length ? <ul className="bot-list">{thread.reply.list.map((item, index) => <li key={index}>{item.href ? <a href={item.href}>{item.label}</a> : item.label}{item.sub ? <span>{item.sub}</span> : null}</li>)}</ul> : null}
+            {thread.reply.list?.length ? <ul className="bot-list">{thread.reply.list.map((item, index) => <li key={index} className={item.tone ? `brief-${item.tone}` : undefined}>{item.href ? <a href={item.href}>{item.label}</a> : item.label}{item.sub ? <span>{item.sub}</span> : null}</li>)}</ul> : null}
             {thread.reply.choices?.length ? <div className="bot-choices">{thread.reply.choices.map(choice => <button key={choice.label + (choice.sub ?? "")} type="button" disabled={busy} onClick={() => void choose(thread.id, choice)}><strong>{choice.label}</strong>{choice.sub ? <span>{choice.sub}</span> : null}</button>)}</div> : null}
             {thread.reply.confirm ? <div className={`bot-confirm${thread.outcome && thread.outcome !== "running" && thread.outcome !== "cancelled" ? (thread.outcome.ok ? " ok" : " bad") : ""}`}>
               {!thread.outcome ? <>

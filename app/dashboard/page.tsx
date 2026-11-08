@@ -3,6 +3,8 @@ import { createSupabaseServerClient, sessionUser } from "../../lib/supabase/serv
 import { canManage } from "../../lib/operations";
 import { riyadhToday } from "../../lib/tasks";
 import { Icon, StackArt } from "../../components/icons";
+import { botBriefing } from "./assistant/actions";
+import { briefingItems } from "../../lib/bot-persona";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "لوحة التشغيل" };
 
@@ -37,7 +39,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       count("tasks").neq("status", "done"),
       count("tasks").eq("status", "done"),
       count("tasks").neq("status", "done").lt("due_date", today),
-      count("enrollments").eq("status", "pending"),
+      manager ? count("applications").in("status", ["new", "reviewing"]) : Promise.resolve({ count: 0, error: null }),
       count("children"),
       manager ? count("invoices").eq("status", "issued") : Promise.resolve({ count: null, error: null }),
     ]);
@@ -82,6 +84,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const pending = sum(org => org.pending);
   const pct = (part: number, whole: number) => whole ? Math.round((part / whole) * 100) : 0;
   const first = organizations[0]?.id;
+  // What needs attention today in the first organization: the same prioritised briefing the bot gives.
+  const briefing = first ? await botBriefing(first) : null;
+  const attention = briefing?.data ? briefingItems(briefing.data).filter(item => item.tone !== "ok").slice(0, 6) : [];
   const email = user.email ?? "";
   const displayName = email.split("@")[0] || "أهلًا";
   const mainRole = roleNames[organizations[0]?.role ?? ""] ?? "عضو";
@@ -113,13 +118,18 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
           <span className="label">مهام منجزة</span>
           <span className="progress"><span style={{ width: `${pct(done, done + open)}%` }} /></span>
         </a>
-        <a className="stat peach" href={first ? `/dashboard/operations?org=${encodeURIComponent(first)}&entity=enrollments` : "/dashboard/operations"}>
+        <a className="stat peach" href={first ? `/dashboard/admissions?org=${encodeURIComponent(first)}` : "/dashboard/admissions"}>
           <span className="tile-icon tone-coral"><Icon name="flag" /></span>
           <span className="figure">{n(pending)}</span>
-          <span className="label">طلبات تسجيل تنتظر الموافقة</span>
+          <span className="label">طلبات التحاق تنتظر المراجعة</span>
           <span className="progress coral"><span style={{ width: `${Math.min(100, pending * 10)}%` }} /></span>
         </a>
       </div>
+
+      {attention.length ? <section aria-labelledby="attention" className="card attention">
+        <div className="section-head"><h2 id="attention">تحتاج انتباهك اليوم</h2><a className="view-all" href="/dashboard/assistant">اسأل المساعد<Icon name="arrowNext" /></a></div>
+        <ul className="bot-list">{attention.map((item, index) => <li key={index} className={`brief-${item.tone}`}><a href={`${item.href}?org=${encodeURIComponent(first!)}`}>{item.text}</a><span>{item.label}</span></li>)}</ul>
+      </section> : null}
 
       <section aria-labelledby="orgs">
         <div className="section-head"><h2 id="orgs">منشآتك</h2><a className="view-all" href="/dashboard/operations">عرض الكل<Icon name="arrowNext" /></a></div>
@@ -154,8 +164,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       <section className="mobile-only" aria-labelledby="shortcuts"><h2 id="shortcuts" className="section-label">اختصارات</h2>
         <div className="tiles">
           <a className="tile" href="/dashboard/tasks"><span className="tile-icon tone-plum"><Icon name="plus" /></span><span className="title">مهمة جديدة</span><span className="sub">أضفها ووزّعها</span></a>
-          <a className="tile" href="/dashboard/operations?entity=children"><span className="tile-icon tone-rose"><Icon name="child" /></span><span className="title">الأطفال</span><span className="sub">الملفات والبيانات</span></a>
-          <a className="tile" href="/dashboard/operations?entity=enrollments"><span className="tile-icon tone-sun"><Icon name="flag" /></span><span className="title">التسجيل</span><span className="sub">طلبات الالتحاق</span></a>
+          <a className="tile" href="/dashboard/children"><span className="tile-icon tone-rose"><Icon name="child" /></span><span className="title">الأطفال</span><span className="sub">الملفات والبيانات</span></a>
+          <a className="tile" href="/dashboard/attendance"><span className="tile-icon tone-sun"><Icon name="clock" /></span><span className="title">الحضور</span><span className="sub">سجّل حضور اليوم</span></a>
           <a className="tile" href="/dashboard/assistant"><span className="tile-icon tone-sky"><Icon name="spark" /></span><span className="title">المساعد</span><span className="sub">اسأل بالعربي</span></a>
         </div>
       </section>

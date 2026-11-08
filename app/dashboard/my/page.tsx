@@ -66,7 +66,7 @@ export default async function MyWorkPage({ searchParams }: { searchParams: Promi
           <span>{leaveLabels[row.kind]} · {row.starts_on}{row.ends_on !== row.starts_on ? ` ← ${row.ends_on}` : ""} ({row.days.toLocaleString("ar-SA")} يوم)</span>
           <span style={{ display: "flex", gap: 8, alignItems: "center" }}><span className={`chip-soft ${leaveStatusTone[row.status]}`}>{leaveStatusLabels[row.status]}</span>{row.status === "pending" ? <LeaveDecision organizationId={org} id={row.id} manager={false} mine /> : null}</span>
         </li>)}</ul> : null}
-    </section> : null}
+    </section> : <p className="info-banner" style={{ marginBottom: 20 }}>تسجيل حضورك وطلب الإجازة يظهر هنا بعد ما يربط المدير ملفك الوظيفي بحسابك من «الموظفين».</p>}
     <div className="home-grid">
       <section className="card" aria-labelledby="tasks-title">
         <h2 id="tasks-title">المهام المسندة لي</h2>
