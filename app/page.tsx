@@ -13,13 +13,13 @@ export default function Home() {
   return <><a className="skip-link" href="#main-content">تجاوز إلى المحتوى</a><main className="shell">
     <header className="top">
       <Logo />
-      <nav aria-label="التنقل الرئيسي"><a className="btn" href="/login">تسجيل الدخول</a></nav>
+      <nav aria-label="التنقل الرئيسي" style={{ display: "flex", gap: 8 }}><a className="btn" href="/pricing">الأسعار</a><a className="btn" href="/login">تسجيل الدخول</a></nav>
     </header>
     <section className="hero-center" id="main-content" tabIndex={-1} aria-labelledby="home-title">
       <span className="badge-circle" aria-hidden="true"><span className="tile-icon lg tone-plum"><Icon name="board" /></span></span>
       <h1 id="home-title">يومك في المدرسة، يسير.</h1>
       <p>سِير منصة تشغيل للمدارس الأهلية والحضانات: المهام والسجلات والمساعد في مكان واحد، بالعربي ومن أول يوم.</p>
-      <div className="hero-actions"><a className="primary-button" href="/login">الدخول إلى سِير</a><a className="btn" href="/auth/activate">تفعيل حساب جديد</a></div>
+      <div className="hero-actions"><a className="primary-button" href="/signup">ابدأ تجربتك المجانية</a><a className="btn" href="/pricing">الباقات والأسعار</a><a className="btn" href="/login">تسجيل الدخول</a></div>
     </section>
     <section aria-labelledby="modules-title">
       <h2 id="modules-title" className="section-title" style={{ textAlign: "center" }}>وش تلقى داخل سِير</h2>

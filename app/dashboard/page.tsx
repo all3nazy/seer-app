@@ -25,8 +25,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   let memberships: { organization_id: string; role: string; organizations: unknown }[] | null = shared.data;
   let membershipError: unknown = shared.error || null;
   if (!membershipError && memberships?.length === 0) {
-    // Only someone without an organization can have a pending email invitation to claim; checking it
-    // on every visit cost a round trip for everyone else.
+    // Only someone without an organization can have a pending sign-up or email invitation to claim;
+    // checking it on every visit cost a round trip for everyone else.
+    await supabase.rpc("complete_signup");
     await supabase.rpc("claim_member_invitations");
     ({ data: memberships, error: membershipError } = await loadMemberships());
   }
