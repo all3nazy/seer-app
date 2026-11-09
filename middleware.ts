@@ -2,7 +2,11 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({ request });
+  // The layout reads the page and organization to enforce the subscription lock and show the right sections.
+  const forwarded = new Headers(request.headers);
+  forwarded.set("x-seer-path", request.nextUrl.pathname);
+  forwarded.set("x-seer-org", request.nextUrl.searchParams.get("org") ?? "");
+  let response = NextResponse.next({ request: { headers: forwarded } });
   const finish = (result: NextResponse) => {
     response.cookies.getAll().forEach(cookie => result.cookies.set(cookie));
     for (const header of ["cache-control", "expires", "pragma"]) {
@@ -22,7 +26,7 @@ export async function middleware(request: NextRequest) {
     setAll(items, headers) {
       items.forEach(({ name, value }) => request.cookies.set(name, value));
       const previous = response;
-      response = NextResponse.next({ request });
+      response = NextResponse.next({ request: { headers: forwarded } });
       previous.cookies.getAll().forEach(cookie => response.cookies.set(cookie));
       for (const header of ["cache-control", "expires", "pragma"]) {
         const value = previous.headers.get(header);
@@ -35,7 +39,7 @@ export async function middleware(request: NextRequest) {
   // Verified access-token claims: checked locally when the project uses asymmetric signing keys,
   // otherwise supabase-js falls back to asking the Auth server, as getUser() did.
   const { data, error } = await supabase.auth.getClaims();
-  if (request.nextUrl.pathname.startsWith("/dashboard") && (error || !data?.claims?.sub)) {
+  if ((request.nextUrl.pathname.startsWith("/dashboard") || request.nextUrl.pathname.startsWith("/admin")) && (error || !data?.claims?.sub)) {
     const target = request.nextUrl.clone();
     target.pathname = "/login";
     target.search = "";
@@ -43,4 +47,4 @@ export async function middleware(request: NextRequest) {
   }
   return finish(response);
 }
-export const config = { matcher: ["/dashboard/:path*", "/login", "/auth/:path*"] };
+export const config = { matcher: ["/dashboard/:path*", "/admin/:path*", "/admin", "/login", "/auth/:path*"] };

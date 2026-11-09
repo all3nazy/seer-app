@@ -11,6 +11,7 @@ import { botBriefing, botHealth, botRepair, botCompleteTask, botDecideLeave, bot
 import { briefingItems, briefingText, withOrg, dayGreeting, detectMood, empathyLead, notUnderstood, smallTalk, stripCourtesy } from "../lib/bot-persona";
 import { attendanceLabels, type AttendanceStatus } from "../lib/students";
 import { botPersonas, tipOfDay, type Stage } from "../lib/stage";
+import { featureOf } from "../lib/subscriptions";
 import { Icon } from "./icons";
 
 type Action = { href: string; label: string; external?: boolean };
@@ -34,7 +35,7 @@ const time = (iso: string) => new Date(iso).toLocaleTimeString("ar-SA", { timeZo
 const riyadhHour = () => Number(new Intl.DateTimeFormat("en-US", { hour: "numeric", hourCycle: "h23", timeZone: "Asia/Riyadh" }).format(new Date()));
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-export function AssistantPanel({ organizations, supportPhone, stage = "school" }: { organizations: { id: string; name: string }[]; supportPhone: string; stage?: Stage }) {
+export function AssistantPanel({ organizations, supportPhone, stage = "school", disabled = [] }: { organizations: { id: string; name: string }[]; supportPhone: string; stage?: Stage; disabled?: string[] }) {
   const persona = botPersonas[stage];
   const [org, setOrg] = useState(organizations[0]?.id ?? "");
   const [busy, setBusy] = useState(false);
@@ -226,7 +227,8 @@ export function AssistantPanel({ organizations, supportPhone, stage = "school" }
     const text = stripCourtesy(raw) || raw;
     const command = parseCommand(text);
     if (command) return { resolve: () => runCommand(command) };
-    const entry = findGuide(text);
+    // Sections turned off or outside the plan are not offered by the assistant.
+    const entry = findGuide(text, item => { const feature = featureOf(item.href); return feature !== null && disabled.includes(feature); });
     if (entry && isHowTo(text)) return { resolve: () => guideReply(entry) };
     const intent = classifyIntent(text, activeTopic);
     if (intent.kind === "unknown" && entry) return { resolve: () => guideReply(entry) };

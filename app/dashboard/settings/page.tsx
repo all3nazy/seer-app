@@ -10,6 +10,8 @@ import { cookies } from "next/headers";
 import { InstallCard, IconPicker } from "../../../components/install-app";
 import { ChangePassword } from "../../../components/change-password";
 import { PushToggle } from "../../../components/notifications";
+import { OrgCustomizer } from "../../../components/org-customizer";
+import type { MyOrg } from "../../../lib/subscriptions";
 import { iconCookie, parseIconChoice } from "../../../lib/app-icons";
 
 export const dynamic = "force-dynamic";
@@ -27,11 +29,16 @@ export default async function SettingsPage() {
   const support = supportLink(process.env.SEER_SUPPORT_WHATSAPP ?? "");
   const email = user.email ?? "";
   const icon = parseIconChoice((await cookies()).get(iconCookie)?.value).choice;
+  const { data: myOrgs } = await supabase.rpc("my_organizations");
+  const owned = ((myOrgs ?? []) as MyOrg[]).filter(org => org.role === "owner");
   return <div style={{ maxWidth: 640 }}>
     <header className="page-head"><div><h1>الإعدادات</h1><p>حسابك وتفضيلات الواجهة.</p></div></header>
     <div className="stack">
       <div className="list-row"><span className="avatar" style={{ margin: 0, width: 48, height: 48, fontSize: 18 }} aria-hidden="true">{(email[0] ?? "س").toUpperCase()}</span>
         <span className="body"><span className="title" dir="ltr" style={{ textAlign: "end" }}>{email.endsWith("@users.seer.local") ? email.split("@")[0] : email}</span><span className="sub">{(memberships ?? []).map(m => `${(m.organizations as unknown as { name: string } | null)?.name ?? "منشأة"} (${roleNames[m.role] ?? "عضو"})`).join("، ") || "غير مرتبط بمنشأة"}</span></span></div>
+      {owned.map(org => <section key={org.organization_id} aria-labelledby={`sections-${org.organization_id}`} id="sections"><h2 id={`sections-${org.organization_id}`} className="section-label">أقسام وهوية {org.name}</h2>
+        <OrgCustomizer organizationId={org.organization_id} features={org.features ?? []} disabled={org.disabled_features ?? []} primary={org.primary_color} accent={org.accent_color} />
+      </section>)}
       <section aria-labelledby="notify-title" id="notify"><h2 id="notify-title" className="section-label">الإشعارات</h2>
         <div className="card" style={{ display: "grid", gap: 10 }}>
           <p style={{ margin: 0 }}>يوصلك إشعار على هذا الجهاز لما تنسند لك مهمة، أو يردّون على استفسارك، أو تنحسم إجازتك. وللمدير: الاستفسارات وطلبات الإجازة والالتحاق وإشعارات الغياب والدفعات.</p>

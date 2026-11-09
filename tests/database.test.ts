@@ -38,6 +38,13 @@ beforeAll(async () => {
       raw_app_meta_data jsonb, raw_user_meta_data jsonb, created_at timestamptz, updated_at timestamptz, confirmation_token text, recovery_token text, email_change_token_new text, email_change text);
     create table auth.identities(provider_id text, user_id uuid, identity_data jsonb, provider text, last_sign_in_at timestamptz, created_at timestamptz, updated_at timestamptz);
     -- Stand-ins for pgcrypto's bcrypt helpers, which embedded Postgres lacks.
+    -- Supabase Storage, reduced to what the receipts policies need.
+    create schema storage;
+    create table storage.buckets(id text primary key, name text, public boolean default false);
+    create table storage.objects(id uuid primary key default gen_random_uuid(), bucket_id text, name text, owner uuid);
+    alter table storage.objects enable row level security;
+    grant usage on schema storage to anon,authenticated;
+    grant select, insert on storage.objects to anon,authenticated;
     create schema extensions;
     create function extensions.gen_salt(kind text) returns text language sql as $$ select '$2a$06$' || md5(random()::text) $$;
     create function extensions.crypt(password text, salt text) returns text language sql as $$ select 'hash:' || md5(password) $$;
@@ -128,6 +135,9 @@ beforeAll(async () => {
   const pushJobs = readdirSync("supabase/migrations").filter(name => name.endsWith("_push_health.sql"));
   if (pushJobs.length !== 1) throw new Error("Expected exactly one push and health migration");
   await db.exec(readFileSync(`supabase/migrations/${pushJobs[0]}`, "utf8"));
+  const subscriptions = readdirSync("supabase/migrations").filter(name => name.endsWith("_subscriptions.sql"));
+  if (subscriptions.length !== 1) throw new Error("Expected exactly one subscriptions migration");
+  await db.exec(readFileSync(`supabase/migrations/${subscriptions[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -1625,5 +1635,186 @@ describe("system health: error log, checks and repairs", () => {
     expect((await rows(`select check_id from public.list_repairs('${orgA}')`))[0].check_id).toBe("messages_stuck");
     await db.exec("reset role");
     expect((await rows("select private.self_heal() as n"))[0].n).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("subscriptions: access, billing, plans and the platform console", () => {
+  const platformAdmin = "60000000-0000-0000-0000-0000000000ad";
+  const signer = "60000000-0000-0000-0000-0000000000a5";
+  const today = async () => (await rows("select (now() at time zone 'Asia/Riyadh')::date::text as d"))[0].d as string;
+  const setEnds = async (days: number, status = "active") => {
+    await db.exec("reset role");
+    await db.exec(`update public.subscriptions set status='${status}', ends_on = ((now() at time zone 'Asia/Riyadh')::date + ${days}), starts_on = least(starts_on, (now() at time zone 'Asia/Riyadh')::date + ${days}) where organization_id='${orgA}'`);
+  };
+  const plan = async (key: string) => (await rows(`select id from public.plans where key='${key}'`))[0].id as string;
+  beforeAll(async () => {
+    await db.exec("reset role");
+    await db.exec(`insert into auth.users(id,email,email_confirmed_at) values ('${platformAdmin}','admin@seer.test',now()),('${signer}','new.owner@school.test',now()) on conflict do nothing;
+      delete from private.platform_admins; insert into private.platform_admins(user_id) values ('${platformAdmin}');
+      insert into public.memberships(organization_id,user_id,role) values ('${orgA}','${staff}','staff') on conflict do nothing`);
+  });
+  afterAll(async () => { await setEnds(365); });
+
+  it("every organization has a subscription; new ones start a trial with every section", async () => {
+    await db.exec("reset role");
+    expect((await rows(`select count(*)::int as n from public.organizations o where not exists (select 1 from public.subscriptions s where s.organization_id = o.id)`))[0].n).toBe(0);
+    const org = (await rows("insert into public.organizations(name,type) values ('Trial School','school') returning id"))[0].id as string;
+    expect(await rows(`select status, ends_on - (now() at time zone 'Asia/Riyadh')::date as days from public.subscriptions where organization_id='${org}'`)).toEqual([{ status: "trial", days: 14 }]);
+    expect((await rows(`select private.org_has_feature('${org}','transport') as f`))[0].f).toBe(true);
+  });
+  it("grace keeps the school working; after the grace days everything closes except billing", async () => {
+    await setEnds(-3);
+    expect((await rows(`select private.org_access('${orgA}') as a`))[0].a).toBe("grace");
+    await as("authenticated", staff);
+    expect((await rows(`select count(*)::int as n from public.children where organization_id='${orgA}'`))[0].n).toBeGreaterThan(0);
+    await setEnds(-8);
+    expect((await rows(`select private.org_access('${orgA}') as a`))[0].a).toBe("locked");
+    await as("authenticated", staff);
+    expect(await rows(`select id from public.children where organization_id='${orgA}'`)).toEqual([]);
+    await expect(db.exec(`insert into public.tasks(organization_id,title) values ('${orgA}','x')`)).rejects.toBeDefined();
+    expect((await rows(`select count(*)::int as n from public.memberships where user_id='${staff}'`))[0].n).toBeGreaterThan(0);
+    expect((await rows(`select public.billing_overview('${orgA}') as b`))[0].b).toMatchObject({ access: "locked", owner: false, payments: [] });
+    await as("authenticated", owner);
+    expect(await rows(`select id from public.children where organization_id='${orgA}'`)).toEqual([]);
+    expect((await rows(`select public.billing_overview('${orgA}') as b`))[0].b).toMatchObject({ access: "locked", owner: true });
+    expect((await rows(`select access from public.my_organizations() where organization_id='${orgA}'`))[0].access).toBe("locked");
+    await as("authenticated", platformAdmin);
+    expect((await rows(`select access from public.admin_subscribers(null,'locked') where organization_id='${orgA}'`))).toHaveLength(1);
+    // Family links pause while locked (platform setting on by default).
+    await as("authenticated", owner);
+    await setEnds(30);
+    await as("authenticated", owner);
+    const portalToken = (await rows(`select public.guardian_portal_token((select id from public.guardians where organization_id='${orgA}' limit 1)) as t`))[0].t as string;
+    await setEnds(-8);
+    await as("anon");
+    expect((await rows(`select public.family_portal('${portalToken}') as p`))[0].p).toBeNull();
+    await setEnds(30);
+    await as("anon");
+    expect((await rows(`select public.family_portal('${portalToken}') as p`))[0].p).not.toBeNull();
+  });
+  it("the owner pays by transfer: amount from the server, receipt only in their own folder", async () => {
+    await setEnds(-8);
+    const advanced = await plan("advanced");
+    await as("authenticated", owner);
+    await db.exec(`insert into storage.objects(bucket_id,name) values ('subscription-receipts','${orgA}/receipt-1.jpg')`);
+    await expect(db.exec(`insert into storage.objects(bucket_id,name) values ('subscription-receipts','${orgB}/receipt-x.jpg')`)).rejects.toMatchObject({ code: "42501" });
+    await expect(db.exec(`select public.submit_subscription_payment('${orgA}','${advanced}',12,'TRX-1','${orgB}/receipt-x.jpg')`)).rejects.toMatchObject({ code: "22023" });
+    const id = (await rows(`select public.submit_subscription_payment('${orgA}','${advanced}',12,'TRX-1','${orgA}/receipt-1.jpg') as id`))[0].id as string;
+    expect((await rows(`select amount from public.subscription_payments where id='${id}'`))[0].amount).toBe("4790.40");
+    expect((await rows(`select public.quote_subscription('${advanced}',3) as a`))[0].a).toBe("1422.15");
+    await as("authenticated", staff);
+    await expect(db.exec(`select public.submit_subscription_payment('${orgA}','${advanced}',1,'TRX-2','${orgA}/receipt-2.jpg')`)).rejects.toMatchObject({ code: "42501" });
+    expect(await rows(`select id from public.subscription_payments where organization_id='${orgA}'`)).toEqual([]);
+    await as("authenticated", outsider);
+    expect(await rows(`select name from storage.objects where bucket_id='subscription-receipts'`)).toEqual([]);
+    await as("authenticated", platformAdmin);
+    expect((await rows(`select name from storage.objects where bucket_id='subscription-receipts'`)).map(r => r.name)).toContain(`${orgA}/receipt-1.jpg`);
+    await as("authenticated", owner);
+    await expect(db.exec(`select public.admin_approve_payment('${id}')`)).rejects.toMatchObject({ code: "42501" });
+    await as("authenticated", staff);
+    await expect(db.exec(`select public.admin_approve_payment('${id}')`)).rejects.toMatchObject({ code: "42501" });
+    // Expired: the paid period starts today.
+    await as("authenticated", platformAdmin);
+    const end = (await rows(`select public.admin_approve_payment('${id}')::text as d`))[0].d as string;
+    expect(end).toBe((await rows("select ((now() at time zone 'Asia/Riyadh')::date + interval '12 months')::date::text as d"))[0].d);
+    expect((await rows(`select private.org_access('${orgA}') as a`))[0].a).toBe("active");
+    await expect(db.exec(`select public.admin_approve_payment('${id}')`)).rejects.toMatchObject({ code: "22023" });
+    await db.exec("reset role");
+    expect((await rows(`select count(*)::int as n from public.audit_events where organization_id='${orgA}' and entity in ('subscriptions','subscription_payments')`))[0].n).toBeGreaterThanOrEqual(2);
+    expect((await rows(`select count(*)::int as n from public.notifications where user_id='${owner}' and kind='subscription'`))[0].n).toBeGreaterThan(0);
+  });
+  it("a running subscription is extended from its end date; rejection needs a reason", async () => {
+    await setEnds(10);
+    const basic = await plan("basic");
+    const before = (await rows(`select ends_on::text as d from public.subscriptions where organization_id='${orgA}'`))[0].d as string;
+    await as("authenticated", owner);
+    const id = (await rows(`select public.submit_subscription_payment('${orgA}','${basic}',3,'TRX-3','${orgA}/receipt-3.jpg') as id`))[0].id as string;
+    const other = (await rows(`select public.submit_subscription_payment('${orgA}','${basic}',1,'TRX-4','${orgA}/receipt-4.jpg') as id`))[0].id as string;
+    await as("authenticated", platformAdmin);
+    expect((await rows(`select public.admin_approve_payment('${id}')::text as d`))[0].d).toBe((await rows(`select ('${before}'::date + interval '3 months')::date::text as d`))[0].d);
+    await expect(db.exec(`select public.admin_reject_payment('${other}','')`)).rejects.toMatchObject({ code: "22023" });
+    await db.exec(`select public.admin_reject_payment('${other}','المبلغ المحوّل ناقص')`);
+    await as("authenticated", owner);
+    expect((await rows(`select status, reject_reason from public.subscription_payments where id='${other}'`))[0]).toEqual({ status: "rejected", reject_reason: "المبلغ المحوّل ناقص" });
+  });
+  it("sections outside the plan or turned off cannot be written", async () => {
+    await setEnds(30);
+    await as("authenticated", platformAdmin);
+    await db.exec(`select public.admin_set_plan('${orgA}','${await plan("basic")}')`);
+    await as("authenticated", owner);
+    await expect(db.exec(`insert into public.vehicles(organization_id,name) values ('${orgA}','Bus 9')`)).rejects.toMatchObject({ code: "42501" });
+    await expect(db.exec(`insert into public.subjects(organization_id,name) values ('${orgA}','Math 9')`)).rejects.toMatchObject({ code: "42501" });
+    expect((await rows(`select public.org_has_feature('${orgA}','transport') as f`))[0].f).toBe(false);
+    await as("authenticated", platformAdmin);
+    await db.exec(`select public.admin_set_plan('${orgA}','${await plan("advanced")}')`);
+    await as("authenticated", owner);
+    await db.exec(`insert into public.vehicles(organization_id,name) values ('${orgA}','Bus 9')`);
+    await db.exec(`select public.save_org_settings('${orgA}', array['transport'], '#225588', null)`);
+    await expect(db.exec(`insert into public.vehicles(organization_id,name) values ('${orgA}','Bus 10')`)).rejects.toMatchObject({ code: "42501" });
+    await expect(db.exec(`select public.save_org_settings('${orgA}', array['rockets'], null, null)`)).rejects.toMatchObject({ code: "22023" });
+    await as("authenticated", staff);
+    await expect(db.exec(`select public.save_org_settings('${orgA}', '{}', null, null)`)).rejects.toMatchObject({ code: "42501" });
+    await as("authenticated", owner);
+    await db.exec(`select public.save_org_settings('${orgA}', '{}', null, null)`);
+  });
+  it("one trial per email and per phone; the account is created only after email verification", async () => {
+    await as("anon");
+    await expect(db.exec("select public.start_signup('bad','0501112233','Huda','Rose','nursery')")).rejects.toMatchObject({ code: "22023" });
+    await db.exec("select public.start_signup('New.Owner@school.test','٠٥٠١١١٢٢٣٣','هدى','روضة الورد','nursery')");
+    await db.exec("reset role");
+    await db.exec(`update auth.users set email_confirmed_at = null where id='${signer}'`);
+    await as("authenticated", signer);
+    await expect(db.exec("select public.complete_signup()")).rejects.toMatchObject({ code: "42501" });
+    await db.exec("reset role");
+    await db.exec(`update auth.users set email_confirmed_at = now() where id='${signer}'`);
+    await as("authenticated", signer);
+    const org = (await rows("select public.complete_signup() as o"))[0].o as string;
+    expect(await rows(`select role, display_name from public.memberships where organization_id='${org}' and user_id='${signer}'`)).toEqual([{ role: "owner", display_name: "هدى" }]);
+    expect((await rows(`select status from public.subscriptions where organization_id='${org}'`))[0].status).toBe("trial");
+    expect((await rows("select public.complete_signup() as o"))[0].o).toBeNull();
+    await as("anon");
+    await expect(db.exec("select public.start_signup('new.owner@school.test','0509998877','هدى','روضة ثانية','nursery')")).rejects.toMatchObject({ code: "23505" });
+    await expect(db.exec("select public.start_signup('other@school.test','0501112233','هدى','روضة ثالثة','nursery')")).rejects.toMatchObject({ code: "23505" });
+    await db.exec("reset role");
+    expect((await rows(`select count(*)::int as n from public.notifications where user_id='${platformAdmin}' and kind='signup'`))[0].n).toBe(1);
+  });
+  it("only the platform admin sees the console, changes plans and settings; changes are audited", async () => {
+    await as("authenticated", owner);
+    await expect(db.exec("select public.admin_overview()")).rejects.toMatchObject({ code: "42501" });
+    await expect(db.exec("select public.admin_save_settings('[]', 14, 7, true)")).rejects.toMatchObject({ code: "42501" });
+    expect((await rows("select public.am_platform_admin() as a"))[0].a).toBe(false);
+    await as("authenticated", platformAdmin);
+    expect((await rows("select public.am_platform_admin() as a"))[0].a).toBe(true);
+    expect((await rows("select public.admin_overview() as o"))[0].o).toMatchObject({ pending: 0 });
+    await expect(db.exec(`select public.admin_save_settings('[{"bank":"الراجحي","holder":"سير","iban":"SA123"}]', 14, 7, true)`)).rejects.toMatchObject({ code: "22023" });
+    await db.exec(`select public.admin_save_settings('[{"bank":"الراجحي","holder":"شركة سير","iban":"SA0380000000608010167519"}]', 10, 5, false)`);
+    const advanced = await plan("advanced");
+    await db.exec(`select public.admin_save_plan('${advanced}','advanced','المتقدمة','وصف', private.feature_keys(), 549, 2, true)`);
+    await db.exec(`select public.admin_save_duration(12, 25, true)`);
+    const extended = (await rows(`select public.admin_extend('${orgA}', 30) as d`))[0].d;
+    expect(extended).toBeTruthy();
+    await db.exec(`select public.admin_set_note('${orgA}','عميل مهم')`);
+    await db.exec(`select public.admin_set_suspended('${orgA}', true)`);
+    expect((await rows(`select private.org_access('${orgA}') as a`))[0].a).toBe("locked");
+    await db.exec(`select public.admin_set_suspended('${orgA}', false)`);
+    expect((await rows(`select private.org_access('${orgA}') as a`))[0].a).toBe("active");
+    expect((await rows("select count(*)::int as n from public.admin_audit()"))[0].n).toBeGreaterThanOrEqual(3);
+    expect((await rows(`select public.admin_subscriber('${orgA}') as s`))[0].s).toMatchObject({ access: "active" });
+    expect((await rows(`select public.quote_subscription('${advanced}',12) as a`))[0].a).toBe("4941.00");
+    await as("anon");
+    expect(((await rows("select public.pricing() as p"))[0].p as { plans: unknown[]; trial_days: number })).toMatchObject({ trial_days: 10 });
+    await as("authenticated", platformAdmin);
+    await db.exec(`select public.admin_save_settings('[]', 14, 7, true)`);
+  });
+  it("daily job sends each reminder once and syncs the status", async () => {
+    await setEnds(3);
+    await db.exec("reset role");
+    expect((await rows("select private.subscription_daily() as n"))[0].n).toBeGreaterThanOrEqual(1);
+    expect((await rows("select private.subscription_daily() as n"))[0].n).toBe(0);
+    expect((await rows(`select count(*)::int as n from private.subscription_reminders where organization_id='${orgA}' and kind='d3'`))[0].n).toBe(1);
+    await setEnds(-2);
+    await db.exec("select private.subscription_daily()");
+    expect((await rows(`select status from public.subscriptions where organization_id='${orgA}'`))[0].status).toBe("grace");
+    await setEnds(365);
   });
 });

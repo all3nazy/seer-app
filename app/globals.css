@@ -840,3 +840,44 @@ a.stat:hover,a.list-row:hover,a.tile:hover,.org-tile:hover,.sidebar .nav-link:ho
 .health-dot{width:10px;height:10px;border-radius:50%;background:var(--ok);flex-shrink:0}
 .health-list li.warn .health-dot{background:var(--sun)}
 .health-list li.info .health-dot{background:var(--sky)}
+/* Pricing */
+.plan-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.plan-card{display:grid;gap:10px;align-content:start}
+.plan-card.featured{border:2px solid var(--primary)}
+.plan-price{margin:0;font-size:15px}.plan-price strong{font-size:30px}
+.plan-features{list-style:none;margin:0;padding:0;display:grid;gap:6px;font-size:14px}
+.compare-table td:not(:first-child),.compare-table th:not(:first-child){text-align:center}
+.faq dt{font-weight:700;margin-top:12px}.faq dd{margin:4px 0 0;color:var(--text-2)}
+/* Billing */
+.lock-card{border:2px solid var(--danger);display:grid;gap:8px;margin-bottom:16px}
+.plan-pick{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.plan-option{display:grid;gap:4px;padding:14px;border-radius:18px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);text-align:start;cursor:pointer;font:inherit}
+.plan-option.is-picked{border-color:var(--primary);background:var(--tint-lilac)}
+.billing-amount{margin:0;font-size:16px}.billing-amount strong{font-size:22px}
+.bank-list{display:grid;gap:8px}
+.bank-item{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;padding:12px;border-radius:14px;background:var(--surface-2)}
+.bank-item .iban{font-family:ui-monospace,monospace;letter-spacing:.5px}
+/* Subscription banner and locked sections */
+.renewal-banner{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:16px;padding:12px 16px;border-radius:16px;background:color-mix(in srgb,var(--sun) 18%,var(--surface));border:1px solid color-mix(in srgb,var(--sun) 45%,transparent);font-weight:600}
+.nav-link.is-locked{opacity:.6}
+.nav-lock{margin-inline-start:auto;font-size:12px}
+.is-rail .nav-lock{display:none}
+.section-toggles{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.section-toggles li{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 12px;border-radius:12px;background:var(--surface-2)}
+.switch{display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px}
+.brand-preview{display:inline-flex;align-items:center;gap:10px;padding:10px 18px;border-radius:999px;font-weight:600;align-self:end}
+.brand-preview span{width:14px;height:14px;border-radius:50%}
+/* Platform admin console */
+.admin-shell{min-height:100vh;background:var(--bg)}
+.admin-bar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:14px 24px;border-bottom:1px solid var(--border);background:var(--surface);position:sticky;top:0;z-index:20}
+.admin-nav{display:flex;flex-wrap:wrap;gap:6px}
+.admin-nav a{padding:8px 12px;border-radius:12px;color:var(--text-2);text-decoration:none;font-weight:600;font-size:14px}
+.admin-nav a:hover{background:var(--surface-2);color:var(--text)}
+.admin-stats{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.admin-payments{display:grid;gap:12px}
+.admin-payment{display:grid;grid-template-columns:1fr 220px;gap:16px;align-items:start}
+.admin-payment-body{display:grid;gap:8px}
+.receipt-thumb{width:100%;max-height:280px;object-fit:contain;border-radius:14px;border:1px solid var(--border);background:var(--surface-2)}
+.admin-actions{display:grid;gap:12px}
+.admin-settings fieldset{border:0;padding:0;margin:0 0 12px;display:grid;gap:8px}
+@media (max-width:700px){.admin-payment{grid-template-columns:1fr}.admin-bar{padding:12px 16px}}

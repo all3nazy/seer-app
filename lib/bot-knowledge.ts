@@ -88,10 +88,11 @@ export const guide: GuideEntry[] = [
 ];
 
 /** Picks the guide entry whose keywords match the question best, or nothing. */
-export function findGuide(question: string): GuideEntry | null {
+export function findGuide(question: string, skip?: (entry: GuideEntry) => boolean): GuideEntry | null {
   const q = ` ${normalizeArabic(question).replace(/[؟?!.,،]/g, " ").replace(/\s+/g, " ")} `;
   let best: { entry: GuideEntry; score: number } | null = null;
   for (const entry of guide) {
+    if (skip?.(entry)) continue;
     let score = 0;
     for (const keyword of entry.keywords) if (q.includes(keyword)) score += keyword.length;
     if (score && (!best || score > best.score)) best = { entry, score };
