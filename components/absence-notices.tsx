@@ -1,6 +1,5 @@
 "use client";
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { markAttendance } from "../app/dashboard/classes/actions";
 import { getSupabaseBrowserClient } from "../lib/supabase";
 import { submitAbsenceNotice } from "../app/p/actions";
@@ -9,15 +8,18 @@ import { notify } from "./feedback";
 export type Notice = { id: string; child_id: string; child: string; reason: string | null; starts_on: string; ends_on: string; handled: boolean; recorded: string | null };
 /** Parents' absence notices for the day: one tap records the absence as excused. */
 export function AbsenceNotices({ organizationId, notices }: { organizationId: string; notices: Notice[] }) {
-  const router = useRouter();
   const [pending, start] = useTransition();
   if (!notices.length) return null;
+  // The notice is closed first, so the attendance action's reply (one refresh) already hides it.
   const excuse = (notice: Notice) => start(async () => {
-    const result = await markAttendance(organizationId, notice.child_id, "excused");
-    if (result.error) { notify(result.error, "error"); return; }
     await getSupabaseBrowserClient().from("absence_notices").update({ handled_at: new Date().toISOString() }).eq("id", notice.id);
+    const result = await markAttendance(organizationId, notice.child_id, "excused");
+    if (result.error) {
+      await getSupabaseBrowserClient().from("absence_notices").update({ handled_at: null }).eq("id", notice.id);
+      notify(result.error, "error");
+      return;
+    }
     notify(`${notice.child}: غياب بعذر`, "info", "done");
-    router.refresh();
   });
   return <section className="card notices" style={{ marginBottom: 16 }} aria-labelledby="notices-title">
     <h2 id="notices-title" style={{ fontSize: 17 }}>إشعارات غياب من أولياء الأمور</h2>

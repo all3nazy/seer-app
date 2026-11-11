@@ -70,14 +70,12 @@ export function StudentHealthForm({ organizationId, childId, health }: { organiz
 const studentStatusLabels: Record<string, string> = { active: "على رأس الدراسة", withdrawn: "منسحب", graduated: "متخرج" };
 /** Change a student's status with a confirmation; their history is kept. */
 export function StudentStatusControl({ organizationId, childId, status }: { organizationId: string; childId: string; status: string }) {
-  const router = useRouter();
   const [pending, start] = useTransition();
   const change = (next: string, question: string) => {
     if (!window.confirm(question)) return;
     start(async () => {
       const result = await setStudentStatus(organizationId, childId, next);
       notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info");
-      if (!result.error) router.refresh();
     });
   };
   return <div className="chip-row" style={{ alignItems: "center", gap: 8 }}>

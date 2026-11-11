@@ -1,6 +1,5 @@
 "use client";
 import { useActionState, useEffect, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { markMessage, saveMessageSettings } from "../app/dashboard/messages/actions";
 import { confirmPickup } from "../app/c/actions";
 import { messageProviderLabels, toggles, type MessageProvider } from "../lib/messaging";
@@ -25,9 +24,8 @@ export function MessageSettingsForm({ organizationId, settings }: { organization
 
 /** One queued message: open WhatsApp with the text ready, then mark it sent. */
 export function OutboxActions({ id, phone, body, status }: { id: string; phone: string; body: string; status: string }) {
-  const router = useRouter();
   const [pending, start] = useTransition();
-  const mark = (next: "sent" | "skipped" | "queued") => start(async () => { const result = await markMessage(id, next); if (result.error) notify(result.error, "error"); router.refresh(); });
+  const mark = (next: "sent" | "skipped" | "queued") => start(async () => { const result = await markMessage(id, next); if (result.error) notify(result.error, "error"); });
   if (status !== "queued" && status !== "failed") return status === "skipped" || status === "sent" ? <button type="button" className="btn btn-sm" disabled={pending} onClick={() => mark("queued")}>إرجاع</button> : null;
   return <span className="share-doc">
     <a className="btn btn-sm share-wa" href={whatsappLink(phone, body)} target="_blank" rel="noopener noreferrer" onClick={() => setTimeout(() => mark("sent"), 400)}>إرسال واتساب</a>

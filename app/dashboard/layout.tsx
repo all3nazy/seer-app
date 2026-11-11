@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { AppShell } from "../../components/app-shell";
-import { requestSession } from "../../lib/supabase/server";
+import { requestMyOrganizations, requestSession } from "../../lib/supabase/server";
 import { stageOf } from "../../lib/stage";
 import Link from "next/link";
 import { featureLabels, featureOf, featureState, renewalNotice, type MyOrg } from "../../lib/subscriptions";
@@ -15,11 +15,11 @@ import { onColor } from "../../lib/documents";
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { client, user } = await requestSession();
   const [{ data }, admin, head] = await Promise.all([
-    user ? client.rpc("my_organizations") : Promise.resolve({ data: [] }),
+    requestMyOrganizations(),
     user ? client.rpc("am_platform_admin") : Promise.resolve({ data: false }),
     headers(),
   ]);
-  const organizations = (data ?? []) as MyOrg[];
+  const organizations = data;
   const path = head.get("x-seer-path") ?? "";
   const requested = head.get("x-seer-org") ?? "";
   const current = organizations.find(org => org.organization_id === requested) ?? organizations[0] ?? null;

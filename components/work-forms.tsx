@@ -31,7 +31,6 @@ export function DeleteCommentButton({ organizationId, taskId, commentId }: { org
 export function TaskStatusPicker({ organizationId, taskId, status }: { organizationId: string; taskId: string; status: TaskStatus }) {
   const [current, setCurrent] = useState(status);
   const [pending, start] = useTransition();
-  const router = useRouter();
   return <label style={{ display: "inline-flex", gap: 8, alignItems: "center", fontWeight: 500 }}>الحالة
     <select value={current} disabled={pending} style={{ minHeight: 40, width: "auto" }} onChange={event => {
       const next = event.target.value as TaskStatus, previous = current;
@@ -40,7 +39,6 @@ export function TaskStatusPicker({ organizationId, taskId, status }: { organizat
         const result = await moveTask(organizationId, taskId, next);
         if (result.error) { setCurrent(previous); notify(result.error, "error"); return; }
         if (next === "done") celebrate(); else notify("تحدّثت المهمة.");
-        router.refresh();
       });
     }}>{taskStatuses.map(item => <option key={item} value={item}>{taskStatusLabels[item]}</option>)}</select>
   </label>;

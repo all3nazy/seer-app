@@ -1,6 +1,5 @@
 "use client";
 import { useActionState, useEffect, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { saveDailyReport } from "../app/dashboard/daily/actions";
 import { deleteAnnouncement, guardianPortalLink, saveAnnouncement, sendAnnouncementToFamilies } from "../app/dashboard/announcements/actions";
 import { audienceLabels, audiences, meals, moodEmoji, moodLabels, moods, portalMessage, portionShort, portions, reportSummary, type DailyReport } from "../lib/family";
@@ -61,9 +60,8 @@ export function AnnouncementForm({ organizationId, sections }: { organizationId:
   </form>;
 }
 export function DeleteAnnouncement({ organizationId, id }: { organizationId: string; id: string }) {
-  const router = useRouter();
   const [pending, start] = useTransition();
-  return <button type="button" className="btn btn-sm btn-danger" disabled={pending} onClick={() => { if (window.confirm("حذف الإعلان؟")) start(async () => { const result = await deleteAnnouncement(organizationId, id); notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info"); router.refresh(); }); }}>حذف</button>;
+  return <button type="button" className="btn btn-sm btn-danger" disabled={pending} onClick={() => { if (window.confirm("حذف الإعلان؟")) start(async () => { const result = await deleteAnnouncement(organizationId, id); notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info"); }); }}>حذف</button>;
 }
 
 /** Sends a family announcement to guardians as messages (WhatsApp/SMS), once per guardian. */

@@ -1,17 +1,15 @@
 "use client";
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { approvePayment, changePlan, extendSubscription, rejectPayment, saveDuration, saveNote, savePlan, saveSettings, setSuspended, type AdminResult } from "../app/admin/actions";
 import { featureKeys, featureLabels } from "../lib/subscriptions";
 import { notify } from "./feedback";
 
 function useRun() {
-  const router = useRouter();
   const [pending, start] = useTransition();
   const run = (work: () => Promise<AdminResult>, after?: () => void) => start(async () => {
     const result = await work();
     notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info", result.error ? undefined : "done");
-    if (!result.error) { after?.(); router.refresh(); }
+    if (!result.error) after?.();
   });
   return { pending, run };
 }
