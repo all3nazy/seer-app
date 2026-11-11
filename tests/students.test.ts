@@ -98,11 +98,11 @@ describe("share links", async () => {
 
 describe("phone and computer versions", async () => {
   const { computerOnlySection, navLinks } = await import("../lib/navigation");
-  it("keeps daily work on phones and the rest for computers and iPads", () => {
-    for (const path of ["/dashboard", "/dashboard/my", "/dashboard/attendance", "/dashboard/pickup", "/dashboard/children/abc", "/dashboard/classes", "/dashboard/inquiries/x", "/dashboard/assistant", "/dashboard/settings", "/dashboard/tasks/123"]) {
+  it("keeps daily work, finance and the task board on phones and the rest for computers and iPads", () => {
+    for (const path of ["/dashboard", "/dashboard/my", "/dashboard/attendance", "/dashboard/pickup", "/dashboard/children/abc", "/dashboard/classes", "/dashboard/inquiries/x", "/dashboard/assistant", "/dashboard/settings", "/dashboard/tasks/123", "/dashboard/tasks", "/dashboard/finance", "/dashboard/finance/invoices/1"]) {
       expect(computerOnlySection(path), path).toBeUndefined();
     }
-    for (const path of ["/dashboard/tasks", "/dashboard/finance", "/dashboard/finance/invoices/1", "/dashboard/admissions", "/dashboard/academics", "/dashboard/operations", "/dashboard/team", "/dashboard/audit"]) {
+    for (const path of ["/dashboard/admissions", "/dashboard/academics", "/dashboard/operations", "/dashboard/team", "/dashboard/audit"]) {
       expect(computerOnlySection(path), path).toBeDefined();
     }
   });

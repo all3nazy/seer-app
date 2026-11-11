@@ -4,6 +4,7 @@ import { linkGuardian, unlinkGuardian } from "../app/dashboard/operations/action
 import { relationshipLabels, relationships, type Relationship } from "../lib/team";
 import type { RecordOption } from "../lib/operations";
 import { notify } from "./feedback";
+import { confirmAction } from "./confirm";
 
 export type FamilyLink = { child_id: string; guardian_id: string; relationship: Relationship };
 type Props = { organizationId: string; manager: boolean; childrenOptions: RecordOption[]; guardians: RecordOption[]; links: FamilyLink[] };
@@ -12,8 +13,8 @@ export function FamilyLinks({ organizationId, manager, childrenOptions, guardian
   const [state, action, pending] = useActionState(linkGuardian, {});
   const [removing, start] = useTransition();
   const name = (options: RecordOption[], id: string) => options.find(option => option.id === id)?.name ?? "سجل خارج القائمة";
-  function unlink(link: FamilyLink) {
-    if (!window.confirm(`إلغاء ربط ${name(childrenOptions, link.child_id)} بـ${name(guardians, link.guardian_id)}؟`)) return;
+  async function unlink(link: FamilyLink) {
+    if (!(await confirmAction(`إلغاء ربط ${name(childrenOptions, link.child_id)} بـ${name(guardians, link.guardian_id)}؟`))) return;
     start(async () => {
       const result = await unlinkGuardian(organizationId, link.child_id, link.guardian_id);
       notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info");

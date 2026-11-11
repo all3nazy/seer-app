@@ -4,6 +4,7 @@ import { checkApplication, submitApplication } from "../app/apply/actions";
 import { applicationStatusLabels, isApplicationStatus } from "../lib/admissions";
 import { relationshipLabels, relationships } from "../lib/team";
 import { riyadhToday } from "../lib/students";
+import { processingNotice } from "../lib/legal";
 
 export function ApplyForm({ organizationId, grades }: { organizationId: string; grades: { id: string; name: string }[] }) {
   const [state, action, pending] = useActionState(submitApplication, {});
@@ -33,6 +34,7 @@ export function ApplyForm({ organizationId, grades }: { organizationId: string; 
       <label>ملاحظات (اختياري)<textarea name="family_notes" maxLength={1000} placeholder="مثلاً: احتياجات خاصة، إخوان في المدرسة، أوقات التواصل المناسبة" /></label>
       <label style={{ display: "flex", gap: 10, alignItems: "flex-start", fontWeight: 400 }}><input type="checkbox" name="consent" required style={{ width: 20, minHeight: 20, marginTop: 3 }} />
         أوافق على استخدام هذه البيانات لغرض دراسة طلب القبول والتواصل معي بخصوصه فقط.</label>
+      <p className="processing-notice">{processingNotice.replace("سياسة الخصوصية", "")}<a href="/privacy" target="_blank" rel="noopener noreferrer">سياسة الخصوصية</a>.</p>
       <button type="submit" className="primary-button">{pending ? "جارٍ الإرسال…" : "إرسال الطلب"}</button>
     </fieldset>
     {state.error ? <p role="alert" className="form-error">{state.error}</p> : null}

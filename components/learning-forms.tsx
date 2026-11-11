@@ -3,6 +3,7 @@ import { useActionState, useEffect, useState, useTransition } from "react";
 import { addBehavior, createAssessment, deleteRecord, saveGrades, saveSubject, setSlot, type LearnResult } from "../app/dashboard/learning/actions";
 import { assessmentKinds, assessmentLabels, behaviorCategories, behaviorLabels } from "../lib/learning";
 import { notify } from "./feedback";
+import { confirmAction } from "./confirm";
 
 type Option = { id: string; name: string };
 function useToast(state: LearnResult, after?: () => void) {
@@ -23,7 +24,7 @@ export function SubjectForm({ organizationId, grades }: { organizationId: string
 }
 export function DeleteLearning({ organizationId, table, id, label = "حذف" }: { organizationId: string; table: "subjects" | "assessments" | "behavior_notes"; id: string; label?: string }) {
   const [pending, start] = useTransition();
-  return <button type="button" className="btn btn-sm btn-danger" disabled={pending} onClick={() => { if (window.confirm("متأكد من الحذف؟")) start(async () => { const result = await deleteRecord(organizationId, table, id); notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info"); }); }}>{label}</button>;
+  return <button type="button" className="btn btn-sm btn-danger" disabled={pending} onClick={async () => { if (await confirmAction("متأكد من الحذف؟")) start(async () => { const result = await deleteRecord(organizationId, table, id); notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info"); }); }}>{label}</button>;
 }
 
 /** One timetable cell: pick the subject and teacher; empty subject clears it. */

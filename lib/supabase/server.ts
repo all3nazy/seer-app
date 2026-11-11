@@ -31,7 +31,7 @@ export async function sessionUser(client: Awaited<ReturnType<typeof createSupaba
   return { id: sub, email: typeof data?.claims?.email === "string" ? data.claims.email : undefined };
 }
 
-export type Membership = { organization_id: string; role: string; organizations: { name: string; type: string } | null };
+export type Membership = { organization_id: string; role: string; display_name: string | null; organizations: { name: string; type: string } | null };
 /**
  * One session and one read of the person's organizations per request (React cache), shared by the
  * dashboard layout, the page and its parts: membership, role, subscription access, sections and
@@ -47,9 +47,16 @@ export const requestMyOrganizations = cache(async (): Promise<{ data: MyOrg[]; e
   const { data, error } = await client.rpc("my_organizations");
   return { data: (data ?? []) as MyOrg[], error: Boolean(error) };
 });
+/** Whether the signed-in person runs the platform (one check per request, shared). */
+export const requestPlatformAdmin = cache(async (): Promise<boolean> => {
+  const { client, user } = await requestSession();
+  if (!user) return false;
+  const { data } = await client.rpc("am_platform_admin");
+  return data === true;
+});
 export const requestMemberships = cache(async (): Promise<{ data: Membership[]; error: boolean }> => {
   const { data, error } = await requestMyOrganizations();
-  return { data: data.map(org => ({ organization_id: org.organization_id, role: org.role, organizations: { name: org.name, type: org.type } })), error };
+  return { data: data.map(org => ({ organization_id: org.organization_id, role: org.role, display_name: org.display_name ?? null, organizations: { name: org.name, type: org.type } })), error };
 });
 /** Drop-in for auth.getUser() in server actions: reads the verified token instead of calling Auth. */
 export async function authUser(client: Awaited<ReturnType<typeof createSupabaseServerClient>>) {

@@ -4,6 +4,7 @@ import { assignStudents, deleteAcademic, saveAcademic, type AcademicResult } fro
 import { sectionGenderLabels, sectionGenders, stageLabels, stages, type AcademicTable } from "../lib/academics";
 import type { RecordOption } from "../lib/operations";
 import { notify } from "./feedback";
+import { confirmAction } from "./confirm";
 
 type Values = Record<string, string | number | boolean | null | undefined>;
 type Options = { years?: RecordOption[]; grades?: RecordOption[]; branches?: RecordOption[]; members?: RecordOption[]; sections?: RecordOption[] };
@@ -71,8 +72,8 @@ export function AcademicForm({ organizationId, table, record, options = {}, onDo
 export function AcademicRow({ organizationId, table, record, options, children }: { organizationId: string; table: AcademicTable; record: Values & { id: string }; options?: Options; children: React.ReactNode }) {
   const [editing, setEditing] = useState(false);
   const [pending, start] = useTransition();
-  function remove() {
-    if (!window.confirm("حذف هذا السجل؟")) return;
+  async function remove() {
+    if (!(await confirmAction("حذف هذا السجل؟"))) return;
     start(async () => { const result = await deleteAcademic(organizationId, table, record.id); notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info"); });
   }
   return <li style={{ display: "grid", gap: 10 }}>

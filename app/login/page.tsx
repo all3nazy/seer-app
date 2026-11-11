@@ -3,6 +3,7 @@ import { useRef, useState } from "react";
 import { getSupabaseBrowserClient } from "../../lib/supabase";
 import { Logo } from "../../components/icons";
 import { loginEmail } from "../../lib/login";
+import { LegalFooter } from "../../components/legal-page";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -47,5 +48,6 @@ export default function Login() {
       </form>
       <p className="login-help">موظف جديد؟ اطلب من إدارتك «رابط الانضمام» على واتساب، وتختار منه اسم المستخدم وكلمة المرور. نسيت كلمة المرور؟ مديرك يقدر يعيّن لك واحدة جديدة.</p>
     </section>
+    <LegalFooter />
   </main></>;
 }

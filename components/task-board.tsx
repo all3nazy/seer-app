@@ -6,6 +6,7 @@ import { Icon, SunPhase } from "./icons";
 import { celebrate, notify } from "./feedback";
 import { play } from "../lib/sound";
 import { memberName, type Member } from "../lib/team";
+import { confirmAction } from "./confirm";
 
 type Props = { organizationId: string; manager: boolean; initialTasks: Task[]; members?: Member[]; me?: string };
 const emptyCopy: Record<TaskStatus, string> = {
@@ -79,8 +80,8 @@ export function TaskBoard({ organizationId, manager, initialTasks, members = [],
       notify("حُفظت التعديلات");
     });
   }
-  function remove() {
-    if (!editing || !window.confirm(`حذف «${editing.title}» نهائيًا؟ لا يمكن التراجع.`)) return;
+  async function remove() {
+    if (!editing || !(await confirmAction(`حذف «${editing.title}» نهائيًا؟ لا يمكن التراجع.`))) return;
     const id = editing.id;
     startTransition(async () => {
       const result = await deleteTask(organizationId, id);

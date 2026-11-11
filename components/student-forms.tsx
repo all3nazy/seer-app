@@ -5,6 +5,7 @@ import { saveStudentHealth, saveStudentProfile, setStudentStatus, type ActionRes
 import { bloodTypes, genderLabels, genders, riyadhToday, type ChildHealth, type ChildProfile } from "../lib/students";
 import type { RecordOption } from "../lib/operations";
 import { notify } from "./feedback";
+import { confirmAction } from "./confirm";
 
 function Result({ state }: { state: ActionResult }) {
   return <>{state.error ? <p role="alert" className="form-error">{state.error}</p> : null}{state.success ? <p role="status">{state.success}</p> : null}</>;
@@ -71,8 +72,8 @@ const studentStatusLabels: Record<string, string> = { active: "على رأس ا�
 /** Change a student's status with a confirmation; their history is kept. */
 export function StudentStatusControl({ organizationId, childId, status }: { organizationId: string; childId: string; status: string }) {
   const [pending, start] = useTransition();
-  const change = (next: string, question: string) => {
-    if (!window.confirm(question)) return;
+  const change = async (next: string, question: string) => {
+    if (!(await confirmAction(question))) return;
     start(async () => {
       const result = await setStudentStatus(organizationId, childId, next);
       notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info");

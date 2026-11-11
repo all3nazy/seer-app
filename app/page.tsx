@@ -1,4 +1,5 @@
 import { Icon, Logo, type IconName } from "../components/icons";
+import { LegalFooter } from "../components/legal-page";
 
 const features: { icon: IconName; tone: string; title: string; description: string }[] = [
   { icon: "board", tone: "plum", title: "لوحة المهام", description: "كل مهمة تمشي من جديدة إلى منجزة. اسحبها بين المراحل وشوف المتأخر قبل ما يتأخر أكثر." },
@@ -25,6 +26,6 @@ export default function Home() {
       <h2 id="modules-title" className="section-title" style={{ textAlign: "center" }}>وش تلقى داخل سِير</h2>
       <div className="feature-grid">{features.map(feature => <article className="tile" key={feature.title}><span className={`tile-icon tone-${feature.tone}`}><Icon name={feature.icon} /></span><h3 style={{ margin: 0 }}>{feature.title}</h3><p>{feature.description}</p></article>)}</div>
     </section>
-    <footer className="foot">سِير، منصة إدارة عمليات المدارس والحضانات.</footer>
+    <LegalFooter />
   </main></>;
 }

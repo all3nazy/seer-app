@@ -7,6 +7,7 @@ import { feeKindLabels, feeKinds, sar, type FeeKind } from "../lib/finance";
 import { whatsappLink } from "../lib/share";
 import { notify } from "./feedback";
 import { FinanceDocument } from "./finance-document";
+import { confirmAction } from "./confirm";
 
 function useToast(state: DocResult) {
   useEffect(() => { if (state.success) notify(state.success, "info", "done"); else if (state.error) notify(state.error, "error"); }, [state]);
@@ -158,7 +159,7 @@ export function QuoteActions({ organizationId, quoteId, status, canConvert }: { 
   return <div className="doc-actions">
     {status === "draft" ? <>
       <button type="button" className="btn-primary" disabled={pending} onClick={() => run(() => setQuoteStatus(organizationId, quoteId, "sent"))}>اعتماد وإرسال</button>
-      <button type="button" className="btn btn-danger" disabled={pending} onClick={() => { if (window.confirm("حذف المسودة؟")) run(() => deleteQuote(organizationId, quoteId)); }}>حذف المسودة</button>
+      <button type="button" className="btn btn-danger" disabled={pending} onClick={async () => { if (await confirmAction("حذف المسودة؟")) run(() => deleteQuote(organizationId, quoteId)); }}>حذف المسودة</button>
     </> : null}
     {status === "sent" ? <>
       <button type="button" className="btn" disabled={pending} onClick={() => run(() => setQuoteStatus(organizationId, quoteId, "accepted"))}>قبِل العميل</button>
@@ -186,7 +187,7 @@ export function ShareDocument({ organizationId, kind, id, link, phone, message }
     <a className="btn-primary share-wa" href={whatsappLink(phone, message)} target="_blank" rel="noopener noreferrer">مشاركة واتساب</a>
     <button type="button" className="btn" onClick={copy}>نسخ الرابط</button>
     <a className="btn" href={link} target="_blank" rel="noopener noreferrer">معاينة كما يراها ولي الأمر</a>
-    <button type="button" className="btn btn-sm" disabled={pending} onClick={() => { if (window.confirm("تجديد الرابط يوقف الرابط القديم. متأكد؟")) start(async () => { const result = await renewShareLink(organizationId, kind, id); notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info"); }); }}>تجديد الرابط</button>
+    <button type="button" className="btn btn-sm" disabled={pending} onClick={async () => { if (await confirmAction("تجديد الرابط يوقف الرابط القديم. متأكد؟")) start(async () => { const result = await renewShareLink(organizationId, kind, id); notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info"); }); }}>تجديد الرابط</button>
   </div>;
 }
 

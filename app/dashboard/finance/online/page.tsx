@@ -4,6 +4,7 @@ import { OrgUnavailable } from "../../../../components/org-unavailable";
 import { PaymentSettingsForm, WebhookSecretForm } from "../../../../components/pay-forms";
 import { intentStatusLabels, liveReady, payMethodLabels, providerLabels, type PayMethod, type Provider } from "../../../../lib/payments";
 import { sar } from "../../../../lib/finance";
+import { pilotMode, pilotTexts } from "../../../../lib/pilot";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "الدفع الإلكتروني" };
@@ -13,6 +14,7 @@ export default async function OnlinePaymentsPage({ searchParams }: { searchParam
   const context = await loadOrgContext(requested);
   if ("error" in context) return <OrgUnavailable reason={context.error} />;
   const { client, org, orgName, manager } = context;
+  if (pilotMode()) return <section className="card"><h1>الدفع الإلكتروني</h1><p>{pilotTexts.payments}</p></section>;
   if (!manager) return <section className="card"><h1>الدفع الإلكتروني</h1><p>لمالك المنشأة أو مديرها فقط.</p></section>;
   const [settingsResult, intentsResult, webhookResult] = await Promise.all([
     client.from("payment_settings").select("provider,mode,methods,publishable_key,is_enabled").eq("organization_id", org).maybeSingle(),

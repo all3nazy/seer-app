@@ -138,6 +138,9 @@ beforeAll(async () => {
   const subscriptions = readdirSync("supabase/migrations").filter(name => name.endsWith("_subscriptions.sql"));
   if (subscriptions.length !== 1) throw new Error("Expected exactly one subscriptions migration");
   await db.exec(readFileSync(`supabase/migrations/${subscriptions[0]}`, "utf8"));
+  const pilot = readdirSync("supabase/migrations").filter(name => name.endsWith("_pilot_launch.sql"));
+  if (pilot.length !== 1) throw new Error("Expected exactly one pilot launch migration");
+  await db.exec(readFileSync(`supabase/migrations/${pilot[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -1816,5 +1819,51 @@ describe("subscriptions: access, billing, plans and the platform console", () =>
     await db.exec("select private.subscription_daily()");
     expect((await rows(`select status from public.subscriptions where organization_id='${orgA}'`))[0].status).toBe("grace");
     await setEnds(365);
+  });
+});
+
+describe("pilot launch: owner consent and extending by months", () => {
+  const platformAdmin = "60000000-0000-0000-0000-0000000000ad";
+  it("only the owner accepts, once per version; each person reads only their own acceptances", async () => {
+    await as("authenticated", staff);
+    await expect(db.exec(`select public.accept_legal('${orgA}','2026-11-11')`)).rejects.toMatchObject({ code: "42501" });
+    await as("authenticated", outsider);
+    await expect(db.exec(`select public.accept_legal('${orgA}','2026-11-11')`)).rejects.toMatchObject({ code: "42501" });
+    await as("authenticated", owner);
+    await expect(db.exec(`select public.accept_legal('${orgA}','bad version!')`)).rejects.toMatchObject({ code: "22023" });
+    expect((await rows(`select legal_version from public.my_organizations() where organization_id='${orgA}'`))[0].legal_version).toBeNull();
+    await db.exec(`select public.accept_legal('${orgA}','2026-11-11')`);
+    await db.exec(`select public.accept_legal('${orgA}','2026-11-11')`);
+    expect((await rows(`select count(*)::int as n from public.legal_acceptances where organization_id='${orgA}'`))[0].n).toBe(1);
+    expect((await rows(`select legal_version from public.my_organizations() where organization_id='${orgA}'`))[0].legal_version).toBe("2026-11-11");
+    // A new version is asked again; the latest acceptance is the one returned.
+    await db.exec(`select public.accept_legal('${orgA}','2027-01-01')`);
+    expect((await rows(`select legal_version from public.my_organizations() where organization_id='${orgA}'`))[0].legal_version).toBe("2027-01-01");
+    // No direct writes, even by the owner.
+    await expect(db.exec(`insert into public.legal_acceptances(organization_id,user_id,version) values ('${orgA}','${owner}','x')`)).rejects.toBeDefined();
+    await expect(db.exec(`delete from public.legal_acceptances where organization_id='${orgA}'`)).rejects.toBeDefined();
+    await as("authenticated", staff);
+    expect(await rows("select id from public.legal_acceptances")).toEqual([]);
+  });
+  it("my_organizations returns the display name", async () => {
+    await db.exec("reset role");
+    await db.exec(`update public.memberships set display_name='أبو فهد' where organization_id='${orgA}' and user_id='${owner}'`);
+    await as("authenticated", owner);
+    expect((await rows(`select display_name from public.my_organizations() where organization_id='${orgA}'`))[0].display_name).toBe("أبو فهد");
+  });
+  it("the platform admin extends by calendar months; nobody else can", async () => {
+    await db.exec("reset role");
+    await db.exec(`insert into auth.users(id,email,email_confirmed_at) values ('${platformAdmin}','admin@seer.test',now()) on conflict do nothing;
+      insert into private.platform_admins(user_id) values ('${platformAdmin}') on conflict do nothing;
+      update public.subscriptions set status='active', starts_on=(now() at time zone 'Asia/Riyadh')::date - 10, ends_on=(now() at time zone 'Asia/Riyadh')::date - 3 where organization_id='${orgA}'`);
+    await as("authenticated", owner);
+    await expect(db.exec(`select public.admin_extend_months('${orgA}', 3)`)).rejects.toMatchObject({ code: "42501" });
+    await as("authenticated", platformAdmin);
+    await expect(db.exec(`select public.admin_extend_months('${orgA}', 0)`)).rejects.toMatchObject({ code: "22023" });
+    const expected = (await rows("select (((now() at time zone 'Asia/Riyadh')::date + interval '3 months')::date)::text as d"))[0].d;
+    expect((await rows(`select public.admin_extend_months('${orgA}', 3)::text as d`))[0].d).toBe(expected);
+    expect((await rows(`select private.org_access('${orgA}') as a`))[0].a).toBe("active");
+    await db.exec("reset role");
+    await db.exec(`update public.subscriptions set ends_on=(now() at time zone 'Asia/Riyadh')::date + 365 where organization_id='${orgA}'`);
   });
 });

@@ -1,8 +1,9 @@
 "use client";
 import { useState, useTransition } from "react";
-import { approvePayment, changePlan, extendSubscription, rejectPayment, saveDuration, saveNote, savePlan, saveSettings, setSuspended, type AdminResult } from "../app/admin/actions";
+import { approvePayment, changePlan, extendSubscription, extendSubscriptionMonths, rejectPayment, saveDuration, saveNote, savePlan, saveSettings, setSuspended, type AdminResult } from "../app/admin/actions";
 import { featureKeys, featureLabels } from "../lib/subscriptions";
 import { notify } from "./feedback";
+import { confirmAction } from "./confirm";
 
 function useRun() {
   const [pending, start] = useTransition();
@@ -23,20 +24,22 @@ export function PaymentDecision({ id }: { id: string }) {
     <span style={{ display: "flex", gap: 6 }}><button type="button" className="btn btn-sm btn-danger" disabled={pending} onClick={() => run(() => rejectPayment(id, reason))}>تأكيد الرفض</button><button type="button" className="btn btn-sm" onClick={() => setRejecting(false)}>إلغاء</button></span>
   </div>;
   return <span style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-    <button type="button" className="btn btn-sm btn-primary" disabled={pending} onClick={() => { if (window.confirm("اعتماد التحويل وتفعيل الاشتراك؟")) run(() => approvePayment(id)); }}>اعتماد</button>
+    <button type="button" className="btn btn-sm btn-primary" disabled={pending} onClick={async () => { if (await confirmAction("اعتماد التحويل وتفعيل الاشتراك؟")) run(() => approvePayment(id)); }}>اعتماد</button>
     <button type="button" className="btn btn-sm" disabled={pending} onClick={() => setRejecting(true)}>رفض</button>
   </span>;
 }
 
 export function SubscriberActions({ org, plans, currentPlan, suspended, note }: { org: string; plans: { id: string; name: string }[]; currentPlan: string | null; suspended: boolean; note: string | null }) {
   const { pending, run } = useRun();
-  const [days, setDays] = useState(30);
+  const [days, setDays] = useState(1);
+  const [unit, setUnit] = useState<"months" | "days">("months");
   const [plan, setPlan] = useState(currentPlan ?? plans[0]?.id ?? "");
   const [text, setText] = useState(note ?? "");
   return <div className="admin-actions">
     <div className="composer">
-      <label>تمديد بعدد أيام<input type="number" min={1} max={730} value={days} onChange={event => setDays(Number(event.target.value))} /></label>
-      <button type="button" className="btn btn-primary" disabled={pending} onClick={() => run(() => extendSubscription(org, days))}>تمديد</button>
+      <label>تمديد<input type="number" min={1} max={unit === "months" ? 24 : 730} value={days} onChange={event => setDays(Number(event.target.value))} /></label>
+      <label>المدة<select value={unit} onChange={event => setUnit(event.target.value as "months" | "days")}><option value="months">أشهر</option><option value="days">أيام</option></select></label>
+      <button type="button" className="btn btn-primary" disabled={pending} onClick={() => run(() => unit === "months" ? extendSubscriptionMonths(org, days) : extendSubscription(org, days))}>تمديد</button>
     </div>
     <div className="composer">
       <label>الباقة<select value={plan} onChange={event => setPlan(event.target.value)}>{plans.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
@@ -48,7 +51,7 @@ export function SubscriberActions({ org, plans, currentPlan, suspended, note }: 
     </div>
     <span>{suspended
       ? <button type="button" className="btn btn-primary" disabled={pending} onClick={() => run(() => setSuspended(org, false))}>إعادة التفعيل</button>
-      : <button type="button" className="btn btn-danger" disabled={pending} onClick={() => { if (window.confirm("إيقاف اشتراك هذه المنشأة؟ تنقفل المنصة عندهم حتى إعادة التفعيل.")) run(() => setSuspended(org, true)); }}>إيقاف الاشتراك</button>}</span>
+      : <button type="button" className="btn btn-danger" disabled={pending} onClick={async () => { if (await confirmAction("إيقاف اشتراك هذه المنشأة؟ تنقفل المنصة عندهم حتى إعادة التفعيل.")) run(() => setSuspended(org, true)); }}>إيقاف الاشتراك</button>}</span>
   </div>;
 }
 

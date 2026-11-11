@@ -5,6 +5,7 @@ import { deleteAnnouncement, guardianPortalLink, saveAnnouncement, sendAnnouncem
 import { audienceLabels, audiences, meals, moodEmoji, moodLabels, moods, portalMessage, portionShort, portions, reportSummary, type DailyReport } from "../lib/family";
 import { whatsappLink } from "../lib/share";
 import { notify } from "./feedback";
+import { confirmAction } from "./confirm";
 
 /** One child's day: tap chips for mood and meals, quick numbers for nap and diapers, then save. */
 export function DailyReportCard({ organizationId, day, child, report, editable, guardianPhone, showDiapers }: {
@@ -61,13 +62,13 @@ export function AnnouncementForm({ organizationId, sections }: { organizationId:
 }
 export function DeleteAnnouncement({ organizationId, id }: { organizationId: string; id: string }) {
   const [pending, start] = useTransition();
-  return <button type="button" className="btn btn-sm btn-danger" disabled={pending} onClick={() => { if (window.confirm("حذف الإعلان؟")) start(async () => { const result = await deleteAnnouncement(organizationId, id); notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info"); }); }}>حذف</button>;
+  return <button type="button" className="btn btn-sm btn-danger" disabled={pending} onClick={async () => { if (await confirmAction("حذف الإعلان؟")) start(async () => { const result = await deleteAnnouncement(organizationId, id); notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info"); }); }}>حذف</button>;
 }
 
 /** Sends a family announcement to guardians as messages (WhatsApp/SMS), once per guardian. */
 export function SendAnnouncement({ id }: { id: string }) {
   const [pending, start] = useTransition();
-  return <button type="button" className="btn btn-sm" disabled={pending} onClick={() => { if (window.confirm("إرسال الإعلان لأولياء الأمور برسالة مع رابط البوابة؟")) start(async () => { const result = await sendAnnouncementToFamilies(id); notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info", result.error ? undefined : "done"); }); }}>{pending ? "جارٍ الإرسال…" : "إرسال للأهالي"}</button>;
+  return <button type="button" className="btn btn-sm" disabled={pending} onClick={async () => { if (await confirmAction("إرسال الإعلان لأولياء الأمور برسالة مع رابط البوابة؟")) start(async () => { const result = await sendAnnouncementToFamilies(id); notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info", result.error ? undefined : "done"); }); }}>{pending ? "جارٍ الإرسال…" : "إرسال للأهالي"}</button>;
 }
 
 /** Managers send a guardian their private portal link over WhatsApp. */
@@ -84,6 +85,6 @@ export function PortalLinkButton({ guardianId, guardianName, phone, organization
     <a className="btn btn-sm share-wa" href={whatsappLink(phone, portalMessage(organization, guardianName, link))} target="_blank" rel="noopener noreferrer">إرسال واتساب</a>
     <button type="button" className="btn btn-sm" onClick={async () => { try { await navigator.clipboard.writeText(link); notify("نُسخ الرابط.", "info", "done"); } catch { notify(link); } }}>نسخ</button>
     <a className="btn btn-sm" href={link} target="_blank" rel="noopener noreferrer">معاينة</a>
-    <button type="button" className="btn btn-sm" disabled={pending} onClick={() => { if (window.confirm("تجديد الرابط يوقف القديم. متأكد؟")) fetchLink(true); }}>تجديد</button>
+    <button type="button" className="btn btn-sm" disabled={pending} onClick={async () => { if (await confirmAction("تجديد الرابط يوقف القديم. متأكد؟")) fetchLink(true); }}>تجديد</button>
   </span>;
 }

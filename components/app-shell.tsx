@@ -9,7 +9,7 @@ import SignOutButton from "./sign-out-button";
 import { BotDock } from "./bot-dock";
 import { BotAvatar } from "./bot-avatar";
 import { NotificationBell } from "./notifications";
-import { computerOnlySection, matches, navGroupLabels, navLinks, visibleLinks, type NavGroup } from "../lib/navigation";
+import { computerOnlySection, groupIsOpen, matches, navGroupLabels, navLinks, visibleLinks, type NavGroup } from "../lib/navigation";
 import { patternUrl, type Stage } from "../lib/stage";
 import { featureOf, featureState, type OrgFeatures } from "../lib/subscriptions";
 
@@ -21,6 +21,14 @@ export function AppShell({ children, stage, organizations, supportPhone, manager
   const path = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   useEffect(() => { try { setCollapsed(localStorage.getItem("seer-sidebar") === "rail"); } catch { /* storage unavailable */ } }, []);
+  // Folded sidebar groups, remembered on this device.
+  const [savedGroups, setSavedGroups] = useState<Partial<Record<NavGroup, boolean>> | null>(null);
+  useEffect(() => { try { const raw = localStorage.getItem("seer-nav-groups"); if (raw) setSavedGroups(JSON.parse(raw)); } catch { /* storage unavailable */ } }, []);
+  const toggleGroup = (group: NavGroup, open: boolean) => setSavedGroups(current => {
+    const next = { ...current, [group]: !open };
+    try { localStorage.setItem("seer-nav-groups", JSON.stringify(next)); } catch { /* ignore */ }
+    return next;
+  });
   const toggle = () => setCollapsed(value => { try { localStorage.setItem("seer-sidebar", value ? "full" : "rail"); } catch { /* ignore */ } return !value; });
   const current = (link: (typeof navLinks)[number]) => matches(link, path) ? "page" as const : undefined;
   const fullOnly = computerOnlySection(path);
@@ -28,7 +36,8 @@ export function AppShell({ children, stage, organizations, supportPhone, manager
   const stateOf = (href: string) => featureState(featureOf(href), sections);
   const tabs = navLinks.filter(link => link.tab && stateOf(link.href) === "on");
   const inMore = !tabs.some(link => matches(link, path));
-  const groups = (Object.keys(navGroupLabels) as NavGroup[]).map(group => ({ group, links: visibleLinks(manager).filter(link => link.group === group && stateOf(link.href) !== "off") }));
+  const groups = (Object.keys(navGroupLabels) as NavGroup[]).map(group => ({ group, links: visibleLinks(manager).filter(link => link.group === group && stateOf(link.href) !== "off") })).filter(({ links }) => links.length);
+  const currentGroup = navLinks.find(link => link.group && matches(link, path))?.group ?? null;
   const style = { ...(brand?.primary ? { "--primary": brand.primary, "--primary-hover": brand.primary, "--on-primary": brand.onPrimary ?? "#fff" } : {}), ...(brand?.accent ? { "--accent": brand.accent, "--coral": brand.accent } : {}) } as React.CSSProperties;
   const assistantOn = stateOf("/dashboard/assistant") === "on";
   const settings = navLinks.find(link => link.href === "/dashboard/settings")!;
@@ -43,8 +52,14 @@ export function AppShell({ children, stage, organizations, supportPhone, manager
         </button>
       </div>
       <nav aria-label="التنقل الرئيسي" className="sidebar-nav">
-        {groups.map(({ group, links }) => <div key={group} className="nav-group">
-          <span className="nav-group-label">{navGroupLabels[group]}</span>
+        {groups.map(({ group, links }) => {
+          const open = groupIsOpen(group, savedGroups, currentGroup, collapsed);
+          return <div key={group} className={`nav-group${open ? " is-open" : ""}`}>
+          <button type="button" className="nav-group-label" aria-expanded={open} aria-controls={`nav-group-${group}`} onClick={() => toggleGroup(group, open)} disabled={collapsed || group === currentGroup}>
+            <span>{navGroupLabels[group]}</span>{open ? null : <span className="nav-group-count" aria-label={`${links.length.toLocaleString("ar-SA")} أقسام`}>{links.length.toLocaleString("ar-SA")}</span>}
+            <span className="nav-group-chevron" aria-hidden="true">▾</span>
+          </button>
+          <div id={`nav-group-${group}`} className="nav-group-links" hidden={!open}>
           {links.map(link => stateOf(link.href) === "locked"
             ? <Link key={link.href} className="nav-link is-locked" href={`/dashboard/billing?upgrade=${featureOf(link.href)}`} title={`${link.label}: ضمن الباقة المتقدمة — رقّ باقتك`}>
                 <Icon name={link.icon} /><span className="nav-text">{link.label}</span><span className="nav-lock" aria-label="خارج باقتك">🔒</span>
@@ -52,7 +67,9 @@ export function AppShell({ children, stage, organizations, supportPhone, manager
             : <Link key={link.href} className="nav-link" href={link.href} aria-current={current(link)} title={link.label}>
                 <Icon name={link.icon} /><span className="nav-text">{link.label}</span>
               </Link>)}
-        </div>)}
+          </div>
+        </div>;
+        })}
       </nav>
       <div className="sidebar-foot">
         {platformAdmin ? <Link className="nav-link" href="/admin" title="لوحة مسؤول المنصة"><Icon name="shield" /><span className="nav-text">لوحة المسؤول</span></Link> : null}

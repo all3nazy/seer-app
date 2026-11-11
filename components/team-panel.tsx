@@ -4,6 +4,7 @@ import { inviteMember, removeMember, revokeInvitation, updateMember } from "../a
 import { invitationMessage, memberName, roleLabels, type Invitation, type Member, type Role } from "../lib/team";
 import { Icon } from "./icons";
 import { notify } from "./feedback";
+import { confirmAction } from "./confirm";
 
 type Props = { organizationId: string; organizationName: string; me: string; myRole: Role; members: Member[]; invitations: Invitation[] | null };
 
@@ -30,8 +31,8 @@ export function TeamPanel({ organizationId, organizationName, me, myRole, member
     data.set("user_id", editing.user_id);
     run(() => updateMember(data), () => dialog.current?.close());
   }
-  function remove(member: Member) {
-    if (!window.confirm(`إزالة «${memberName(member)}» من ${organizationName}؟ مهامه تصير بدون مسؤول.`)) return;
+  async function remove(member: Member) {
+    if (!(await confirmAction(`إزالة «${memberName(member)}» من ${organizationName}؟ مهامه تصير بدون مسؤول.`))) return;
     run(() => removeMember(organizationId, member.user_id), () => dialog.current?.close());
   }
   const canEdit = (member: Member) => manager && (myRole === "owner" || member.role === "staff" || member.user_id === me);

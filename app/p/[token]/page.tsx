@@ -7,6 +7,7 @@ import { moodEmoji, moodLabels, meals, napLabel, portionShort, type Mood, type P
 import { attendanceLabels, type AttendanceStatus } from "../../../lib/students";
 import { onColor } from "../../../lib/documents";
 import { sar } from "../../../lib/finance";
+import { processingNotice } from "../../../lib/legal";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "بوابة ولي الأمر", robots: { index: false, follow: false } };
@@ -89,6 +90,7 @@ export default async function FamilyPortalPage({ params }: { params: Promise<{ t
       {portal.organization.phone ? <a className="btn" href={`tel:${portal.organization.phone}`}>اتصال بالإدارة</a> : null}
       <PrintButton />
       <p>هذا رابط خاص بكم. لا تشاركونه مع غيركم.</p>
+      <p className="processing-notice">{processingNotice.replace("سياسة الخصوصية", "")}<Link href="/privacy">سياسة الخصوصية</Link>. · <Link href="/terms">شروط الاستخدام</Link></p>
     </footer>
   </main>;
 }

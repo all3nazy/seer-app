@@ -7,7 +7,7 @@ import { featureKeys, featureLabels } from "../lib/subscriptions";
 import { notify } from "./feedback";
 
 /** The owner turns sections on and off within the plan and picks the brand colours. */
-export function OrgCustomizer({ organizationId, features, disabled, primary, accent }: { organizationId: string; features: string[]; disabled: string[]; primary: string | null; accent: string | null }) {
+export function OrgCustomizer({ organizationId, features, disabled, primary, accent, hidden = [] }: { organizationId: string; features: string[]; disabled: string[]; primary: string | null; accent: string | null; hidden?: string[] }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [off, setOff] = useState<string[]>(disabled);
@@ -24,12 +24,14 @@ export function OrgCustomizer({ organizationId, features, disabled, primary, acc
     <div>
       <h3 style={{ margin: "0 0 8px", fontSize: 16 }}>الأقسام</h3>
       <p className="hint" style={{ margin: "0 0 10px" }}>الأقسام المطفية تختفي من القوائم ومن المساعد لكل الفريق، وبياناتها تبقى محفوظة.</p>
-      <ul className="section-toggles">{featureKeys.map(key => {
+      <ul className="section-toggles">{featureKeys.filter(key => !hidden.includes(key)).map(key => {
         const inPlan = features.includes(key);
         return <li key={key}>
-          <span>{featureLabels[key]}</span>
+          <span id={`section-${key}`}>{featureLabels[key]}</span>
           {inPlan
-            ? <label className="switch"><input type="checkbox" checked={!off.includes(key)} onChange={event => setOff(current => event.target.checked ? current.filter(item => item !== key) : [...current, key])} /><span>{off.includes(key) ? "مطفي" : "شغّال"}</span></label>
+            ? <span className="toggle-state"><span aria-hidden="true">{off.includes(key) ? "مطفي" : "شغّال"}</span>
+                <button type="button" className="switch" role="switch" aria-checked={!off.includes(key)} aria-labelledby={`section-${key}`}
+                  onClick={() => setOff(current => current.includes(key) ? current.filter(item => item !== key) : [...current, key])} /></span>
             : <Link className="chip-soft" href={`/dashboard/billing?upgrade=${key}`}>🔒 رقّ باقتك</Link>}
         </li>;
       })}</ul>
