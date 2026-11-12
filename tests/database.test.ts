@@ -144,6 +144,9 @@ beforeAll(async () => {
   const support = readdirSync("supabase/migrations").filter(name => name.endsWith("_support.sql"));
   if (support.length !== 1) throw new Error("Expected exactly one support migration");
   await db.exec(readFileSync(`supabase/migrations/${support[0]}`, "utf8"));
+  const invites = readdirSync("supabase/migrations").filter(name => name.endsWith("_org_invites.sql"));
+  if (invites.length !== 1) throw new Error("Expected exactly one org invites migration");
+  await db.exec(readFileSync(`supabase/migrations/${invites[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -1932,5 +1935,103 @@ describe("in-app support tickets", () => {
     await expect(db.exec(open("الرابعة", "/dashboard"))).rejects.toMatchObject({ code: "54000" });
     await db.exec("reset role");
     await db.exec(`delete from public.support_threads where user_id='${staff}'`);
+  });
+});
+
+describe("organization invite links (no email)", () => {
+  const platformAdmin = "60000000-0000-0000-0000-0000000000ad";
+  const invite = (name = "مدرسة النخبة", months = 3, plan = "null") => `select public.admin_create_org_invite('${name}','school',${plan},${months},'تجربة الرياض') as t`;
+  beforeAll(async () => {
+    await db.exec("reset role");
+    await db.exec(`insert into auth.users(id,email,email_confirmed_at) values ('${platformAdmin}','admin@seer.test',now()) on conflict do nothing;
+      insert into private.platform_admins(user_id) values ('${platformAdmin}') on conflict do nothing;
+      delete from private.org_invite_attempts`);
+  });
+  it("only the platform admin creates invites; only the hash of the token is stored", async () => {
+    for (const who of [owner, staff, outsider]) {
+      await as("authenticated", who);
+      await expect(db.exec(invite())).rejects.toMatchObject({ code: "42501" });
+    }
+    await as("anon");
+    await expect(db.exec(invite())).rejects.toBeDefined();
+    await as("authenticated", platformAdmin);
+    await expect(db.exec(invite("مدرسة", 13))).rejects.toMatchObject({ code: "22023" });
+    const token = (await rows(invite()))[0].t as string;
+    expect(token).toMatch(/^[A-HJ-NP-Za-km-z2-9]{32}$/);
+    await db.exec("reset role");
+    const stored = await rows("select token_hash, org_name, trial_months from private.org_invites order by created_at desc limit 1");
+    expect(stored[0].token_hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(stored[0].token_hash).not.toContain(token);
+    expect(JSON.stringify(await rows("select * from private.org_invites"))).not.toContain(token);
+    expect((await rows("select count(*)::int as n from private.platform_audit where action = 'org_invite_created'"))[0].n).toBeGreaterThan(0);
+  });
+  it("creates the organization, its owner, the subscription and the legal acceptance in one go; the link works once", async () => {
+    await as("authenticated", platformAdmin);
+    const token = (await rows(invite("روضة الأمل", 3)))[0].t as string;
+    await as("anon");
+    expect((await rows(`select public.org_invite_view('${token}') as v`))[0].v).toMatchObject({ valid: true, organization: "روضة الأمل", trial_months: 3 });
+    // A bad password or a missing consent changes nothing and keeps the link usable.
+    await expect(db.exec(`select public.accept_org_invite('${token}','owner.amal','short','أم فهد','2026-11-11')`)).rejects.toMatchObject({ code: "22023" });
+    await expect(db.exec(`select public.accept_org_invite('${token}','owner.amal','secret123','أم فهد',null)`)).rejects.toMatchObject({ code: "22023" });
+    const result = (await rows(`select public.accept_org_invite('${token}','owner.amal','secret123','أم فهد','2026-11-11') as r`))[0].r as { ok: boolean; login: string; organization_id: string };
+    expect(result).toMatchObject({ ok: true, login: "owner.amal@users.seer.local" });
+    const org = result.organization_id;
+    await db.exec("reset role");
+    expect(await rows(`select name, type from public.organizations where id='${org}'`)).toEqual([{ name: "روضة الأمل", type: "school" }]);
+    const [member] = await rows(`select m.role, m.display_name, u.email, u.email_confirmed_at is not null as confirmed from public.memberships m join auth.users u on u.id = m.user_id where m.organization_id='${org}'`);
+    expect(member).toEqual({ role: "owner", display_name: "أم فهد", email: "owner.amal@users.seer.local", confirmed: true });
+    const expected = (await rows("select (((now() at time zone 'Asia/Riyadh')::date + interval '3 months')::date)::text as d"))[0].d;
+    expect(await rows(`select s.status, s.ends_on::text as ends, p.key from public.subscriptions s join public.plans p on p.id = s.plan_id where s.organization_id='${org}'`)).toEqual([{ status: "trial", ends: expected, key: "advanced" }]);
+    expect(await rows(`select version from public.legal_acceptances where organization_id='${org}'`)).toEqual([{ version: "2026-11-11" }]);
+    expect((await rows(`select count(*)::int as n from public.audit_events where organization_id='${org}' and entity='org_invites'`))[0].n).toBe(1);
+    expect((await rows(`select title from public.notifications where user_id='${platformAdmin}' and kind='signup' and organization_id='${org}'`))).toEqual([{ title: "تفعّلت منشأة: روضة الأمل" }]);
+    // Used: the same link is refused, and the view says so.
+    await as("anon");
+    expect((await rows(`select public.accept_org_invite('${token}','second.owner','secret123','ثاني','2026-11-11') as r`))[0].r).toEqual({ ok: false, reason: "used" });
+    expect((await rows(`select public.org_invite_view('${token}') as v`))[0].v).toEqual({ valid: false, reason: "used" });
+  });
+  it("a signed-in person gets the new organization on their own account", async () => {
+    await as("authenticated", platformAdmin);
+    const token = (await rows(invite("مدرسة الحاضر", 1)))[0].t as string;
+    await as("authenticated", staff);
+    const result = (await rows(`select public.accept_org_invite('${token}',null,null,'المعلمة','2026-11-11') as r`))[0].r as { ok: boolean; organization_id: string };
+    expect(result.ok).toBe(true);
+    expect((await rows(`select role from public.memberships where organization_id='${result.organization_id}' and user_id='${staff}'`))[0].role).toBe("owner");
+  });
+  it("expired and revoked links are refused; reissue gives a new link and stops the old one", async () => {
+    await as("authenticated", platformAdmin);
+    const expired = (await rows(invite("مدرسة قديمة")))[0].t as string;
+    await db.exec("reset role");
+    await db.exec(`update private.org_invites set expires_at = now() - interval '1 minute' where org_name = 'مدرسة قديمة'`);
+    await as("anon");
+    expect((await rows(`select public.accept_org_invite('${expired}','late.owner','secret123','متأخر','2026-11-11') as r`))[0].r).toEqual({ ok: false, reason: "expired" });
+    await as("authenticated", platformAdmin);
+    const first = (await rows(invite("مدرسة ملغاة")))[0].t as string;
+    const id = (await rows("select id from public.admin_org_invites() where org_name = 'مدرسة ملغاة'"))[0].id as string;
+    const second = (await rows(`select public.admin_reissue_org_invite('${id}') as t`))[0].t as string;
+    expect(second).not.toBe(first);
+    await as("anon");
+    expect((await rows(`select public.org_invite_view('${first}') as v`))[0].v).toEqual({ valid: false, reason: "revoked" });
+    expect((await rows(`select public.org_invite_view('${second}') as v`))[0].v).toMatchObject({ valid: true });
+    await as("authenticated", platformAdmin);
+    const fresh = (await rows("select id from public.admin_org_invites() where org_name = 'مدرسة ملغاة' and status = 'pending'"))[0].id as string;
+    await db.exec(`select public.admin_revoke_org_invite('${fresh}')`);
+    const statuses = (await rows("select status from public.admin_org_invites() where org_name in ('مدرسة ملغاة','مدرسة قديمة','روضة الأمل') order by status")).map(row => row.status);
+    expect(statuses).toEqual(["expired", "revoked", "revoked", "used"]);
+    await db.exec("reset role");
+    expect((await rows("select count(*)::int as n from private.platform_audit where action in ('org_invite_revoked','org_invite_reissued','org_invite_used')"))[0].n).toBeGreaterThanOrEqual(3);
+  });
+  it("limits wrong tokens: after 10 wrong attempts even a valid token is refused for a while", async () => {
+    await db.exec("reset role");
+    await db.exec("delete from private.org_invite_attempts");
+    await as("authenticated", platformAdmin);
+    const token = (await rows(invite("مدرسة المحاولات")))[0].t as string;
+    await as("anon");
+    for (let i = 0; i < 10; i++) expect((await rows(`select public.org_invite_view('wrong-token-${i}') as v`))[0].v).toEqual({ valid: false, reason: "invalid" });
+    expect((await rows(`select public.org_invite_view('${token}') as v`))[0].v).toEqual({ valid: false, reason: "blocked" });
+    expect((await rows(`select public.accept_org_invite('${token}','x.owner','secret123','س','2026-11-11') as r`))[0].r).toEqual({ ok: false, reason: "blocked" });
+    await db.exec("reset role");
+    expect(JSON.stringify(await rows("select * from private.org_invite_attempts"))).not.toContain("wrong-token");
+    await db.exec("delete from private.org_invite_attempts");
   });
 });
