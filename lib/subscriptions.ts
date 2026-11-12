@@ -45,7 +45,7 @@ export const accessLabels: Record<Access, string> = { active: "فعّال", grac
 export const statusLabels: Record<string, string> = { trial: "تجربة مجانية", active: "فعّال", grace: "مهلة التجديد", locked: "مقفل", suspended: "موقوف" };
 export const paymentStatusLabels: Record<string, string> = { pending: "قيد المراجعة", approved: "معتمد", rejected: "مرفوض" };
 
-export type MyOrg = { organization_id: string; name: string; type: string; role: string; access: Access; status: string | null; ends_on: string | null; days_left: number | null; plan_key: string | null; features: string[]; disabled_features: string[]; primary_color: string | null; accent_color: string | null };
+export type MyOrg = { organization_id: string; name: string; type: string; role: string; display_name?: string | null; legal_version?: string | null; access: Access; status: string | null; ends_on: string | null; days_left: number | null; plan_key: string | null; features: string[]; disabled_features: string[]; primary_color: string | null; accent_color: string | null };
 /** The banner shown in the last days and during the grace period. */
 export function renewalNotice(org: Pick<MyOrg, "access" | "status" | "days_left"> | null, graceDays = 7): string | null {
   if (!org || org.days_left === null || org.status === "suspended") return null;

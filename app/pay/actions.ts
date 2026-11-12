@@ -1,11 +1,13 @@
 "use server";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "../../lib/supabase/server";
+import { pilotMode } from "../../lib/pilot";
 
 const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 /** From the family's invoice link: start paying the balance with the chosen method. */
 export async function startPayment(token: string, method: string): Promise<{ error?: string }> {
   if (!isUuid(token)) return { error: "رابط غير صالح." };
+  if (pilotMode()) return { error: "الدفع الإلكتروني غير متاح خلال المرحلة التجريبية." };
   const client = await createSupabaseServerClient();
   const { data, error } = await client.rpc("start_online_payment", { token, method });
   if (error?.code === "54000") return { error: "محاولات كثيرة. حاول بعد ساعة." };

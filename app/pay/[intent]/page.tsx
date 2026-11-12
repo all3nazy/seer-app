@@ -6,6 +6,7 @@ import { onColor } from "../../../lib/documents";
 import { sar } from "../../../lib/finance";
 import { payMethodLabels, providerLabels, toHalalas, type PayMethod, type Provider } from "../../../lib/payments";
 import { siteOrigin } from "../../../lib/origin";
+import { pilotMode } from "../../../lib/pilot";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "الدفع", robots: { index: false, follow: false } };
@@ -15,7 +16,7 @@ type View = { id: string; amount: number; status: string; provider: Provider; mo
 /** Checkout for one payment attempt, reached from the family's invoice link. */
 export default async function PayPage({ params, searchParams }: { params: Promise<{ intent: string }>; searchParams: Promise<{ t?: string }> }) {
   const [{ intent }, { t: token }] = await Promise.all([params, searchParams]);
-  if (!isUuid(intent) || !isUuid(token)) notFound();
+  if (!isUuid(intent) || !isUuid(token) || pilotMode()) notFound();
   const client = await createSupabaseServerClient();
   const { data } = await client.rpc("payment_intent_view", { token, intent });
   if (!data) notFound();

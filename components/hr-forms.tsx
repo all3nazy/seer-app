@@ -3,6 +3,7 @@ import { useActionState, useEffect, useState, useTransition } from "react";
 import { adjustPayrollLine, approvePayroll, checkInOut, decideLeave, generatePayroll, markStaffAttendance, requestLeave, saveStaff, type HrResult } from "../app/dashboard/staff/actions";
 import { contractLabels, contractTypes, leaveKinds, leaveLabels, staffAttendanceLabels, staffAttendanceStatuses, type StaffProfile } from "../lib/hr";
 import { notify } from "./feedback";
+import { confirmAction } from "./confirm";
 
 function useToast(state: HrResult, after?: () => void) {
   useEffect(() => { if (state.success) { notify(state.success, "info", "done"); after?.(); } else if (state.error) notify(state.error, "error"); }, [state]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -83,7 +84,7 @@ export function StaffAttendanceSelect({ organizationId, staffId, day, status }: 
 
 export function PayrollGenerate({ organizationId, month, exists }: { organizationId: string; month: string; exists: boolean }) {
   const { pending, run } = useRun();
-  return <button type="button" className="btn-primary" disabled={pending} onClick={() => { if (!exists || window.confirm("إعادة الحساب تمسح المكافآت والخصومات اليدوية لهذا الشهر. متأكد؟")) run(() => generatePayroll(organizationId, month)); }}>{exists ? "إعادة حساب الشهر" : "حساب رواتب الشهر"}</button>;
+  return <button type="button" className="btn-primary" disabled={pending} onClick={async () => { if (!exists || await confirmAction("إعادة الحساب تمسح المكافآت والخصومات اليدوية لهذا الشهر. متأكد؟")) run(() => generatePayroll(organizationId, month)); }}>{exists ? "إعادة حساب الشهر" : "حساب رواتب الشهر"}</button>;
 }
 export function PayrollAdjust({ organizationId, lineId, bonus, deduction, locked }: { organizationId: string; lineId: string; bonus: number; deduction: number; locked: boolean }) {
   const { pending, run } = useRun();
@@ -98,5 +99,5 @@ export function PayrollAdjust({ organizationId, lineId, bonus, deduction, locked
 }
 export function PayrollApprove({ organizationId, runId }: { organizationId: string; runId: string }) {
   const { pending, run } = useRun();
-  return <button type="button" className="btn" disabled={pending} onClick={() => { if (window.confirm("بعد الاعتماد ما تتغير رواتب هذا الشهر. اعتماد؟")) run(() => approvePayroll(organizationId, runId)); }}>اعتماد الرواتب</button>;
+  return <button type="button" className="btn" disabled={pending} onClick={async () => { if (await confirmAction("بعد الاعتماد ما تتغير رواتب هذا الشهر. اعتماد؟")) run(() => approvePayroll(organizationId, runId)); }}>اعتماد الرواتب</button>;
 }

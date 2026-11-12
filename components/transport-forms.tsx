@@ -4,6 +4,7 @@ import { finishTrip, recordRider, removeStop, saveRoute, saveStop, saveVehicle, 
 import { busMessage, directionLabels, riderLabels, riderState, type Direction, type TripEvent } from "../lib/transport";
 import { whatsappLink } from "../lib/share";
 import { notify } from "./feedback";
+import { confirmAction } from "./confirm";
 
 type Option = { id: string; name: string };
 function useToast(state: BusResult, after?: () => void) {
@@ -56,7 +57,7 @@ export function StopForm({ organizationId, routeId, students }: { organizationId
 }
 export function RemoveStop({ organizationId, id }: { organizationId: string; id: string }) {
   const { pending, run } = useRun();
-  return <button type="button" className="btn btn-sm btn-danger" disabled={pending} onClick={() => { if (window.confirm("إزالة الطالب من المسار؟")) run(() => removeStop(organizationId, id)); }}>إزالة</button>;
+  return <button type="button" className="btn btn-sm btn-danger" disabled={pending} onClick={async () => { if (await confirmAction("إزالة الطالب من المسار؟")) run(() => removeStop(organizationId, id)); }}>إزالة</button>;
 }
 export function StartTrip({ organizationId, routeId, direction }: { organizationId: string; routeId: string; direction: Direction }) {
   const { pending, run } = useRun();
@@ -64,7 +65,7 @@ export function StartTrip({ organizationId, routeId, direction }: { organization
 }
 export function FinishTrip({ organizationId, tripId, waiting }: { organizationId: string; tripId: string; waiting: number }) {
   const { pending, run } = useRun();
-  return <button type="button" className="btn" disabled={pending} onClick={() => { if (!waiting || window.confirm(`فيه ${waiting} طالب ما تسجّل. إنهاء الرحلة؟`)) run(() => finishTrip(organizationId, tripId)); }}>إنهاء الرحلة</button>;
+  return <button type="button" className="btn" disabled={pending} onClick={async () => { if (!waiting || await confirmAction(`فيه ${waiting} طالب ما تسجّل. إنهاء الرحلة؟`)) run(() => finishTrip(organizationId, tripId)); }}>إنهاء الرحلة</button>;
 }
 /** One rider on a running trip: big tap targets for the driver or supervisor, plus a WhatsApp note to the parent. */
 export function RiderRow({ organizationId, tripId, child, stop, events, direction, route, phone, finished }: {

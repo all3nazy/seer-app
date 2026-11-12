@@ -5,6 +5,7 @@ import { convertApplication, deleteApplication, reviewApplication, saveAdmission
 import { applicationStatusLabels, manualStatuses, riyadhLocalInput, type Application } from "../lib/admissions";
 import type { RecordOption } from "../lib/operations";
 import { notify } from "./feedback";
+import { confirmAction, confirmSubmit } from "./confirm";
 
 function useToast(state: AdmissionResult) { useEffect(() => { if (state.success) notify(state.success); }, [state]); }
 const FormError = ({ state }: { state: AdmissionResult }) => state.error ? <p role="alert" className="form-error" style={{ gridColumn: "1/-1" }}>{state.error}</p> : null;
@@ -52,7 +53,7 @@ export function ConvertForm({ organizationId, applicationId, sections }: { organ
   const router = useRouter();
   useToast(state);
   useEffect(() => { if (state.childId) router.push(`/dashboard/children/${state.childId}?org=${encodeURIComponent(organizationId)}`); }, [state, organizationId, router]);
-  return <form action={action} className="composer" onSubmit={event => { if (!window.confirm("تحويل الطلب لملف طالب؟ ينضاف الطالب وولي أمره وطلب تسجيل مقبول.")) event.preventDefault(); }}>
+  return <form action={action} className="composer" onSubmit={event => confirmSubmit(event, "تحويل الطلب لملف طالب؟ ينضاف الطالب وولي أمره وطلب تسجيل مقبول.")}>
     <input type="hidden" name="organization_id" value={organizationId} />
     <input type="hidden" name="application_id" value={applicationId} />
     {sections.length ? <label>الشعبة (اختياري)<select name="section_id" defaultValue=""><option value="">بدون شعبة الحين</option>{sections.map(section => <option key={section.id} value={section.id}>{section.name}</option>)}</select></label> : null}
@@ -64,8 +65,8 @@ export function ConvertForm({ organizationId, applicationId, sections }: { organ
 export function DeleteApplicationButton({ organizationId, applicationId }: { organizationId: string; applicationId: string }) {
   const [pending, start] = useTransition();
   const router = useRouter();
-  return <button type="button" className="btn btn-danger btn-sm" disabled={pending} onClick={() => {
-    if (!window.confirm("حذف الطلب نهائيًا؟")) return;
+  return <button type="button" className="btn btn-danger btn-sm" disabled={pending} onClick={async () => {
+    if (!(await confirmAction("حذف الطلب نهائيًا؟"))) return;
     start(async () => {
       const result = await deleteApplication(organizationId, applicationId);
       notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info");

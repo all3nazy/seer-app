@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseServerClient } from "../../../lib/supabase/server";
+import { pilotMode } from "../../../lib/pilot";
 
 /**
  * The link in the verification email lands here: the session is started, and a pending sign-up
@@ -13,6 +14,7 @@ export async function GET(request: NextRequest) {
   const client = await createSupabaseServerClient();
   const { error } = await client.auth.exchangeCodeForSession(code);
   if (error) return NextResponse.redirect(new URL("/login?verified=1", request.url));
-  await client.rpc("complete_signup");
+  // During the pilot sign-up is by invitation only: no organization is created from a sign-up.
+  if (!pilotMode()) await client.rpc("complete_signup");
   return NextResponse.redirect(target);
 }

@@ -9,6 +9,7 @@ import { discountReasonLabels, discountReasons, feeKindLabels, feeKinds, payment
 import { riyadhToday } from "../lib/students";
 import type { RecordOption } from "../lib/operations";
 import { notify } from "./feedback";
+import { confirmAction, confirmSubmit } from "./confirm";
 
 type Values = Record<string, string | number | boolean | null | undefined>;
 const str = (value: unknown) => (value === null || value === undefined ? "" : String(value));
@@ -57,7 +58,7 @@ export function FinanceRow({ organizationId, table, record, options, children }:
       <div style={{ minWidth: 0 }}>{children}</div>
       <span style={{ display: "flex", gap: 8 }}>
         <button type="button" className="btn btn-sm" onClick={() => setEditing(value => !value)} aria-expanded={editing}>{editing ? "إغلاق" : "تعديل"}</button>
-        <button type="button" className="btn btn-sm btn-danger" disabled={pending} onClick={() => { if (window.confirm("حذف؟")) start(async () => { const result = await deleteFinanceRecord(organizationId, table, record.id); notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info"); }); }}>حذف</button>
+        <button type="button" className="btn btn-sm btn-danger" disabled={pending} onClick={async () => { if (await confirmAction("حذف؟")) start(async () => { const result = await deleteFinanceRecord(organizationId, table, record.id); notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info"); }); }}>حذف</button>
       </span>
     </div>
     {editing ? <FinanceRecordForm organizationId={organizationId} table={table} record={record} options={options} onDone={() => setEditing(false)} /> : null}
@@ -108,8 +109,8 @@ export function DeleteLineButton({ organizationId, invoiceId, lineId }: { organi
 export function InvoiceActions({ organizationId, invoice }: { organizationId: string; invoice: Invoice }) {
   const [pending, start] = useTransition();
   const router = useRouter();
-  const run = (label: string, task: () => Promise<FinanceResult>, after?: () => void) => {
-    if (!window.confirm(label)) return;
+  const run = async (label: string, task: () => Promise<FinanceResult>, after?: () => void) => {
+    if (!(await confirmAction(label))) return;
     start(async () => { const result = await task(); notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info", result.error ? undefined : "done"); if (!result.error) after?.(); });
   };
   const org = encodeURIComponent(organizationId);
@@ -138,13 +139,13 @@ export function PaymentForm({ organizationId, invoiceId, balance }: { organizati
 }
 export function DeletePaymentButton({ organizationId, invoiceId, paymentId }: { organizationId: string; invoiceId: string; paymentId: string }) {
   const [pending, start] = useTransition();
-  return <button type="button" className="btn btn-sm btn-danger" disabled={pending} onClick={() => { if (window.confirm("حذف الدفعة؟ استخدمه لتصحيح خطأ إدخال فقط.")) start(async () => { const result = await deletePayment(organizationId, invoiceId, paymentId); notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info"); }); }}>حذف</button>;
+  return <button type="button" className="btn btn-sm btn-danger" disabled={pending} onClick={async () => { if (await confirmAction("حذف الدفعة؟ استخدمه لتصحيح خطأ إدخال فقط.")) start(async () => { const result = await deletePayment(organizationId, invoiceId, paymentId); notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info"); }); }}>حذف</button>;
 }
 
 export function GenerateInvoicesForm({ organizationId, plans, targets, discounts }: { organizationId: string; plans: RecordOption[]; targets: RecordOption[]; discounts: RecordOption[] }) {
   const [state, action, pending] = useActionState(generateInvoices, {});
   useToast(state);
-  return <form action={action} className="composer" onSubmit={event => { if (!window.confirm("إنشاء فواتير الباقة لكل طلاب الاختيار؟")) event.preventDefault(); }}>
+  return <form action={action} className="composer" onSubmit={event => confirmSubmit(event, "إنشاء فواتير الباقة لكل طلاب الاختيار؟")}>
     <input type="hidden" name="organization_id" value={organizationId} />
     <Select name="fee_plan_id" label="الباقة" options={plans} required />
     <Select name="target" label="الصف أو الشعبة" options={targets} required />

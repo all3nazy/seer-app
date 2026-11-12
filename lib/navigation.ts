@@ -7,6 +7,12 @@ import type { IconName } from "../components/icons";
  */
 export type NavGroup = "today" | "students" | "admin";
 export const navGroupLabels: Record<NavGroup, string> = { today: "اليوم", students: "الطلاب والدراسة", admin: "الإدارة" };
+/** Sidebar groups fold. First visit: only «اليوم» open; the group of the current page is always open; the rail shows all. */
+export const defaultOpenGroups: Record<NavGroup, boolean> = { today: true, students: false, admin: false };
+export function groupIsOpen(group: NavGroup, saved: Partial<Record<NavGroup, boolean>> | null, currentGroup: NavGroup | null, rail: boolean): boolean {
+  if (rail || group === currentGroup) return true;
+  return saved?.[group] ?? defaultOpenGroups[group];
+}
 export type NavLink = { href: string; label: string; short: string; icon: IconName; phone: boolean; group: NavGroup | null; tab?: boolean; exact?: boolean; managers?: boolean };
 export const navLinks: NavLink[] = [
   { href: "/dashboard", label: "لوحة التشغيل", short: "الرئيسية", icon: "home", group: "today", phone: true, tab: true, exact: true },
@@ -21,8 +27,8 @@ export const navLinks: NavLink[] = [
   { href: "/dashboard/classes", label: "متابعة الفصول", short: "الفصول", icon: "chart", group: "today", phone: true },
   { href: "/dashboard/inquiries", label: "استفسارات الموظفين", short: "الاستفسارات", icon: "question", group: "admin", phone: true, managers: true },
   { href: "/dashboard/assistant", label: "المساعد", short: "المساعد", icon: "spark", group: null, phone: true },
-  { href: "/dashboard/tasks", label: "لوحة المهام", short: "المهام", icon: "board", group: "admin", phone: false, exact: true },
-  { href: "/dashboard/finance", label: "المالية", short: "المالية", icon: "wallet", group: "admin", phone: false, managers: true },
+  { href: "/dashboard/tasks", label: "لوحة المهام", short: "المهام", icon: "board", group: "admin", phone: true, exact: true },
+  { href: "/dashboard/finance", label: "المالية", short: "المالية", icon: "wallet", group: "admin", phone: true, managers: true },
   { href: "/dashboard/admissions", label: "القبول والتسجيل", short: "القبول", icon: "flag", group: "students", phone: false, managers: true },
   { href: "/dashboard/learning", label: "الدراسة والدرجات", short: "الدراسة", icon: "list", group: "students", phone: true },
   { href: "/dashboard/academics", label: "الهيكل الدراسي", short: "الصفوف", icon: "school", group: "students", phone: false, managers: true },

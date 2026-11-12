@@ -28,6 +28,11 @@ export async function extendSubscription(org: string, days: number) {
   if (!uuid.test(org) || !Number.isInteger(days) || days < 1 || days > 730) return { error: "عدد الأيام من ١ إلى ٧٣٠." };
   return call("admin_extend", { org, days }, `مُدّد الاشتراك ${days.toLocaleString("ar-SA")} يوم.`, [`/admin/subscribers/${org}`, "/admin"]);
 }
+/** Extends by calendar months from the later of today and the current end (e.g. pilot schools). */
+export async function extendSubscriptionMonths(org: string, months: number) {
+  if (!uuid.test(org) || !Number.isInteger(months) || months < 1 || months > 24) return { error: "عدد الأشهر من ١ إلى ٢٤." };
+  return call("admin_extend_months", { org, months }, `مُدّد الاشتراك ${months.toLocaleString("ar-SA")} ${months === 1 ? "شهر" : months <= 10 ? "أشهر" : "شهرًا"}.`, [`/admin/subscribers/${org}`, "/admin"]);
+}
 export async function changePlan(org: string, plan: string) {
   if (!uuid.test(org) || !uuid.test(plan)) return { error: "طلب غير صالح." };
   return call("admin_set_plan", { org, plan }, "تغيّرت الباقة.", [`/admin/subscribers/${org}`]);

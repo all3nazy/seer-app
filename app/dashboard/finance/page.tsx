@@ -5,6 +5,7 @@ import { FinanceRecordForm, FinanceRow, GenerateInvoicesForm, InvoiceHeaderForm 
 import { balance, discountReasonLabels, feeKindLabels, invoiceLabel, invoiceStatusLabels, invoiceStatusTone, paymentMethodLabels, sar, type FeeKind, type Invoice, type Payment, type PaymentMethod } from "../../../lib/finance";
 import { sectionLabel } from "../../../lib/academics";
 import { isIsoDate, riyadhToday } from "../../../lib/students";
+import { pilotMode } from "../../../lib/pilot";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "المالية" };
@@ -35,7 +36,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
       <OrgSwitcher path="/dashboard/finance" current={org} organizations={organizations} extra={{ tab }} />
     </header>
     <nav className="segments" aria-label="أقسام المالية">{(Object.keys(tabs) as Tab[]).map(key => <Link key={key} href={`/dashboard/finance?org=${orgParam}&tab=${key}`} aria-current={key === tab ? "page" : undefined}>{tabs[key]}</Link>)}
-      <Link href={`/dashboard/finance/quotes?org=${orgParam}`}>عروض الأسعار</Link><Link href={`/dashboard/finance/branding?org=${orgParam}`}>هوية المستندات</Link><Link href={`/dashboard/finance/online?org=${orgParam}`}>الدفع الإلكتروني</Link></nav>
+      <Link href={`/dashboard/finance/quotes?org=${orgParam}`}>عروض الأسعار</Link><Link href={`/dashboard/finance/branding?org=${orgParam}`}>هوية المستندات</Link>{pilotMode() ? null : <Link href={`/dashboard/finance/online?org=${orgParam}`}>الدفع الإلكتروني</Link>}</nav>
   </>;
   const invoiceRow = (invoice: Invoice) => <Link key={invoice.id} className="list-row" href={`/dashboard/finance/invoices/${invoice.id}?org=${orgParam}`}>
     <span className="body"><span className="title">{invoiceLabel(invoice)}{invoice.number && invoice.title ? ` — ${invoice.title}` : ""}</span>

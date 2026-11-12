@@ -7,6 +7,7 @@ import { briefingFor } from "./assistant/actions";
 import { Suspense } from "react";
 import Link from "next/link";
 import { briefingItems, withOrg } from "../../lib/bot-persona";
+import { pilotMode } from "../../lib/pilot";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "لوحة التشغيل" };
 
@@ -20,14 +21,14 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const { client: supabase, user } = await requestSession();
   if (!user) redirect("/login");
   const loadMemberships = () => supabase.from("memberships")
-    .select("organization_id,role,organizations(name,type)").eq("user_id", user.id);
+    .select("organization_id,role,display_name,organizations(name,type)").eq("user_id", user.id);
   const shared = await requestMemberships();
   let memberships: { organization_id: string; role: string; organizations: unknown }[] | null = shared.data;
   let membershipError: unknown = shared.error || null;
   if (!membershipError && memberships?.length === 0) {
     // Only someone without an organization can have a pending sign-up or email invitation to claim;
     // checking it on every visit cost a round trip for everyone else.
-    await supabase.rpc("complete_signup");
+    if (!pilotMode()) await supabase.rpc("complete_signup");
     await supabase.rpc("claim_member_invitations");
     ({ data: memberships, error: membershipError } = await loadMemberships());
   }
@@ -94,7 +95,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   // What needs attention today in the first organization: the same prioritised briefing the bot gives.
   const firstMember = (memberships ?? [])[0];
   const email = user.email ?? "";
-  const displayName = email.split("@")[0] || "أهلًا";
+  // The name the person gave the organization (team page), else the part of the login before "@".
+  const displayName = (memberships ?? []).map(m => (m as { display_name?: string | null }).display_name?.trim()).find(Boolean) || email.split("@")[0] || "أهلًا";
   const mainRole = roleNames[organizations[0]?.role ?? ""] ?? "عضو";
   return <div className="dash">
     <div className="dash-main">
