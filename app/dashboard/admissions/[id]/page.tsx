@@ -8,6 +8,7 @@ import { sectionLabel } from "../../../../lib/academics";
 import { age, genderLabels } from "../../../../lib/students";
 import { uuid } from "../../../../lib/operations";
 import { relationshipLabels, type Relationship } from "../../../../lib/team";
+import { BackLink } from "../../../../components/back-link";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "طلب التحاق" };
@@ -38,6 +39,7 @@ export default async function ApplicationPage({ params, searchParams }: { params
   const sectionOptions = [...sectionRows].sort((a, b) => Number(b.grade_level_id === app.grade_level_id) - Number(a.grade_level_id === app.grade_level_id)).map(item => ({ id: item.id, name: sectionLabel(item, gradeRows) }));
   const orgParam = encodeURIComponent(org);
   return <div style={{ display: "grid", gap: 24 }}>
+    <BackLink href={`/dashboard/admissions?org=${orgParam}`} label="رجوع إلى القبول والتسجيل" />
     <header className="page-head" style={{ marginBottom: 0 }}>
       <div>
         <p className="hint"><Link href={`/dashboard/admissions?org=${orgParam}`}>القبول والتسجيل</Link> / طلب <span dir="ltr">{app.reference}</span></p>

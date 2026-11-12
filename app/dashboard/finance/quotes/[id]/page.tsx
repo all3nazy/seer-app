@@ -10,6 +10,7 @@ import { quoteStatusLabels, quoteStatusTone, shareMessage, type DocLine, type Qu
 import { feeKindLabels, sar } from "../../../../../lib/finance";
 import { uuid } from "../../../../../lib/operations";
 import { siteOrigin } from "../../../../../lib/origin";
+import { BackLink } from "../../../../../components/back-link";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "عرض سعر" };
@@ -39,6 +40,7 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
   const orgParam = encodeURIComponent(org);
   const link = await shortLink(client, origin, `/d/${quote.share_token}`);
   return <div style={{ display: "grid", gap: 20 }}>
+    <BackLink href={`/dashboard/finance/quotes?org=${orgParam}`} label="رجوع إلى عروض الأسعار" />
     <header className="page-head no-print" style={{ marginBottom: 0 }}><div>
       <p className="hint"><Link href={`/dashboard/finance/quotes?org=${orgParam}`}>عروض الأسعار</Link> / {quote.number ? `عرض رقم ${quote.number}` : "مسودة"}</p>
       <h1>{quote.title}</h1>

@@ -53,3 +53,37 @@ describe("settings tabs: short names and old anchors", () => {
     expect(settingsTabFor(hash, [...all])).toBe(tab);
   });
 });
+
+describe("every detail page has «رجوع» to the right place", () => {
+  const expected: [string, string][] = [
+    ["app/dashboard/support/page.tsx", 'href="/dashboard"'],
+    ["app/dashboard/support/new/page.tsx", 'href="/dashboard/support"'],
+    ["app/dashboard/support/[id]/page.tsx", 'href="/dashboard/support"'],
+    ["app/admin/support/[id]/page.tsx", 'href="/admin/support"'],
+    ["app/admin/subscribers/[id]/page.tsx", 'href="/admin/subscribers"'],
+    ["app/dashboard/academics/sections/[id]/page.tsx", "href={`/dashboard/academics?"],
+    ["app/dashboard/admissions/[id]/page.tsx", "href={`/dashboard/admissions?"],
+    ["app/dashboard/billing/receipt/[id]/page.tsx", "href={`/dashboard/billing?"],
+    ["app/dashboard/children/[id]/page.tsx", "href={`/dashboard/children$"],
+    ["app/dashboard/classes/[id]/page.tsx", "href={`/dashboard/classes?"],
+    ["app/dashboard/finance/invoices/[id]/page.tsx", "href={`/dashboard/finance?"],
+    ["app/dashboard/finance/quotes/[id]/page.tsx", "href={`/dashboard/finance/quotes?"],
+    ["app/dashboard/inquiries/[id]/page.tsx", "href={`/dashboard/inquiries?"],
+    ["app/dashboard/tasks/[id]/page.tsx", "href={`/dashboard/my?"],
+  ];
+  it.each(expected)("%s", (file, href) => {
+    const source = readFileSync(file, "utf8");
+    expect(source).toContain(`<BackLink ${href}`);
+  });
+  it("the support list goes back to the previous page when there is one", () => {
+    expect(readFileSync("app/dashboard/support/page.tsx", "utf8")).toMatch(/<BackLink href="\/dashboard" history \/>/);
+  });
+  it("the admin console has a clear «رجوع للمنصة»", () => {
+    expect(readFileSync("app/admin/layout.tsx", "utf8")).toMatch(/href="\/dashboard">[\s\S]*رجوع للمنصة/);
+  });
+  it("«الدعم» is the first row of the phone «المزيد» page", () => {
+    const source = readFileSync("app/dashboard/more/page.tsx", "utf8");
+    expect(source.indexOf("<SupportMenuRow")).toBeGreaterThan(0);
+    expect(source.indexOf("<SupportMenuRow")).toBeLessThan(source.indexOf("{items.map("));
+  });
+});

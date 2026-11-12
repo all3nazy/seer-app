@@ -1,6 +1,7 @@
 import { requestMemberships } from "../../../../lib/supabase/server";
 import { SupportNew } from "../../../../components/support-new";
 import { ticketPage } from "../../../../lib/support";
+import { BackLink } from "../../../../components/back-link";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "تذكرة دعم جديدة" };
@@ -10,6 +11,7 @@ export default async function NewTicketPage({ searchParams }: { searchParams: Pr
   const [{ from }, memberships] = await Promise.all([searchParams, requestMemberships()]);
   const organizations = memberships.data.map(item => ({ id: item.organization_id, name: item.organizations?.name ?? "منشأة" }));
   return <div style={{ maxWidth: 640 }}>
+    <BackLink href="/dashboard/support" label="رجوع إلى تذاكري" />
     <header className="page-head"><div><h1>تكلّم مع فريق سِير</h1><p>اكتب مشكلتك أو سؤالك، ويرد عليك الفريق هنا داخل المنصة.</p></div></header>
     <section className="card"><SupportNew organizations={organizations} page={ticketPage(from)} /></section>
   </div>;

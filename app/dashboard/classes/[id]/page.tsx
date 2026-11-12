@@ -7,6 +7,7 @@ import { holidayOn } from "../../../../lib/academics";
 import { riyadhToday } from "../../../../lib/students";
 import { memberName, type Member } from "../../../../lib/team";
 import type { LiveAttendance, LiveEvent, LivePickup } from "../../../../lib/live-class";
+import { BackLink } from "../../../../components/back-link";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "الفصل مباشر" };
@@ -46,6 +47,7 @@ export default async function LiveClassPage({ params, searchParams }: { params: 
   const holiday = holidayOn(today, (holidays.data ?? []) as { name: string; starts_on: string; ends_on: string }[]);
   const orgParam = encodeURIComponent(org);
   return <>
+    <BackLink href={`/dashboard/classes?org=${orgParam}`} label="رجوع إلى متابعة الفصول" />
     <nav className="hint" style={{ marginBottom: 8 }}><Link href={`/dashboard/classes?org=${orgParam}`}>متابعة الفصول</Link> ‹ {section?.grade_levels?.name}</nav>
     {failed || !section ? <p role="alert" className="info-banner">تعذر تحميل الفصل. أعد تحميل الصفحة.</p> : <>
       {holiday ? <p className="info-banner" style={{ marginBottom: 16 }}>اليوم إجازة: {holiday}.</p> : null}

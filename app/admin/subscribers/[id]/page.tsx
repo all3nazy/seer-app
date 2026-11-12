@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requestSession } from "../../../../lib/supabase/server";
 import { SubscriberActions } from "../../../../components/admin-forms";
 import { accessLabels, durationLabel, paymentStatusLabels, riyal, statusLabels, type Access } from "../../../../lib/subscriptions";
+import { BackLink } from "../../../../components/back-link";
 
 export const metadata = { title: "مشترك" };
 type Detail = { organization_id: string; name: string; type: string; created_at: string; access: Access;
@@ -19,6 +20,7 @@ export default async function AdminSubscriber({ params }: { params: Promise<{ id
   if (!d) notFound();
   const s = d.subscription;
   return <>
+    <BackLink href="/admin/subscribers" label="رجوع إلى المشتركين" />
     <header className="page-head"><div><h1>{d.name}</h1><p>{types[d.type] ?? d.type} · منذ {new Date(d.created_at).toLocaleDateString("ar-SA")}</p></div></header>
     <div className="stats">
       <div className="stat"><span className="figure">{s?.status === "trial" && d.access === "active" ? statusLabels.trial : s?.status === "suspended" ? statusLabels.suspended : accessLabels[d.access]}</span><span className="label">الحالة</span></div>

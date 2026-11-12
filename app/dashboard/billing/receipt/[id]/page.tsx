@@ -4,6 +4,7 @@ import { OrgUnavailable } from "../../../../../components/org-unavailable";
 import { PrintButton } from "../../../../../components/print-button";
 import { Logo } from "../../../../../components/icons";
 import { durationLabel, riyal } from "../../../../../lib/subscriptions";
+import { BackLink } from "../../../../../components/back-link";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "إيصال الاشتراك" };
@@ -14,11 +15,12 @@ export default async function SubscriptionReceipt({ params, searchParams }: { pa
   if (!/^[0-9a-f-]{36}$/.test(id)) notFound();
   const context = await loadOrgContext((await searchParams).org);
   if ("error" in context) return <OrgUnavailable reason={context.error} />;
-  const { client, orgName } = context;
+  const { client, org, orgName } = context;
   const { data } = await client.from("subscription_payments").select("id,months,amount,reference,status,decided_at,period_start,period_end,created_at,plans(name)").eq("id", id).maybeSingle();
   if (!data || data.status !== "approved") notFound();
   const plan = (data.plans as unknown as { name: string } | null)?.name ?? "";
   return <article className="card sub-receipt" style={{ maxWidth: 640, margin: "0 auto", display: "grid", gap: 14 }}>
+    <span className="no-print"><BackLink href={`/dashboard/billing?org=${encodeURIComponent(org)}`} label="رجوع إلى الاشتراك" /></span>
     <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><Logo /><span className="no-print"><PrintButton /></span></header>
     <h1 style={{ margin: 0 }}>إيصال اشتراك</h1>
     <dl className="field-row">

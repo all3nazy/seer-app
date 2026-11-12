@@ -9,6 +9,7 @@ import { uuid } from "../../../../../lib/operations";
 import { ShareDocument } from "../../../../../components/document-forms";
 import { shareMessage } from "../../../../../lib/documents";
 import { siteOrigin } from "../../../../../lib/origin";
+import { BackLink } from "../../../../../components/back-link";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "فاتورة" };
@@ -44,6 +45,7 @@ export default async function InvoicePage({ params, searchParams }: { params: Pr
   const remaining = balance(invoice);
   const dayAgo = Date.now() - 86400_000;
   return <div style={{ display: "grid", gap: 24 }}>
+    <BackLink href={`/dashboard/finance?org=${orgParam}&tab=invoices`} label="رجوع إلى الفواتير" />
     <header className="page-head" style={{ marginBottom: 0 }}>
       <div>
         <p className="hint"><Link href={`/dashboard/finance?org=${orgParam}&tab=invoices`}>الفواتير</Link> / {invoiceLabel(invoice)}</p>
