@@ -14,6 +14,6 @@ export default async function AssistantPage() {
   const organizations = (memberships ?? []).map(m => ({ id: m.organization_id, name: (m.organizations as unknown as { name: string } | null)?.name ?? "منشأة" }));
   return <>
     <header className="page-head"><div><h1>المساعد</h1><p>اسأل عن مهامك وسجلات منشأتك بالعربي.</p></div></header>
-    <div style={{ maxWidth: 820 }}><AssistantPanel organizations={organizations} supportPhone={process.env.SEER_SUPPORT_WHATSAPP ?? ""} /></div>
+    <div style={{ maxWidth: 820 }}><AssistantPanel organizations={organizations} /></div>
   </>;
 }

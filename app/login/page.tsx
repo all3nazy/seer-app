@@ -4,6 +4,7 @@ import { getSupabaseBrowserClient } from "../../lib/supabase";
 import { Logo } from "../../components/icons";
 import { loginEmail } from "../../lib/login";
 import { LegalFooter } from "../../components/legal-page";
+import { supportEmail, supportMailto } from "../../lib/support";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -47,6 +48,7 @@ export default function Login() {
         <span role="status" className="sr-only">{busy ? "جارٍ تسجيل الدخول. يرجى الانتظار." : ""}</span>
       </form>
       <p className="login-help">موظف جديد؟ اطلب من إدارتك «رابط الانضمام» على واتساب، وتختار منه اسم المستخدم وكلمة المرور. نسيت كلمة المرور؟ مديرك يقدر يعيّن لك واحدة جديدة.</p>
+      <p className="login-help">تحتاج مساعدة؟ راسلنا على <a href={supportMailto} dir="ltr">{supportEmail}</a></p>
     </section>
     <LegalFooter />
   </main></>;

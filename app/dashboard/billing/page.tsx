@@ -25,14 +25,13 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const prices = (pricing.data ?? { plans: [], durations: [] }) as { plans: Plan[]; durations: Duration[] };
   const locked = data.access === "locked";
   const pilot = pilotMode();
-  const support = supportLink(process.env.SEER_SUPPORT_WHATSAPP ?? "");
   const days = data.days_left ?? 0;
   return <div style={{ maxWidth: 900 }}>
     <header className="page-head"><div><h1>الاشتراك</h1><p>{orgName}</p></div></header>
     {locked ? <section className="card lock-card" role="alert">
       <h2 style={{ margin: 0 }}>{data.status === "suspended" ? "اشتراك المنشأة موقوف" : "انتهى الاشتراك وانقفلت المنصة مؤقتًا"}</h2>
       <p style={{ margin: 0 }}>كل بياناتك محفوظة بالكامل: الطلاب والحضور والفواتير وكل السجلات. بمجرد اعتماد التجديد تنفتح المنصة مباشرة لك ولفريقك.</p>
-      {pilot ? <p style={{ margin: 0 }}><strong>تواصل مع فريق سِير لتمديد فترتك التجريبية.</strong>{support ? <> <a href={support} target="_blank" rel="noopener noreferrer">الدعم عبر واتساب</a></> : null}</p>
+      {pilot ? <p style={{ margin: 0 }}><strong>تواصل مع فريق سِير لتمديد فترتك التجريبية.</strong> <Link href={supportLink("/dashboard/billing")}>تكلّم مع فريق سِير</Link></p>
         : !data.owner ? <p style={{ margin: 0 }}><strong>التجديد من صلاحية مالك المنشأة.</strong> تواصل معه ليجدد الاشتراك.</p> : null}
     </section> : null}
     {pilot ? <p className="info-banner" role="status">{pilotTexts.billing}. ما تحتاج تحوّل أي مبلغ، وكل الأقسام مفتوحة لمنشأتك.</p> : null}

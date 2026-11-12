@@ -1,12 +1,13 @@
 import { normalizeArabic } from "./assistant-intents";
+import { guideSteps } from "./bot-steps";
 
 /**
  * The bot's guide to the platform: what each section does and how to get common jobs done.
  * Matching is by keywords, entirely inside the app; no text is sent anywhere.
  */
-export type GuideEntry = { id: string; title: string; keywords: string[]; answer: string; href: string; computerOnly?: boolean; managers?: boolean };
+export type GuideEntry = { id: string; title: string; keywords: string[]; answer: string; href: string; computerOnly?: boolean; managers?: boolean; steps?: string[] };
 
-export const guide: GuideEntry[] = [
+const entries: GuideEntry[] = [
   { id: "dashboard", title: "لوحة التشغيل", href: "/dashboard", keywords: ["لوحه التشغيل", "الرئيسيه", "الصفحه الرئيسيه", "نظره عامه"],
     answer: "لوحة التشغيل فيها «تحتاج انتباهك اليوم»: من ما تسجّل حضوره، والغياب والتأخير، والمهام المتأخرة، وطلبات الإجازة والالتحاق، والفواتير المتأخرة، والرسائل المتعثرة، مرتبة حسب الأهمية. وتقدر تقول لي «ملخص اليوم» وأعطيك نفس الصورة هنا." },
   { id: "my", title: "مهامي", href: "/dashboard/my", keywords: ["مهامي", "المسند لي", "شغلي", "المطلوب مني", "مهام المعلم", "رابط المهام", "بصمه الحضور", "تسجيل دخولي", "حضوري", "طلب اجازه", "اجازتي", "اطلب اجازه"],
@@ -61,7 +62,7 @@ export const guide: GuideEntry[] = [
     answer: "«عروض الأسعار» من المالية: اختر بنود الرسوم والخصم، وشارك العرض برابط أو واتساب بهوية مدرستك. لما يوافق ولي الأمر حوّله لفاتورة بضغطة، وتنتقل البنود والخصم كما هي." },
   { id: "branding", title: "هوية المستندات", href: "/dashboard/finance/branding", computerOnly: true, managers: true, keywords: ["الشعار", "هويه المدرسه", "الهويه", "السجل التجاري", "الرقم الضريبي", "شكل الفاتوره", "الايبان"],
     answer: "«هوية المستندات» تضبط فيها شعار مدرستك واسمها النظامي والسجل والرقم الضريبي والعنوان والآيبان ولون الهوية، وتظهر تلقائيًا على كل فاتورة وإيصال وعرض سعر." },
-  { id: "payroll", title: "مسير الرواتب", href: "/dashboard/staff/payroll", computerOnly: true, managers: true, keywords: ["مسير الرواتب", "الرواتب", "راتب", "التامينات", "خصم الغياب", "ملف البنك"],
+  { id: "payroll", title: "مسير الرواتب", href: "/dashboard/staff/payroll", computerOnly: true, managers: true, keywords: ["احسب الرواتب", "حساب الرواتب", "اعتماد الرواتب", "مسير الرواتب", "الرواتب", "راتب", "التامينات", "خصم الغياب", "ملف البنك"],
     answer: "«مسير الرواتب» يحسب رواتب الشهر من ملفات الموظفين: الأساسي والبدلات وخصم التأمينات والغياب والإجازة بدون راتب. تقدر تضيف مكافأة أو خصم لكل موظف، ثم «اعتماد» يقفل الشهر، وتصدّر ملف البنك." },
   { id: "report", title: "الشهادة", href: "/dashboard/learning/report", keywords: ["الشهاده", "شهاده الطالب", "كشف الدرجات", "النتيجه", "التقدير", "طباعه الشهاده"],
     answer: "الشهادة من «الدراسة والدرجات»: تجمع درجات كل مادة بأوزانها والتقدير العام والحضور وملاحظات السلوك، وتطبعها للفصل كامل أو لطالب واحد." },
@@ -85,7 +86,22 @@ export const guide: GuideEntry[] = [
     answer: "الجرس 🔔 فيه كل ما يخصك: مهمة جديدة، رد على استفسارك، قرار إجازتك، وللمدير الاستفسارات والإجازات والالتحاق وإشعارات الغياب. ولتوصلك على الجوال والكمبيوتر فعّلها من الإعدادات ← الإشعارات." },
   { id: "health", title: "صحة النظام", href: "/dashboard/health", managers: true, keywords: ["صحه النظام", "فحص النظام", "الاخطاء", "سجل الاخطاء", "اصلاح", "مشكله في النظام", "عطل"],
     answer: "«صحة النظام» تفحص المنصة فورًا: الرسائل العالقة، والدفعات المعلّقة، والطلاب بدون ولي أمر أو فصل، والأخطاء الجديدة. الآمن منها ينصلح بضغطة، وينصلح تلقائيًا كل ربع ساعة. وكل خطأ ينسجل بدون بيانات شخصية، وإذا كتبت حله يتذكّره النظام ويعرضه لو تكرر. وتقدر تقول لي «فحص النظام»." },
+  { id: "assistant", title: "المساعد", href: "/dashboard/assistant", keywords: ["المساعد", "البوت", "مساعد سير", "وش تقدر تسوي", "وش تسوي"],
+    answer: "أنا المساعد: أشرح لك أي قسم خطوة بخطوة، وأنفّذ لك أشياء بتأكيد منك مثل تسجيل الحضور والتسليم وإقفال المهام، وأعطيك ملخص يومك." },
+  { id: "support", title: "الدعم", href: "/dashboard/support", keywords: ["الدعم", "فريق سير", "تذكره", "تذاكري", "اكلم احد", "ابي اكلم", "تواصل معكم", "خدمه العملاء", "الدعم الفني"],
+    answer: "الدعم داخل المنصة: اسألني أولًا، وإذا ما لقيت جوابك اضغط «تكلّم مع فريق سِير» وتنفتح تذكرة يرد عليك فيها الفريق هنا، ويوصلك إشعار مع كل رد." },
+  { id: "billing", title: "الاشتراك", href: "/dashboard/billing", keywords: ["الاشتراك", "الباقه", "التجديد", "الفاتوره الشهريه", "كم باقي", "ينتهي الاشتراك"],
+    answer: "«الاشتراك» يعرض حالة اشتراك منشأتك وباقتها والأيام المتبقية." },
+  { id: "password", title: "كلمة المرور", href: "/dashboard/settings", keywords: ["كلمه المرور", "كلمه السر", "الباسورد", "نسيت كلمه", "اغير كلمه", "تغيير كلمه"],
+    answer: "تغيّر كلمة مرورك من «الإعدادات» في تبويب «حسابي»." },
+  { id: "install", title: "تثبيت سِير على الجهاز", href: "/dashboard/settings", keywords: ["تثبيت", "ثبت", "اثبت التطبيق", "تثبيت التطبيق", "انزل التطبيق على", "ايقونه", "الشاشه الرئيسيه", "تطبيق على الجوال", "انزل التطبيق"],
+    answer: "تقدر تثبّت سِير على الكمبيوتر أو الجوال أو الآيباد ويفتح مثل التطبيق، من «الإعدادات» في تبويب «الجهاز والإشعارات»." },
+  { id: "sidebar", title: "القائمة الجانبية", href: "/dashboard", keywords: ["القائمه الجانبيه", "القائمه", "المجموعات", "الاقسام مخفيه", "اختفت الاقسام", "ما القى القسم"],
+    answer: "القائمة الجانبية مقسومة لمجموعات تنطوي: اضغط اسم المجموعة لفتحها. والأقسام المطفية من الإعدادات تختفي منها." },
 ];
+
+/** Every entry with its step-by-step instructions attached. */
+export const guide: GuideEntry[] = entries.map(entry => ({ ...entry, steps: guideSteps[entry.id] ?? entry.steps }));
 
 /** Picks the guide entry whose keywords match the question best, or nothing. */
 export function findGuide(question: string, skip?: (entry: GuideEntry) => boolean): GuideEntry | null {
@@ -102,4 +118,10 @@ export function findGuide(question: string, skip?: (entry: GuideEntry) => boolea
 /** "How do I…", "where is…", "what is…" style questions about the platform itself. */
 export function isHowTo(question: string): boolean {
   return /^(?:كيف|وين|فين|ايش|وش|شنو|ما هو|ما هي|مافهمت|ما فهمت|اشرح|شرح|ابي اعرف|وش يعني|ايش يعني|طريقه|ممكن)|كيف|طريقه|اشرح|وش فايده|ايش فايده|وين القى|وين الاقي/.test(normalizeArabic(question));
+}
+
+/** A reported problem rather than a question: these also offer «تكلّم مع فريق سِير». */
+export function isProblem(question: string): boolean {
+  const q = normalizeArabic(question);
+  return /مشكله|خطا|غلط|ما يشتغل|ما تشتغل|ماتشتغل|ما اشتغل|مايشتغل|ما يفتح|ما تفتح|ماتفتح|مايفتح|ما ينفتح|ما تنفتح|ما يحفظ|ما تحفظ|ماتحفظ|مايحفظ|ما انحفظ|علق|معلق|يعلق|خربان|خرب|ما يطلع|مايطلع|اختفى|اختفت|ما وصل|ماوصل|ما يوصل|معطل|عطلان|فيه عطل|بطيء|بطي|ما قدرت|ماقدرت|ما اقدر|مااقدر|ساعدوني|ابي اكلم|كلموني|الدعم/.test(q);
 }

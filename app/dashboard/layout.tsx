@@ -42,7 +42,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const gate = sections ? featureState(feature, sections) : "on";
   const brand = current?.primary_color ? { primary: current.primary_color, onPrimary: onColor(current.primary_color), accent: current.accent_color } : current?.accent_color ? { primary: null, onPrimary: null, accent: current.accent_color } : null;
   return <AppShell stage={stageOf(current?.type ?? organizations[0]?.type)} organizations={organizations.map(org => ({ id: org.organization_id, name: org.name }))}
-    supportPhone={process.env.SEER_SUPPORT_WHATSAPP ?? ""} manager={organizations.some(org => org.role === "owner" || org.role === "admin")} userId={user?.id}
+    manager={organizations.some(org => org.role === "owner" || org.role === "admin")} userId={user?.id}
     sections={sections} brand={brand}
     notice={notice ? { text: notice, owner: current?.role === "owner", org: current!.organization_id } : null} platformAdmin={admin}>
     {gate === "on" || !feature ? children : <section className="card" style={{ maxWidth: 560, display: "grid", gap: 12 }}>

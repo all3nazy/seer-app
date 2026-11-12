@@ -9,7 +9,7 @@ import { botPersonas, type Stage } from "../lib/stage";
  * The assistant as a floating companion: a launcher on every page that opens a side drawer.
  * Its face and greeting follow the organization's stage (nursery, kindergarten or school).
  */
-export function BotDock({ stage, organizations, supportPhone, disabled = [] }: { stage: Stage; organizations: { id: string; name: string }[]; supportPhone: string; disabled?: string[] }) {
+export function BotDock({ stage, organizations, disabled = [] }: { stage: Stage; organizations: { id: string; name: string }[]; disabled?: string[] }) {
   const [open, setOpen] = useState(false);
   const path = usePathname();
   const persona = botPersonas[stage];
@@ -44,7 +44,7 @@ export function BotDock({ stage, organizations, supportPhone, disabled = [] }: {
       </header>
       <p className="bot-hint">{persona.greeting} {persona.hint}</p>
       <div className="bot-drawer-body">
-        {organizations.length ? <AssistantPanel organizations={organizations} supportPhone={supportPhone} stage={stage} disabled={disabled} /> : <p className="hint">اطلب من مسؤول المنصة ربط حسابك بمنشأة.</p>}
+        {organizations.length ? <AssistantPanel organizations={organizations} stage={stage} disabled={disabled} /> : <p className="hint">اطلب من مسؤول المنصة ربط حسابك بمنشأة.</p>}
       </div>
     </aside>
   </>;
