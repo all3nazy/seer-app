@@ -950,3 +950,12 @@ a.stat:hover,a.list-row:hover,a.tile:hover,.org-tile:hover,.sidebar .nav-link:ho
 .nav-link{position:relative}
 .tabbar a{position:relative}
 .tab-dot{position:absolute;top:6px;inset-inline-end:calc(50% - 16px);width:9px;height:9px;border-radius:50%;background:var(--coral,#FF7A59);border:2px solid var(--surface)}
+/* Organization invites */
+.invite-form{margin-top:12px}
+.invite-fresh{display:grid;gap:10px;margin-top:12px;padding:14px;border-radius:16px;background:color-mix(in srgb,var(--leaf,#3BAA6E) 12%,var(--surface));border:1px solid color-mix(in srgb,var(--leaf,#3BAA6E) 40%,transparent)}
+.invite-fresh input{font-family:ui-monospace,monospace;font-size:13px}
+.invite-row{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.consent-check{display:flex;gap:10px;align-items:flex-start;font-weight:400}
+.consent-check>input{flex:none;width:20px;min-height:20px;margin-top:4px}
+.consent-check>span{display:block;flex:1;line-height:1.8}
+.consent-check>span a{display:inline;min-height:0;padding:0}
