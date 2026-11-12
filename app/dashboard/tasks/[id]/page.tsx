@@ -10,6 +10,7 @@ import { uuid } from "../../../../lib/operations";
 import { ShareButtons } from "../../../../components/share-buttons";
 import { taskMessage } from "../../../../lib/share";
 import { siteOrigin } from "../../../../lib/origin";
+import { BackLink } from "../../../../components/back-link";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "مهمة" };
@@ -37,6 +38,7 @@ export default async function TaskPage({ params, searchParams }: { params: Promi
   const orgParam = encodeURIComponent(org);
   const dayAgo = Date.now() - 86400_000;
   return <div style={{ display: "grid", gap: 24, maxWidth: 760 }}>
+    <BackLink href={`/dashboard/my?org=${orgParam}`} label="رجوع" history />
     <header className="page-head" style={{ marginBottom: 0 }}>
       <div>
         <p className="hint"><Link href={`/dashboard/my?org=${orgParam}`}>مهامي</Link>{manager ? <> · <Link href={`/dashboard/tasks?org=${orgParam}`}>لوحة المهام</Link></> : null}</p>

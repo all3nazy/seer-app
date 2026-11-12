@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { AppShell } from "../../components/app-shell";
-import { requestMyOrganizations, requestPlatformAdmin, requestSession } from "../../lib/supabase/server";
+import { requestMyOrganizations, requestPlatformAdmin, requestSession, requestSupportCounts } from "../../lib/supabase/server";
 import { stageOf } from "../../lib/stage";
 import Link from "next/link";
 import { featureLabels, featureOf, featureState, renewalNotice, type MyOrg } from "../../lib/subscriptions";
@@ -17,9 +17,10 @@ import { effectiveSections, pilotHides, pilotMode, pilotTexts } from "../../lib/
  */
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user } = await requestSession();
-  const [{ data }, admin, head] = await Promise.all([
+  const [{ data }, admin, support, head] = await Promise.all([
     requestMyOrganizations(),
     requestPlatformAdmin(),
+    requestSupportCounts(),
     headers(),
   ]);
   const organizations = data;
@@ -44,7 +45,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return <AppShell stage={stageOf(current?.type ?? organizations[0]?.type)} organizations={organizations.map(org => ({ id: org.organization_id, name: org.name }))}
     manager={organizations.some(org => org.role === "owner" || org.role === "admin")} userId={user?.id}
     sections={sections} brand={brand}
-    notice={notice ? { text: notice, owner: current?.role === "owner", org: current!.organization_id } : null} platformAdmin={admin}>
+    notice={notice ? { text: notice, owner: current?.role === "owner", org: current!.organization_id } : null} platformAdmin={admin} support={support}>
     {gate === "on" || !feature ? children : <section className="card" style={{ maxWidth: 560, display: "grid", gap: 12 }}>
       <h1 style={{ fontSize: 20, margin: 0 }}>🔒 {featureLabels[feature]}</h1>
       {pilot && pilotHides(feature) ? <p style={{ margin: 0 }}>{pilotTexts.payments}</p>

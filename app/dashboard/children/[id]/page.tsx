@@ -10,6 +10,7 @@ import { relationshipLabels, type Relationship } from "../../../../lib/team";
 import { sectionLabel } from "../../../../lib/academics";
 import { AuthorizedPickupForm, AuthorizedToggle } from "../../../../components/pickup-forms";
 import { PortalLinkButton } from "../../../../components/family-forms";
+import { BackLink } from "../../../../components/back-link";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "ملف الطالب" };
@@ -55,6 +56,7 @@ export default async function StudentFile({ params, searchParams }: { params: Pr
   const presentDays = attendance.filter(row => row.status === "present" || row.status === "late").length;
   const orgQuery = `?org=${encodeURIComponent(org)}`;
   return <div style={{ display: "grid", gap: 24 }}>
+    <BackLink href={`/dashboard/children${orgQuery}`} label="رجوع إلى الطلاب" />
     <header className="page-head" style={{ marginBottom: 0 }}>
       <div>
         <p className="hint"><Link href={`/dashboard/children${orgQuery}`}>الطلاب</Link> / ملف الطالب</p>

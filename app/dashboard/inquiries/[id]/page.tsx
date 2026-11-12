@@ -6,6 +6,7 @@ import { InquiryStatusButtons, ReplyForm } from "../../../../components/work-for
 import { inquiryCategoryLabels, inquiryStatusLabels, inquiryStatusTone, since, type Inquiry, type Reply } from "../../../../lib/inquiries";
 import { memberName, type Member } from "../../../../lib/team";
 import { uuid } from "../../../../lib/operations";
+import { BackLink } from "../../../../components/back-link";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "استفسار" };
@@ -33,6 +34,7 @@ export default async function InquiryPage({ params, searchParams }: { params: Pr
     <span style={{ whiteSpace: "pre-wrap" }}>{body}</span>
   </li>;
   return <div style={{ display: "grid", gap: 24, maxWidth: 760 }}>
+    <BackLink href={`/dashboard/inquiries?org=${orgParam}`} label="رجوع إلى الاستفسارات" history />
     <header className="page-head" style={{ marginBottom: 0 }}>
       <div>
         <p className="hint"><Link href={manager ? `/dashboard/inquiries?org=${orgParam}` : `/dashboard/my?org=${orgParam}`}>{manager ? "استفسارات الموظفين" : "مهامي"}</Link></p>

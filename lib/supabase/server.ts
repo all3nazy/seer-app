@@ -54,6 +54,20 @@ export const requestPlatformAdmin = cache(async (): Promise<boolean> => {
   const { data } = await client.rpc("am_platform_admin");
   return data === true;
 });
+/**
+ * Counts for the «الدعم» link: the person's open tickets whose last message is from the team, and for
+ * a platform admin the open tickets waiting for the team. Head-only counts, once per request.
+ */
+export const requestSupportCounts = cache(async (): Promise<{ replies: number; waiting: number | null }> => {
+  const { client, user } = await requestSession();
+  if (!user) return { replies: 0, waiting: null };
+  const admin = await requestPlatformAdmin();
+  const [mine, team] = await Promise.all([
+    client.from("support_threads").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("status", "open").eq("last_sender", "admin"),
+    admin ? client.from("support_threads").select("id", { count: "exact", head: true }).eq("status", "open").eq("last_sender", "user") : Promise.resolve({ count: null }),
+  ]);
+  return { replies: mine.count ?? 0, waiting: admin ? team.count ?? 0 : null };
+});
 export const requestMemberships = cache(async (): Promise<{ data: Membership[]; error: boolean }> => {
   const { data, error } = await requestMyOrganizations();
   return { data: data.map(org => ({ organization_id: org.organization_id, role: org.role, display_name: org.display_name ?? null, organizations: { name: org.name, type: org.type } })), error };

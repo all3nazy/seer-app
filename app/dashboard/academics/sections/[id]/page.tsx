@@ -6,6 +6,7 @@ import { AcademicForm, AcademicRow, AssignStudents } from "../../../../../compon
 import { sectionGenderLabels, sectionLabel, type GradeLevel, type Section } from "../../../../../lib/academics";
 import { uuid } from "../../../../../lib/operations";
 import { memberName, type Member } from "../../../../../lib/team";
+import { BackLink } from "../../../../../components/back-link";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "الشعبة" };
@@ -36,6 +37,7 @@ export default async function SectionPage({ params, searchParams }: { params: Pr
   const orgParam = encodeURIComponent(org);
   const options = { grades: gradeRows.map(grade => ({ id: grade.id, name: grade.name })), branches: (branches.data ?? []) as { id: string; name: string }[], members: memberRows.map(member => ({ id: member.user_id, name: name(member.user_id) })), sections: [{ id, name: row.name }] };
   return <div style={{ display: "grid", gap: 24 }}>
+    <BackLink href={`/dashboard/academics?org=${orgParam}`} label="رجوع إلى الهيكل الدراسي" />
     <header className="page-head" style={{ marginBottom: 0 }}>
       <div>
         <p className="hint"><Link href={`/dashboard/academics?org=${orgParam}`}>الهيكل الدراسي</Link> / الشعبة</p>

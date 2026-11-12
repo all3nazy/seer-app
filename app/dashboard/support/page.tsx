@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requestMemberships, requestSession } from "../../../lib/supabase/server";
 import { redirect } from "next/navigation";
 import { newTicketPath } from "../../../lib/support";
+import { BackLink } from "../../../components/back-link";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "الدعم" };
@@ -19,6 +20,7 @@ export default async function SupportPage() {
   ]);
   const threads = (data ?? []) as Thread[];
   return <div style={{ maxWidth: 760 }}>
+    <BackLink href="/dashboard" history />
     <header className="page-head"><div><h1>الدعم</h1><p>تذاكرك مع فريق سِير. يوصلك إشعار مع كل رد.</p></div>
       {memberships.data.length ? <Link className="btn btn-primary" href={newTicketPath}>تذكرة جديدة</Link> : null}</header>
     <section className="card">

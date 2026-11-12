@@ -15,9 +15,15 @@ import { featureOf, featureState, type OrgFeatures } from "../lib/subscriptions"
 
 type ShellProps = { children: React.ReactNode; stage: Stage; organizations: { id: string; name: string }[]; manager?: boolean; userId?: string;
   sections?: OrgFeatures | null; brand?: { primary: string | null; onPrimary: string | null; accent: string | null } | null;
-  notice?: { text: string; owner: boolean; org: string } | null; platformAdmin?: boolean };
+  notice?: { text: string; owner: boolean; org: string } | null; platformAdmin?: boolean;
+  /** Open tickets with a new reply from the team; for a platform admin, tickets waiting for the team. */
+  support?: { replies: number; waiting: number | null } };
 
-export function AppShell({ children, stage, organizations, manager = true, userId, sections = null, brand = null, notice = null, platformAdmin = false }: ShellProps) {
+export function AppShell({ children, stage, organizations, manager = true, userId, sections = null, brand = null, notice = null, platformAdmin = false, support = { replies: 0, waiting: null } }: ShellProps) {
+  // «الدعم»: a platform admin goes to the team inbox; everyone else to their tickets.
+  const supportHref = platformAdmin ? "/admin/support" : "/dashboard/support";
+  const supportCount = platformAdmin ? support.waiting ?? 0 : support.replies;
+  const supportLabel = platformAdmin ? `الدعم${supportCount ? `: ${supportCount.toLocaleString("ar-SA")} بانتظار ردّك` : ""}` : `الدعم${supportCount ? `: ${supportCount.toLocaleString("ar-SA")} فيها رد جديد` : ""}`;
   const path = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   useEffect(() => { try { setCollapsed(localStorage.getItem("seer-sidebar") === "rail"); } catch { /* storage unavailable */ } }, []);
@@ -73,6 +79,9 @@ export function AppShell({ children, stage, organizations, manager = true, userI
       </nav>
       <div className="sidebar-foot">
         {platformAdmin ? <Link className="nav-link" href="/admin" title="لوحة مسؤول المنصة"><Icon name="shield" /><span className="nav-text">لوحة المسؤول</span></Link> : null}
+        <Link className="nav-link support-link" href={supportHref} aria-current={path.startsWith("/dashboard/support") ? "page" : undefined} title={supportLabel} aria-label={supportLabel}>
+          <Icon name="help" /><span className="nav-text">الدعم</span>{supportCount ? <span className="nav-badge" aria-hidden="true">{supportCount > 9 ? "9+" : supportCount.toLocaleString("ar-SA")}</span> : null}
+        </Link>
         <Link className="nav-link" href="/dashboard/billing" aria-current={path.startsWith("/dashboard/billing") ? "page" : undefined} title="الاشتراك"><Icon name="wallet" /><span className="nav-text">الاشتراك</span></Link>
         <Link className="nav-link" href={settings.href} aria-current={current(settings)} title={collapsed ? settings.label : undefined}><Icon name="settings" /><span className="nav-text">{settings.label}</span></Link>
         <div className="sidebar-tools">{userId ? <NotificationBell userId={userId} /> : null}<ThemeToggle /><SoundToggle /><SignOutButton compact /></div>
@@ -99,7 +108,7 @@ export function AppShell({ children, stage, organizations, manager = true, userI
     </div>
     <nav className="tabbar" aria-label="التنقل السفلي">
       {tabs.map(link => <Link key={link.href} href={link.href} aria-current={current(link)}><Icon name={link.icon} />{link.short}</Link>)}
-      <Link href="/dashboard/more" aria-current={inMore ? "page" : undefined}><Icon name="list" />المزيد</Link>
+      <Link href="/dashboard/more" aria-current={inMore ? "page" : undefined} aria-label={supportCount ? `المزيد، ${supportLabel}` : undefined}><Icon name="list" />المزيد{supportCount ? <span className="tab-dot" aria-hidden="true" /> : null}</Link>
     </nav>
     {assistantOn ? <BotDock stage={stage} organizations={organizations} disabled={sections ? [...sections.disabled, ...featureKeysOutside(sections)] : []} /> : null}
     <FeedbackLayer />

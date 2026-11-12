@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requestSession } from "../../../../lib/supabase/server";
 import { SupportThread, type SupportMessage } from "../../../../components/support-thread";
+import { BackLink } from "../../../../components/back-link";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "تذكرة دعم" };
@@ -23,7 +24,8 @@ export default async function AdminTicketPage({ params }: { params: Promise<{ id
   if (!thread) notFound();
   const who = ((listResult.data ?? []) as { id: string; organization: string; user_name: string | null; user_email: string | null }[])[0];
   return <div style={{ maxWidth: 860 }}>
-    <header className="page-head"><div><h1>{thread.subject}</h1><p><Link href="/admin/support">كل التذاكر</Link></p></div></header>
+    <BackLink href="/admin/support" label="رجوع إلى التذاكر" />
+    <header className="page-head"><div><h1>{thread.subject}</h1></div></header>
     <section className="support-context" aria-label="تفاصيل التذكرة">
       <span><strong>المنشأة:</strong> <Link href={`/admin/subscribers/${thread.organization_id}`}>{who?.organization ?? "—"}</Link></span>
       <span><strong>المستخدم:</strong> {who?.user_name || "—"} {who?.user_email ? <span dir="ltr">({who.user_email})</span> : null}</span>

@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requestSession } from "../../../../lib/supabase/server";
 import { SupportThread, type SupportMessage } from "../../../../components/support-thread";
+import { BackLink } from "../../../../components/back-link";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "تذكرة دعم" };
@@ -20,7 +20,8 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
   const thread = threadResult.data as { id: string; subject: string; status: "open" | "closed"; created_at: string } | null;
   if (!thread) notFound();
   return <div style={{ maxWidth: 760 }}>
-    <header className="page-head"><div><h1>{thread.subject}</h1><p><Link href="/dashboard/support">كل تذاكري</Link></p></div></header>
+    <BackLink href="/dashboard/support" label="رجوع إلى تذاكري" />
+    <header className="page-head"><div><h1>{thread.subject}</h1></div></header>
     <section className="card"><SupportThread threadId={thread.id} initialMessages={(messagesResult.data ?? []) as SupportMessage[]} initialStatus={thread.status} side="user" /></section>
   </div>;
 }
