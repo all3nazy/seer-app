@@ -43,6 +43,33 @@ test.describe("«الدعم» in the menu", () => {
   });
 });
 
+test.describe("the support badge follows the bell's live notifications and clears when read", () => {
+  test("a live reply adds to the badge; opening a thread clears it at once; the open thread is not counted again", async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 850 });
+    await page.goto("/e2e/shell?replies=2");
+    const badge = page.locator(".sidebar-foot .support-link .nav-badge");
+    const row = page.locator("main .support-link .nav-badge");
+    await expect(badge).toHaveText("٢");
+    await page.getByRole("button", { name: "فتح التذكرة ١" }).click();
+    await expect(badge).toHaveText("١");
+    await expect(row).toHaveText("١");
+    await page.getByRole("button", { name: "وصل رد" }).click();
+    await expect(badge).toHaveText("٢");
+    await page.getByRole("button", { name: "فتح التذكرة ٩" }).click();
+    await expect(badge).toHaveText("١");
+    await page.getByRole("button", { name: "وصل رد" }).click();
+    await expect(badge).toHaveText("١");
+  });
+  test("platform admin: a new ticket notification adds to the team badge", async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 850 });
+    await page.goto("/e2e/shell?admin=1&waiting=1");
+    const badge = page.locator(".sidebar-foot .support-link .nav-badge");
+    await expect(badge).toHaveText("١");
+    await page.getByRole("button", { name: "وصلت تذكرة" }).click();
+    await expect(badge).toHaveText("٢");
+  });
+});
+
 test.describe("«رجوع» on detail pages", () => {
   test("is large enough to tap on a phone and goes to its page", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });

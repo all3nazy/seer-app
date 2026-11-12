@@ -1,7 +1,15 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { canonicalRedirect } from "./lib/canonical";
+
+// Paths that need the session checked or refreshed (as before the canonical redirect was added).
+const sessionPaths = /^\/(dashboard|admin|login|auth)(\/|$)/;
 
 export async function middleware(request: NextRequest) {
+  // Old production addresses go to the official one (308 keeps the method; the #fragment stays).
+  const official = canonicalRedirect(request.headers.get("x-forwarded-host") ?? request.headers.get("host"), request.nextUrl.pathname, request.nextUrl.search);
+  if (official) return NextResponse.redirect(official, 308);
+  if (!sessionPaths.test(request.nextUrl.pathname)) return NextResponse.next();
   // The layout reads the page and organization to enforce the subscription lock and show the right sections.
   const forwarded = new Headers(request.headers);
   forwarded.set("x-seer-path", request.nextUrl.pathname);
@@ -47,4 +55,5 @@ export async function middleware(request: NextRequest) {
   }
   return finish(response);
 }
-export const config = { matcher: ["/dashboard/:path*", "/admin/:path*", "/admin", "/login", "/auth/:path*"] };
+// Every page (for the canonical redirect), except /api, Next's own files and static assets.
+export const config = { matcher: ["/((?!api/|api$|_next/static|_next/image|favicon|icons/|manifest|sw\\.js|robots|sitemap|.*\\.(?:png|jpg|jpeg|svg|webp|ico|txt|xml|js|css|webmanifest)$).*)"] };

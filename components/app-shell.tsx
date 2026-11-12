@@ -8,7 +8,8 @@ import { FeedbackLayer } from "./feedback";
 import SignOutButton from "./sign-out-button";
 import { BotDock } from "./bot-dock";
 import { BotAvatar } from "./bot-avatar";
-import { NotificationBell } from "./notifications";
+import { NotificationBell, onNotification } from "./notifications";
+import { seedSupportBadge, supportNotification, useSupportBadge } from "./support-badge";
 import { computerOnlySection, groupIsOpen, matches, navGroupLabels, navLinks, visibleLinks, type NavGroup } from "../lib/navigation";
 import { patternUrl, type Stage } from "../lib/stage";
 import { featureOf, featureState, type OrgFeatures } from "../lib/subscriptions";
@@ -17,12 +18,16 @@ type ShellProps = { children: React.ReactNode; stage: Stage; organizations: { id
   sections?: OrgFeatures | null; brand?: { primary: string | null; onPrimary: string | null; accent: string | null } | null;
   notice?: { text: string; owner: boolean; org: string } | null; platformAdmin?: boolean;
   /** Open tickets with a new reply from the team; for a platform admin, tickets waiting for the team. */
-  support?: { replies: number; waiting: number | null } };
+  support?: { mine: string[]; team: string[] | null } };
 
-export function AppShell({ children, stage, organizations, manager = true, userId, sections = null, brand = null, notice = null, platformAdmin = false, support = { replies: 0, waiting: null } }: ShellProps) {
+export function AppShell({ children, stage, organizations, manager = true, userId, sections = null, brand = null, notice = null, platformAdmin = false, support = { mine: [], team: null } }: ShellProps) {
+  // The badge starts from the server's unread list and then follows the bell's realtime channel.
+  seedSupportBadge(support.mine, support.team);
+  const badge = useSupportBadge();
+  useEffect(() => onNotification(supportNotification), []);
   // «الدعم»: a platform admin goes to the team inbox; everyone else to their tickets.
   const supportHref = platformAdmin ? "/admin/support" : "/dashboard/support";
-  const supportCount = platformAdmin ? support.waiting ?? 0 : support.replies;
+  const supportCount = platformAdmin ? badge.team ?? 0 : badge.mine;
   const supportLabel = platformAdmin ? `الدعم${supportCount ? `: ${supportCount.toLocaleString("ar-SA")} بانتظار ردّك` : ""}` : `الدعم${supportCount ? `: ${supportCount.toLocaleString("ar-SA")} فيها رد جديد` : ""}`;
   const path = usePathname();
   const [collapsed, setCollapsed] = useState(false);

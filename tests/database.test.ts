@@ -147,6 +147,9 @@ beforeAll(async () => {
   const invites = readdirSync("supabase/migrations").filter(name => name.endsWith("_org_invites.sql"));
   if (invites.length !== 1) throw new Error("Expected exactly one org invites migration");
   await db.exec(readFileSync(`supabase/migrations/${invites[0]}`, "utf8"));
+  const supportRead = readdirSync("supabase/migrations").filter(name => name.endsWith("_support_read.sql"));
+  if (supportRead.length !== 1) throw new Error("Expected exactly one support read migration");
+  await db.exec(readFileSync(`supabase/migrations/${supportRead[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -2033,5 +2036,51 @@ describe("organization invite links (no email)", () => {
     await db.exec("reset role");
     expect(JSON.stringify(await rows("select * from private.org_invite_attempts"))).not.toContain("wrong-token");
     await db.exec("delete from private.org_invite_attempts");
+  });
+});
+
+describe("support badge: unread until each side opens the thread", () => {
+  const platformAdmin = "60000000-0000-0000-0000-0000000000ad";
+  const unread = async () => (await rows("select public.support_unread() as u"))[0].u as { mine: string[]; team: string[] | null };
+  let thread = "";
+  beforeAll(async () => {
+    await db.exec("reset role");
+    await db.exec(`insert into auth.users(id,email,email_confirmed_at) values ('${platformAdmin}','admin@seer.test',now()) on conflict do nothing;
+      insert into private.platform_admins(user_id) values ('${platformAdmin}') on conflict do nothing;
+      delete from public.support_threads where user_id='${owner}'`);
+    await as("authenticated", owner);
+    thread = (await rows(`select public.open_support_thread('${orgA}','سؤال عن الفواتير','كيف أصدر فاتورة؟')::text as id`))[0].id as string;
+  });
+  it("a new ticket is unread for the team until an admin opens it; the user has nothing new", async () => {
+    await as("authenticated", owner);
+    expect(await unread()).toEqual({ mine: [], team: null });
+    await as("authenticated", platformAdmin);
+    expect((await unread()).team).toContain(thread);
+    await db.exec(`select public.mark_support_read('${thread}')`);
+    expect((await unread()).team).not.toContain(thread);
+  });
+  it("the team's reply is unread for the user until they open it; a new user reply is unread for the team again", async () => {
+    await as("authenticated", platformAdmin);
+    await db.exec(`select public.reply_support('${thread}','من «المالية» اضغط «فاتورة جديدة».')`);
+    await as("authenticated", owner);
+    expect((await unread()).mine).toEqual([thread]);
+    await db.exec(`select public.mark_support_read('${thread}')`);
+    expect((await unread()).mine).toEqual([]);
+    await db.exec(`select public.reply_support('${thread}','تمام، شكرًا')`);
+    await as("authenticated", platformAdmin);
+    expect((await unread()).team).toContain(thread);
+  });
+  it("only the owner or a platform admin can mark a thread read, each on their own side", async () => {
+    for (const who of [staff, outsider]) {
+      await as("authenticated", who);
+      await expect(db.exec(`select public.mark_support_read('${thread}')`)).rejects.toMatchObject({ code: "42501" });
+    }
+    await as("authenticated", platformAdmin);
+    await db.exec(`select public.mark_support_read('${thread}')`);
+    await db.exec("reset role");
+    const [row] = await rows(`select user_read_at is not null as user_read, admin_read_at >= last_message_at as admin_read from public.support_threads where id='${thread}'`);
+    expect(row).toEqual({ user_read: true, admin_read: true });
+    await as("anon");
+    await expect(db.exec("select public.support_unread()")).rejects.toBeDefined();
   });
 });

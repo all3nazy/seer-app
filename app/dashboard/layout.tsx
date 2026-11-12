@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { AppShell } from "../../components/app-shell";
-import { requestMyOrganizations, requestPlatformAdmin, requestSession, requestSupportCounts } from "../../lib/supabase/server";
+import { requestMyOrganizations, requestPlatformAdmin, requestSession, requestSupportUnread } from "../../lib/supabase/server";
 import { stageOf } from "../../lib/stage";
 import Link from "next/link";
 import { featureLabels, featureOf, featureState, renewalNotice, type MyOrg } from "../../lib/subscriptions";
@@ -20,7 +20,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const [{ data }, admin, support, head] = await Promise.all([
     requestMyOrganizations(),
     requestPlatformAdmin(),
-    requestSupportCounts(),
+    requestSupportUnread(),
     headers(),
   ]);
   const organizations = data;

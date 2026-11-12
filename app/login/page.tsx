@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getSupabaseBrowserClient } from "../../lib/supabase";
 import { Logo } from "../../components/icons";
 import { loginEmail } from "../../lib/login";
@@ -10,6 +10,9 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  // After an activation link or invite: the account is ready, only sign-in is left.
+  const [activated, setActivated] = useState(false);
+  useEffect(() => { setActivated(new URLSearchParams(window.location.search).get("activated") === "1"); }, []);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const errorRef = useRef<HTMLParagraphElement>(null);
@@ -35,6 +38,7 @@ export default function Login() {
     <section className="card login-card" id="main-content" tabIndex={-1} aria-labelledby="login-title">
       <h1 id="login-title">تسجيل الدخول</h1>
       <p id="login-description">أهلًا فيك. ادخل بحساب منشأتك.</p>
+      {activated ? <p className="info-banner" role="status">✓ تفعّل حسابك. ادخل باسم المستخدم أو البريد وكلمة المرور اللي اخترتها.</p> : null}
       <form method="post" onSubmit={signIn} className="login-form" aria-describedby="login-description" aria-busy={busy}>
         <label htmlFor="email">اسم المستخدم أو البريد الإلكتروني</label>
         <input id="email" name="email" type="text" dir="ltr" inputMode="email" required autoComplete="username" autoCapitalize="none" spellCheck={false} maxLength={254} value={email} onChange={event => setEmail(event.target.value)} readOnly={busy}/>

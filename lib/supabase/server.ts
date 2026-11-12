@@ -55,18 +55,16 @@ export const requestPlatformAdmin = cache(async (): Promise<boolean> => {
   return data === true;
 });
 /**
- * Counts for the «الدعم» link: the person's open tickets whose last message is from the team, and for
- * a platform admin the open tickets waiting for the team. Head-only counts, once per request.
+ * Unread support threads for the «الدعم» badge, in one call: the person's threads with a reply from
+ * the team they have not opened, and for a platform admin the open threads waiting for the team.
  */
-export const requestSupportCounts = cache(async (): Promise<{ replies: number; waiting: number | null }> => {
+export type SupportUnread = { mine: string[]; team: string[] | null };
+export const requestSupportUnread = cache(async (): Promise<SupportUnread> => {
   const { client, user } = await requestSession();
-  if (!user) return { replies: 0, waiting: null };
-  const admin = await requestPlatformAdmin();
-  const [mine, team] = await Promise.all([
-    client.from("support_threads").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("status", "open").eq("last_sender", "admin"),
-    admin ? client.from("support_threads").select("id", { count: "exact", head: true }).eq("status", "open").eq("last_sender", "user") : Promise.resolve({ count: null }),
-  ]);
-  return { replies: mine.count ?? 0, waiting: admin ? team.count ?? 0 : null };
+  if (!user) return { mine: [], team: null };
+  const { data } = await client.rpc("support_unread");
+  const value = (data ?? {}) as Partial<SupportUnread>;
+  return { mine: value.mine ?? [], team: value.team ?? null };
 });
 export const requestMemberships = cache(async (): Promise<{ data: Membership[]; error: boolean }> => {
   const { data, error } = await requestMyOrganizations();
