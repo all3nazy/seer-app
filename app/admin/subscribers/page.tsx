@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requestSession } from "../../../lib/supabase/server";
 import { accessLabels, statusLabels, type Access } from "../../../lib/subscriptions";
 import { OrgInvites, type InviteRow } from "../../../components/org-invites";
+import { JoinRequests, type JoinRow } from "../../../components/join-requests";
 
 export const metadata = { title: "المشتركين" };
 type Row = { organization_id: string; name: string; type: string; plan: string | null; status: string | null; access: Access; ends_on: string | null; days_left: number | null; owner_email: string | null; owner_phone: string | null; students: number; staff: number; pending: number };
@@ -12,14 +13,16 @@ export default async function AdminSubscribers({ searchParams }: { searchParams:
   const q = (params.q ?? "").trim().slice(0, 60);
   const status = filters.some(([key]) => key === params.status) ? params.status ?? "" : "";
   const { client } = await requestSession();
-  const [{ data }, invitesResult, plansResult] = await Promise.all([
+  const [{ data }, invitesResult, plansResult, joinResult] = await Promise.all([
     client.rpc("admin_subscribers", { search: q || null, filter: status || null }),
     client.rpc("admin_org_invites"),
     client.from("plans").select("id,key,name").order("sort_order"),
+    client.rpc("admin_join_requests"),
   ]);
   const rows = (data ?? []) as Row[];
   return <>
     <header className="page-head"><div><h1>المشتركين</h1><p>{rows.length.toLocaleString("ar-SA")} منشأة</p></div></header>
+    <JoinRequests requests={(joinResult.data ?? []) as JoinRow[]} />
     <OrgInvites invites={(invitesResult.data ?? []) as InviteRow[]} plans={(plansResult.data ?? []) as { id: string; key: string; name: string }[]} />
     <form className="toolbar" style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "end", marginBottom: 16 }}>
       <label style={{ flex: "1 1 220px" }}>بحث بالاسم<input type="search" name="q" defaultValue={q} /></label>

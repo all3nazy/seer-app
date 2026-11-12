@@ -150,6 +150,9 @@ beforeAll(async () => {
   const supportRead = readdirSync("supabase/migrations").filter(name => name.endsWith("_support_read.sql"));
   if (supportRead.length !== 1) throw new Error("Expected exactly one support read migration");
   await db.exec(readFileSync(`supabase/migrations/${supportRead[0]}`, "utf8"));
+  const telegram = readdirSync("supabase/migrations").filter(name => name.endsWith("_telegram.sql"));
+  if (telegram.length !== 1) throw new Error("Expected exactly one telegram migration");
+  await db.exec(readFileSync(`supabase/migrations/${telegram[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -2082,5 +2085,182 @@ describe("support badge: unread until each side opens the thread", () => {
     expect(row).toEqual({ user_read: true, admin_read: true });
     await as("anon");
     await expect(db.exec("select public.support_unread()")).rejects.toBeDefined();
+  });
+});
+
+describe("telegram for platform admins", () => {
+  const platformAdmin = "60000000-0000-0000-0000-0000000000ad";
+  const chat = 777001, stranger = 777999;
+  const handle = async (update: unknown) => {
+    await db.exec("reset role");
+    await db.exec("set role service_role");
+    const result = (await db.query<{ r: Record<string, unknown> }>("select public.telegram_handle($1::jsonb) as r", [JSON.stringify(update)])).rows[0].r;
+    await db.exec("reset role");
+    return result as { replies?: { chat_id: number; text?: string; invite?: Record<string, unknown> }[]; answer?: { text: string }; clear?: unknown };
+  };
+  let nextMessage = 1;
+  const message = (from: number, text: string, extra: Record<string, unknown> = {}) => ({ update_id: nextMessage, message: { message_id: nextMessage++, chat: { id: from, type: "private" }, from: { id: from, username: "seer_admin" }, text, ...extra } });
+  const button = (from: number, data: string, messageId = 1) => ({ update_id: nextMessage++, callback_query: { id: `cb${nextMessage}`, data, message: { message_id: messageId, chat: { id: from, type: "private" } } } });
+  const outbox = async () => (await db.exec("reset role"), await rows("select id, chat_id::int as chat, body, buttons, context from private.telegram_outbox where status = 'queued' order by id")) as { id: number; chat: number; body: string; buttons: { text: string; data?: string; url?: string }[]; context: Record<string, string> }[];
+  beforeAll(async () => {
+    await db.exec("reset role");
+    await db.exec(`insert into auth.users(id,email,email_confirmed_at) values ('${platformAdmin}','admin@seer.test',now()) on conflict do nothing;
+      insert into private.platform_admins(user_id) values ('${platformAdmin}') on conflict do nothing;
+      delete from private.telegram_links; delete from private.telegram_outbox; delete from private.org_invite_attempts;`);
+  });
+
+  it("only a platform admin gets a link code; a wrong code is refused; the right one links the chat once", async () => {
+    await as("authenticated", owner);
+    await expect(db.exec("select public.telegram_link_code()")).rejects.toMatchObject({ code: "42501" });
+    await as("authenticated", platformAdmin);
+    const code = (await rows("select public.telegram_link_code() as c"))[0].c as string;
+    expect(code).toMatch(/^[A-HJ-NP-Z2-9]{8}$/);
+    await db.exec("reset role");
+    expect(JSON.stringify(await rows("select * from private.telegram_link_codes"))).not.toContain(code);
+    expect((await handle(message(chat, "/link ZZZZZZZZ"))).replies?.[0].text).toContain("غير صحيح");
+    expect((await handle(message(chat, `/link ${code.toLowerCase()}`))).replies?.[0].text).toContain("تم ربط تيليقرام");
+    expect(await rows(`select chat_id::int as c from private.telegram_links where user_id='${platformAdmin}'`)).toEqual([{ c: chat }]);
+    expect((await handle(message(stranger, `/link ${code}`))).replies?.[0].text).toContain("غير صحيح");
+    await as("authenticated", platformAdmin);
+    expect((await rows("select public.telegram_status() as s"))[0].s).toMatchObject({ linked: true, username: "seer_admin" });
+  });
+
+  it("ignores chats that are not linked, for messages and buttons alike", async () => {
+    expect(await handle(message(stranger, "/summary"))).toEqual({});
+    expect(await handle(button(stranger, "sc:00000000-0000-0000-0000-000000000000"))).toEqual({});
+    expect(await handle({ update_id: 1, message: { message_id: 1, chat: { id: chat, type: "group" }, text: "/summary" } })).toEqual({});
+    const summary = await handle(message(chat, "/summary"));
+    expect(summary.replies?.[0].text).toContain("تذاكر تنتظر ردّك");
+    expect((await handle(message(chat, "/help"))).replies?.[0].text).toContain("/summary");
+  });
+
+  it("a new ticket arrives with the organization, page and message, «إقفال» and «فتح في اللوحة»; a Telegram reply reaches the user", async () => {
+    await db.exec("reset role");
+    await db.exec("delete from private.telegram_outbox; delete from public.support_threads");
+    await as("authenticated", staff);
+    const thread = (await rows(`select public.open_support_thread('${orgA}','الحضور ما ينحفظ','ضغطت حفظ وما صار شي','/dashboard/attendance?org=x')::text as id`))[0].id as string;
+    const [queued] = await outbox();
+    expect(queued.chat).toBe(chat);
+    expect(queued.body).toContain("تذكرة دعم جديدة");
+    expect(queued.body).toContain("الصفحة: /dashboard/attendance");
+    expect(queued.body).toContain("ضغطت حفظ وما صار شي");
+    expect(queued.buttons).toEqual([{ text: "إقفال", data: `sc:${thread}` }, { text: "فتح في اللوحة", url: `/admin/support/${thread}` }]);
+    // The dispatcher sends it and records the Telegram message id; the text is not kept.
+    await db.exec("set role service_role");
+    const claimed = await rows("select id from public.telegram_claim(10)");
+    expect(claimed).toHaveLength(1);
+    await db.exec(`select public.telegram_report(${queued.id}, true, 9001, null)`);
+    await db.exec("reset role");
+    expect(await rows(`select body, status from private.telegram_outbox where id=${queued.id}`)).toEqual([{ body: "", status: "sent" }]);
+    // The admin answers with Telegram's «reply».
+    const replied = await handle(message(chat, "جرّب تحدّث الصفحة وارجع جرّب", { reply_to_message: { message_id: 9001 } }));
+    expect(replied.replies?.[0].text).toContain("وصل ردك");
+    expect(await rows(`select from_admin, sender_id::text as who from public.support_messages where thread_id='${thread}' order by created_at desc limit 1`)).toEqual([{ from_admin: true, who: platformAdmin }]);
+    expect((await rows(`select count(*)::int as n from public.notifications where user_id='${staff}' and kind='support' and title='رد من فريق سِير'`))[0].n).toBeGreaterThan(0);
+    // «إقفال» closes it as the linked admin.
+    const closed = await handle(button(chat, `sc:${thread}`, 9001));
+    expect(closed.answer?.text).toContain("أُغلقت");
+    expect(closed.clear).toBeTruthy();
+    expect((await rows(`select status from public.support_threads where id='${thread}'`))[0].status).toBe("closed");
+    expect(await rows(`select action, actor_id::text as actor from private.platform_audit where action in ('telegram_reply_ticket','telegram_close_ticket') order by id`)).toEqual([
+      { action: "telegram_reply_ticket", actor: platformAdmin }, { action: "telegram_close_ticket", actor: platformAdmin }]);
+  });
+
+  it("transfer buttons: «اعتماد» approves as the linked admin; «رفض» asks for the reason and rejects with it", async () => {
+    await db.exec("reset role");
+    await db.exec("delete from private.telegram_outbox");
+    const advanced = (await rows("select id from public.plans where key='advanced'"))[0].id as string;
+    await as("authenticated", owner);
+    await db.exec(`insert into storage.objects(bucket_id,name) values ('subscription-receipts','${orgA}/receipt-tg1.jpg'),('subscription-receipts','${orgA}/receipt-tg2.jpg')`);
+    const first = (await rows(`select public.submit_subscription_payment('${orgA}','${advanced}',1,'TG-REF-1','${orgA}/receipt-tg1.jpg')::text as id`))[0].id as string;
+    const [queued] = await outbox();
+    expect(queued.body).toContain("تحويل بنكي جديد");
+    expect(queued.buttons.map(b => b.data ?? b.url)).toEqual([`pa:${first}`, `pr:${first}`, "/admin/payments"]);
+    const approved = await handle(button(chat, `pa:${first}`));
+    expect(approved.replies?.[0].text).toContain("اعتُمد التحويل");
+    await db.exec("reset role");
+    expect(await rows(`select status, decided_by::text as by from public.subscription_payments where id='${first}'`)).toEqual([{ status: "approved", by: platformAdmin }]);
+    // Pressing again does nothing harmful.
+    expect((await handle(button(chat, `pa:${first}`))).answer?.text).toContain("من قبل");
+    await as("authenticated", owner);
+    const second = (await rows(`select public.submit_subscription_payment('${orgA}','${advanced}',1,'TG-REF-2','${orgA}/receipt-tg2.jpg')::text as id`))[0].id as string;
+    expect((await handle(button(chat, `pr:${second}`))).replies?.[0].text).toContain("اكتب سبب");
+    expect((await handle(message(chat, "المبلغ ناقص ٥٠ ريال"))).replies?.[0].text).toContain("رُفض التحويل");
+    await db.exec("reset role");
+    expect(await rows(`select status, reject_reason from public.subscription_payments where id='${second}'`)).toEqual([{ status: "rejected", reject_reason: "المبلغ ناقص ٥٠ ريال" }]);
+    await db.exec(`update public.subscriptions set ends_on = (now() at time zone 'Asia/Riyadh')::date + 365, status = 'active' where organization_id='${orgA}'`);
+  });
+
+  it("join requests: checks, spam limits, then «أرسل دعوة» creates a 3-month invite and returns its token once", async () => {
+    await db.exec("reset role");
+    await db.exec("delete from private.telegram_outbox; delete from private.join_requests");
+    await as("anon");
+    const submit = (phone: string, name = "مدرسة الريادة", website = "") => `select public.submit_join_request('${name}','school','الرياض','أبو خالد','${phone}',250,'${website}') as r`;
+    await expect(db.exec(submit("12345"))).rejects.toMatchObject({ code: "22023" });
+    expect((await rows(submit("0555555555", "روبوت", "http://spam.test")))[0].r).toBe("ok");
+    expect((await rows(submit("+966 55 111 2222")))[0].r).toBe("ok");
+    expect((await rows(submit("0551112222")))[0].r).toBe("ok"); // same phone again: no duplicate
+    await db.exec("reset role");
+    expect(await rows("select org_name, phone, status from private.join_requests")).toEqual([{ org_name: "مدرسة الريادة", phone: "0551112222", status: "new" }]);
+    await as("anon");
+    await db.exec(submit("0551112223", "مدرسة ٢"));
+    await db.exec(submit("0551112224", "مدرسة ٣"));
+    await expect(db.exec(submit("0551112225", "مدرسة ٤"))).rejects.toMatchObject({ code: "54000" });
+    const queued = await outbox();
+    expect(queued[0].body).toContain("طلب انضمام");
+    const request = queued[0].buttons[0].data!.slice(3);
+    expect(queued[0].buttons.map(b => b.text)).toEqual(["أرسل دعوة", "رفض"]);
+    const invited = await handle(button(chat, `ji:${request}`));
+    const invite = invited.replies?.[0].invite as { token: string; org_name: string; phone: string; trial_months: number };
+    expect(invite).toMatchObject({ org_name: "مدرسة الريادة", phone: "0551112222", trial_months: 3 });
+    expect(invite.token).toMatch(/^[A-HJ-NP-Za-km-z2-9]{32}$/);
+    await db.exec("reset role");
+    expect(await rows("select status, (invite_id is not null) as has_invite from private.join_requests where org_name='مدرسة الريادة'")).toEqual([{ status: "invited", has_invite: true }]);
+    expect(await rows("select trial_months, created_by::text as by from private.org_invites order by created_at desc limit 1")).toEqual([{ trial_months: 3, by: platformAdmin }]);
+    expect(JSON.stringify(await rows("select * from private.telegram_outbox"))).not.toContain(invite.token);
+    const other = (await rows("select id from private.join_requests where org_name='مدرسة ٢'"))[0].id as string;
+    expect((await handle(button(chat, `jr:${other}`))).answer?.text).toContain("رُفض");
+    await as("authenticated", platformAdmin);
+    expect((await rows("select status from public.admin_join_requests() order by status")).map(row => row.status)).toEqual(["invited", "new", "rejected"]);
+    await as("authenticated", owner);
+    await expect(db.exec("select * from public.admin_join_requests()")).rejects.toMatchObject({ code: "42501" });
+  });
+
+  it("errors alert once an hour; the daily run sends the summary and subscriptions ending soon", async () => {
+    await db.exec("reset role");
+    await db.exec("delete from private.telegram_outbox; delete from private.telegram_alerts");
+    await db.exec("insert into public.system_errors(fingerprint, kind, message, route) values (repeat('a',32), 'server', 'Cannot read properties of undefined', '/dashboard/x')");
+    await db.exec("update public.system_errors set status = 'resolved' where fingerprint = repeat('a',32)");
+    await db.exec("update public.system_errors set status = 'new', regressed = true where fingerprint = repeat('a',32)");
+    const alerts = (await outbox()).filter(row => row.body.includes("خطأ تشغيل"));
+    expect(alerts).toHaveLength(1);
+    await db.exec(`update public.subscriptions set ends_on = (now() at time zone 'Asia/Riyadh')::date + 3 where organization_id='${orgA}'`);
+    await db.exec("delete from private.telegram_outbox");
+    await db.exec("select private.telegram_daily()");
+    const daily = (await outbox()).map(row => row.body);
+    expect(daily[0]).toContain("ملخص سِير");
+    expect(daily[1]).toContain("تنتهي خلال ٧ أيام");
+    await db.exec(`update public.subscriptions set ends_on = (now() at time zone 'Asia/Riyadh')::date + 365 where organization_id='${orgA}'`);
+  });
+
+  it("failed sends retry with backoff and give up after 5 attempts; a removed admin is unlinked", async () => {
+    await db.exec("reset role");
+    await db.exec("delete from private.telegram_outbox");
+    await db.exec(`select private.telegram_queue('رسالة تجربة')`);
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      await db.exec("update private.telegram_outbox set next_attempt_at = now() - interval '1 second' where status = 'queued'");
+      await db.exec("set role service_role");
+      const [row] = await rows("select id from public.telegram_claim(5)");
+      await db.exec(`select public.telegram_report(${row.id}, false, null, 'network')`);
+      await db.exec("reset role");
+    }
+    expect(await rows("select status, attempts from private.telegram_outbox")).toEqual([{ status: "failed", attempts: 5 }]);
+    await as("anon");
+    await expect(db.exec("select public.telegram_claim(5)")).rejects.toBeDefined();
+    await expect(db.exec(`select public.telegram_handle('{}'::jsonb)`)).rejects.toBeDefined();
+    await db.exec("reset role");
+    await db.exec(`delete from private.platform_admins where user_id='${platformAdmin}'`);
+    expect(await rows("select * from private.telegram_links")).toEqual([]);
+    await db.exec(`insert into private.platform_admins(user_id) values ('${platformAdmin}')`);
   });
 });

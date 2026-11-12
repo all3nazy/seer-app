@@ -14,7 +14,7 @@ const errorText = (code?: string) => code === "42501" ? "لمسؤول المنص
 const date = (iso: string) => new Date(iso).toLocaleDateString("ar-SA", { timeZone: "Asia/Riyadh", day: "numeric", month: "short" });
 
 /** A new link, shown once: copy it or send it on WhatsApp. Only its hash is stored. */
-function FreshLink({ token, orgName, months, onDone }: { token: string; orgName: string; months: number; onDone: () => void }) {
+export function FreshLink({ token, orgName, months, phone = null, onDone }: { token: string; orgName: string; months: number; phone?: string | null; onDone: () => void }) {
   const link = inviteLink(window.location.origin, token);
   const copy = async () => {
     try { await navigator.clipboard.writeText(link); notify("نُسخ الرابط.", "info", "done"); } catch { notify("ما قدرت أنسخ. حدّد الرابط وانسخه يدويًا.", "error"); }
@@ -24,7 +24,7 @@ function FreshLink({ token, orgName, months, onDone }: { token: string; orgName:
     <input readOnly dir="ltr" value={link} aria-label="رابط الدعوة" onFocus={event => event.currentTarget.select()} />
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
       <button type="button" className="btn btn-primary" onClick={() => void copy()}>نسخ</button>
-      <a className="btn" href={whatsappLink(null, inviteMessage(orgName, months, link))} target="_blank" rel="noopener noreferrer">أرسل بالواتساب</a>
+      <a className="btn" href={whatsappLink(phone, inviteMessage(orgName, months, link))} target="_blank" rel="noopener noreferrer">أرسل بالواتساب</a>
       <button type="button" className="btn" onClick={onDone}>تم</button>
     </div>
   </div>;

@@ -1042,3 +1042,13 @@ a.stat:hover,a.list-row:hover,a.tile:hover,.org-tile:hover,.sidebar .nav-link:ho
   .lp-actions .lp-btn{flex:1 1 100%}
   .lp-foot{justify-content:center;text-align:center}
 }
+/* Join request form on the home page */
+.lp-join-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;width:100%;max-width:640px;text-align:start}
+.lp-join-form label{display:grid;gap:6px;font-weight:600;font-size:14px;color:#fff}
+.lp-join-form input,.lp-join-form select{min-height:46px;border-radius:14px;border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.95);color:#1E1430;padding:8px 14px;font:inherit}
+.lp-join-form button{grid-column:1/-1;justify-self:center}
+.lp-join-error{grid-column:1/-1;margin:0;padding:10px 14px;border-radius:12px;background:rgba(255,255,255,.95);color:#B42318;font-weight:600}
+.lp-join-done{margin:0;padding:14px 18px;border-radius:16px;background:rgba(255,255,255,.16);font-weight:700}
+.lp-hp,.lp-join-form .lp-hp input{position:absolute!important;width:1px;height:1px;min-height:0;padding:0;margin:0;border:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;opacity:0}
+.lp-mail a{color:#fff}
+@media (max-width:600px){.lp-join-form{grid-template-columns:1fr}}
