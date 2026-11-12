@@ -1,6 +1,5 @@
 "use client";
 import { useActionState, useEffect, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { addBehavior, createAssessment, deleteRecord, saveGrades, saveSubject, setSlot, type LearnResult } from "../app/dashboard/learning/actions";
 import { assessmentKinds, assessmentLabels, behaviorCategories, behaviorLabels } from "../lib/learning";
 import { notify } from "./feedback";
@@ -23,16 +22,14 @@ export function SubjectForm({ organizationId, grades }: { organizationId: string
   </form>;
 }
 export function DeleteLearning({ organizationId, table, id, label = "حذف" }: { organizationId: string; table: "subjects" | "assessments" | "behavior_notes"; id: string; label?: string }) {
-  const router = useRouter();
   const [pending, start] = useTransition();
-  return <button type="button" className="btn btn-sm btn-danger" disabled={pending} onClick={() => { if (window.confirm("متأكد من الحذف؟")) start(async () => { const result = await deleteRecord(organizationId, table, id); notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info"); router.refresh(); }); }}>{label}</button>;
+  return <button type="button" className="btn btn-sm btn-danger" disabled={pending} onClick={() => { if (window.confirm("متأكد من الحذف؟")) start(async () => { const result = await deleteRecord(organizationId, table, id); notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info"); }); }}>{label}</button>;
 }
 
 /** One timetable cell: pick the subject and teacher; empty subject clears it. */
 export function TimetableCell({ organizationId, sectionId, weekday, period, subjectId, teacherId, subjects, teachers, editable, label }: {
   organizationId: string; sectionId: string; weekday: number; period: number; subjectId: string | null; teacherId: string | null; subjects: Option[]; teachers: Option[]; editable: boolean; label: { subject: string | null; teacher: string | null };
 }) {
-  const router = useRouter();
   const [pending, start] = useTransition();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({ subject: subjectId ?? "", teacher: teacherId ?? "" });
@@ -42,7 +39,7 @@ export function TimetableCell({ organizationId, sectionId, weekday, period, subj
   const save = () => start(async () => {
     const result = await setSlot(organizationId, sectionId, weekday, period, draft.subject, draft.teacher);
     notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info");
-    if (!result.error) { setEditing(false); router.refresh(); }
+    if (!result.error) setEditing(false);
   });
   return <div className="tt-edit">
     <select aria-label="المادة" value={draft.subject} onChange={event => setDraft(current => ({ ...current, subject: event.target.value }))}><option value="">— فارغة —</option>{subjects.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select>

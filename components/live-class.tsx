@@ -34,6 +34,8 @@ export function LiveClass(props: Props) {
   const [open, setOpen] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+  // A change made here already comes back with the action's reply; its live echo is ignored for a moment.
+  const quietUntil = useRef(0);
   const seats = useMemo(() => seatsFor(students, attendance, pickups), [students, attendance, pickups]);
   const counts = seatCounts(seats);
   const names = useMemo(() => new Map(students.map(student => [student.id, student.full_name])), [students]);
@@ -55,7 +57,7 @@ export function LiveClass(props: Props) {
 
   useEffect(() => {
     let timer: number | undefined;
-    const refresh = () => { window.clearTimeout(timer); timer = window.setTimeout(() => startTransition(() => router.refresh()), 400); };
+    const refresh = () => { if (Date.now() < quietUntil.current) return; window.clearTimeout(timer); timer = window.setTimeout(() => startTransition(() => router.refresh()), 400); };
     let channel: ReturnType<ReturnType<typeof getSupabaseBrowserClient>["channel"]> | null = null;
     let connected = false;
     try {
@@ -68,9 +70,15 @@ export function LiveClass(props: Props) {
     } catch { setLive("polling"); }
     // Fallback only: poll every 30 seconds while the live connection is down and the tab is visible.
     const poll = window.setInterval(() => { if (!connected && document.visibilityState === "visible") startTransition(() => router.refresh()); }, 30_000);
-    const onFocus = () => refresh();
-    window.addEventListener("focus", onFocus);
-    return () => { window.clearInterval(poll); window.clearTimeout(timer); window.removeEventListener("focus", onFocus); if (channel) void getSupabaseBrowserClient().removeChannel(channel); };
+    // Coming back to the page refreshes it only when the live connection is down or after a long absence.
+    let hiddenAt = 0;
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") { hiddenAt = Date.now(); return; }
+      if (!connected || (hiddenAt && Date.now() - hiddenAt > 60_000)) refresh();
+      hiddenAt = 0;
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => { window.clearInterval(poll); window.clearTimeout(timer); document.removeEventListener("visibilitychange", onVisibility); if (channel) void getSupabaseBrowserClient().removeChannel(channel); };
   }, [organizationId, router]);
 
   useEffect(() => {
@@ -82,11 +90,13 @@ export function LiveClass(props: Props) {
 
   async function mark(childId: string, status: AttendanceStatus) {
     setSaving(childId); setOpen(null);
+    quietUntil.current = Date.now() + 3000;
     const result = await markAttendance(organizationId, childId, status);
+    quietUntil.current = Date.now() + 2000;
     setSaving(null);
     if (result.error) notify(result.error, "error");
-    // The live connection refreshes the view; only refresh here when it is not connected.
-    else { notify(`${names.get(childId) ?? "الطالب"}: ${attendanceLabels[status]}`, "info", "done"); if (live !== "live") startTransition(() => router.refresh()); }
+    // The action's reply already carries the refreshed class, live or not.
+    else notify(`${names.get(childId) ?? "الطالب"}: ${attendanceLabels[status]}`, "info", "done");
   }
 
   const shown = seats.filter(seat => filter === "all" || seat.state === filter);

@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { createSupabaseServerClient, sessionUser } from "../../../lib/supabase/server";
+import { requestMyOrganizations, requestSession } from "../../../lib/supabase/server";
 import { supportLink } from "../../../lib/support";
 import { Icon } from "../../../components/icons";
 import { SoundSwitchRow, ThemeSwitchRow } from "../../../components/preferences";
@@ -19,8 +19,7 @@ export const metadata = { title: "الإعدادات" };
 const roleNames: Record<string, string> = { owner: "مالك", admin: "مدير", staff: "موظف" };
 
 export default async function SettingsPage() {
-  const supabase = await createSupabaseServerClient();
-  const user = await sessionUser(supabase);
+  const { client: supabase, user } = await requestSession();
   if (!user) redirect("/login");
   const { data: memberships } = await supabase.from("memberships").select("organization_id,role,display_name,organizations(name)").eq("user_id", user.id);
   const myName = (memberships ?? []).map(m => (m as { display_name?: string | null }).display_name).find(Boolean) ?? "";
@@ -29,8 +28,7 @@ export default async function SettingsPage() {
   const support = supportLink(process.env.SEER_SUPPORT_WHATSAPP ?? "");
   const email = user.email ?? "";
   const icon = parseIconChoice((await cookies()).get(iconCookie)?.value).choice;
-  const { data: myOrgs } = await supabase.rpc("my_organizations");
-  const owned = ((myOrgs ?? []) as MyOrg[]).filter(org => org.role === "owner");
+  const owned = (await requestMyOrganizations()).data.filter(org => org.role === "owner");
   return <div style={{ maxWidth: 640 }}>
     <header className="page-head"><div><h1>الإعدادات</h1><p>حسابك وتفضيلات الواجهة.</p></div></header>
     <div className="stack">

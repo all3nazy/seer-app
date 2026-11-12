@@ -1,12 +1,10 @@
 "use client";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { getSupabaseBrowserClient } from "../lib/supabase";
 import { Icon } from "./icons";
 import { notify } from "./feedback";
 
-// Both bells receive the same notification; show its pop-up once.
-const announced = new Set<string>();
 type Item = { id: string; kind: string; title: string; body: string | null; url: string | null; read_at: string | null; created_at: string };
 const ago = (iso: string) => {
   const minutes = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000));
@@ -16,30 +14,49 @@ const ago = (iso: string) => {
   return hours < 24 ? `قبل ${hours.toLocaleString("ar-SA")} س` : new Date(iso).toLocaleDateString("ar-SA", { day: "numeric", month: "short" });
 };
 
-/** The bell: the person's latest notifications, live, with an unread count. */
-export function NotificationBell({ userId }: { userId: string }) {
-  const [items, setItems] = useState<Item[]>([]);
-  const [open, setOpen] = useState(false);
-  const box = useRef<HTMLDivElement>(null);
-  // The bell appears twice (sidebar and phone top bar); each needs its own realtime channel name,
-  // otherwise the second one reuses a channel that is already subscribed and fails.
-  const instance = useId().replace(/[^a-zA-Z0-9]/g, "");
-  const load = useCallback(async () => {
-    const { data } = await getSupabaseBrowserClient().from("notifications").select("id,kind,title,body,url,read_at,created_at").order("created_at", { ascending: false }).limit(20);
-    setItems((data ?? []) as Item[]);
-  }, []);
-  useEffect(() => {
-    void load();
+/**
+ * One store for the person's notifications, shared by every bell on the page (the sidebar and the
+ * phone top bar): one load and one realtime channel, and marking as read updates both bells.
+ */
+type Store = { userId: string; items: Item[]; listeners: Set<() => void>; stop: () => void };
+let store: Store | null = null;
+const emit = () => store?.listeners.forEach(listener => listener());
+const setItems = (update: (items: Item[]) => Item[]) => { if (store) { store.items = update(store.items); emit(); } };
+function subscribe(userId: string, listener: () => void) {
+  if (!store || store.userId !== userId) {
+    store?.stop();
     const client = getSupabaseBrowserClient();
-    const channel = client.channel(`notifications-${userId}-${instance}`)
+    const current: Store = { userId, items: [], listeners: new Set(), stop: () => {} };
+    store = current;
+    void client.from("notifications").select("id,kind,title,body,url,read_at,created_at").order("created_at", { ascending: false }).limit(20)
+      .then(({ data }: { data: Item[] | null }) => { if (store === current) { current.items = data ?? []; emit(); } });
+    const channel = client.channel(`notifications-${userId}-${Math.random().toString(36).slice(2, 8)}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` }, (payload: { new: unknown }) => {
         const item = payload.new as Item;
-        setItems(current => [item, ...current.filter(row => row.id !== item.id)].slice(0, 20));
-        if (!announced.has(item.id)) { announced.add(item.id); notify(item.title, "info"); }
+        setItems(items => [item, ...items.filter(row => row.id !== item.id)].slice(0, 20));
+        notify(item.title, "info");
       })
       .subscribe();
-    return () => { void client.removeChannel(channel); };
-  }, [userId, load, instance]);
+    current.stop = () => { void client.removeChannel(channel); };
+  }
+  const active = store;
+  active.listeners.add(listener);
+  return () => {
+    active.listeners.delete(listener);
+    // The last bell gone (signed out or left the dashboard): close the channel.
+    if (!active.listeners.size && store === active) { active.stop(); store = null; }
+  };
+}
+const noItems: Item[] = [];
+function useNotifications(userId: string) {
+  return useSyncExternalStore(useCallback(listener => subscribe(userId, listener), [userId]), () => store?.userId === userId ? store.items : noItems, () => noItems);
+}
+
+/** The bell: the person's latest notifications, live, with an unread count. */
+export function NotificationBell({ userId }: { userId: string }) {
+  const items = useNotifications(userId);
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
     const close = (event: MouseEvent) => { if (box.current && !box.current.contains(event.target as Node)) setOpen(false); };

@@ -154,7 +154,6 @@ export function QuoteActions({ organizationId, quoteId, status, canConvert }: { 
     const result = await work();
     notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info", result.error ? undefined : "done");
     if (result.invoiceId) router.push(`/dashboard/finance/invoices/${result.invoiceId}?org=${encodeURIComponent(organizationId)}`);
-    else router.refresh();
   });
   return <div className="doc-actions">
     {status === "draft" ? <>
@@ -173,14 +172,12 @@ export function QuoteActions({ organizationId, quoteId, status, canConvert }: { 
   </div>;
 }
 export function DeleteQuoteLineButton({ organizationId, quoteId, lineId }: { organizationId: string; quoteId: string; lineId: string }) {
-  const router = useRouter();
   const [pending, start] = useTransition();
-  return <button type="button" className="btn btn-sm btn-danger" disabled={pending} onClick={() => start(async () => { const result = await deleteQuoteLine(organizationId, quoteId, lineId); notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info"); router.refresh(); })}>حذف</button>;
+  return <button type="button" className="btn btn-sm btn-danger" disabled={pending} onClick={() => start(async () => { const result = await deleteQuoteLine(organizationId, quoteId, lineId); notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info"); })}>حذف</button>;
 }
 
 /** WhatsApp, copy and renew for a document's private link. */
 export function ShareDocument({ organizationId, kind, id, link, phone, message }: { organizationId: string; kind: "invoice" | "quote"; id: string; link: string; phone: string | null; message: string }) {
-  const router = useRouter();
   const [pending, start] = useTransition();
   async function copy() {
     try { await navigator.clipboard.writeText(link); notify("نُسخ الرابط.", "info", "done"); } catch { notify("ما قدرت أنسخ؛ انسخ الرابط يدويًا.", "error"); }
@@ -189,7 +186,7 @@ export function ShareDocument({ organizationId, kind, id, link, phone, message }
     <a className="btn-primary share-wa" href={whatsappLink(phone, message)} target="_blank" rel="noopener noreferrer">مشاركة واتساب</a>
     <button type="button" className="btn" onClick={copy}>نسخ الرابط</button>
     <a className="btn" href={link} target="_blank" rel="noopener noreferrer">معاينة كما يراها ولي الأمر</a>
-    <button type="button" className="btn btn-sm" disabled={pending} onClick={() => { if (window.confirm("تجديد الرابط يوقف الرابط القديم. متأكد؟")) start(async () => { const result = await renewShareLink(organizationId, kind, id); notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info"); router.refresh(); }); }}>تجديد الرابط</button>
+    <button type="button" className="btn btn-sm" disabled={pending} onClick={() => { if (window.confirm("تجديد الرابط يوقف الرابط القديم. متأكد؟")) start(async () => { const result = await renewShareLink(organizationId, kind, id); notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info"); }); }}>تجديد الرابط</button>
   </div>;
 }
 

@@ -1,6 +1,5 @@
 "use client";
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { createJoinLink, resetMemberPassword, revokeJoinLink } from "../app/dashboard/team/actions";
 import { whatsappLink } from "../lib/share";
 import { notify } from "./feedback";
@@ -12,7 +11,6 @@ const message = (organization: string, link: string, name: string | null) =>
 
 /** Creates a join link and offers it for WhatsApp or copying. */
 export function JoinLinkCreator({ organizationId, organizationName, canInviteAdmins }: { organizationId: string; organizationName: string; canInviteAdmins: boolean }) {
-  const router = useRouter();
   const [pending, start] = useTransition();
   const [role, setRole] = useState("staff");
   const [name, setName] = useState("");
@@ -21,7 +19,7 @@ export function JoinLinkCreator({ organizationId, organizationName, canInviteAdm
   const create = () => start(async () => {
     const result = await createJoinLink(organizationId, role, name, uses);
     notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info", result.error ? undefined : "done");
-    if (result.link) { setLink(result.link); router.refresh(); }
+    if (result.link) setLink(result.link);
   });
   return <div style={{ display: "grid", gap: 12 }}>
     <div className="composer">
@@ -41,12 +39,11 @@ export function JoinLinkCreator({ organizationId, organizationName, canInviteAdm
 }
 
 export function JoinLinkList({ organizationId, links, origin }: { organizationId: string; links: JoinLink[]; origin: string }) {
-  const router = useRouter();
   const [pending, start] = useTransition();
   if (!links.length) return null;
   return <ul className="records" style={{ marginTop: 12 }}>{links.map(item => <li key={item.code} style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
     <span>{item.display_name ?? "رابط عام"} · {roleLabel(item.role)}<span className="hint" style={{ display: "block" }} dir="ltr">{origin}/j/{item.code} · {item.uses}/{item.max_uses}</span></span>
-    <button type="button" className="btn btn-sm btn-danger" disabled={pending} onClick={() => start(async () => { const result = await revokeJoinLink(organizationId, item.code); notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info"); router.refresh(); })}>إلغاء</button>
+    <button type="button" className="btn btn-sm btn-danger" disabled={pending} onClick={() => start(async () => { const result = await revokeJoinLink(organizationId, item.code); notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info"); })}>إلغاء</button>
   </li>)}</ul>;
 }
 

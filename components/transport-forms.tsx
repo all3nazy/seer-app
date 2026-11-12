@@ -1,6 +1,5 @@
 "use client";
 import { useActionState, useEffect, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { finishTrip, recordRider, removeStop, saveRoute, saveStop, saveVehicle, startTrip, type BusResult } from "../app/dashboard/transport/actions";
 import { busMessage, directionLabels, riderLabels, riderState, type Direction, type TripEvent } from "../lib/transport";
 import { whatsappLink } from "../lib/share";
@@ -11,9 +10,8 @@ function useToast(state: BusResult, after?: () => void) {
   useEffect(() => { if (state.success) { notify(state.success, "info", "done"); after?.(); } else if (state.error) notify(state.error, "error"); }, [state]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 function useRun() {
-  const router = useRouter();
   const [pending, start] = useTransition();
-  return { pending, run: (work: () => Promise<BusResult>, quiet = false) => start(async () => { const result = await work(); if (result.error || !quiet) notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info", result.error ? undefined : "done"); router.refresh(); }) };
+  return { pending, run: (work: () => Promise<BusResult>, quiet = false) => start(async () => { const result = await work(); if (result.error || !quiet) notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info", result.error ? undefined : "done"); }) };
 }
 
 export function VehicleForm({ organizationId, staff }: { organizationId: string; staff: Option[] }) {

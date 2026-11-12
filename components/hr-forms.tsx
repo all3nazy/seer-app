@@ -1,6 +1,5 @@
 "use client";
 import { useActionState, useEffect, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { adjustPayrollLine, approvePayroll, checkInOut, decideLeave, generatePayroll, markStaffAttendance, requestLeave, saveStaff, type HrResult } from "../app/dashboard/staff/actions";
 import { contractLabels, contractTypes, leaveKinds, leaveLabels, staffAttendanceLabels, staffAttendanceStatuses, type StaffProfile } from "../lib/hr";
 import { notify } from "./feedback";
@@ -9,9 +8,8 @@ function useToast(state: HrResult, after?: () => void) {
   useEffect(() => { if (state.success) { notify(state.success, "info", "done"); after?.(); } else if (state.error) notify(state.error, "error"); }, [state]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 function useRun() {
-  const router = useRouter();
   const [pending, start] = useTransition();
-  const run = (work: () => Promise<HrResult>) => start(async () => { const result = await work(); notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info", result.error ? undefined : "done"); router.refresh(); });
+  const run = (work: () => Promise<HrResult>) => start(async () => { const result = await work(); notify(result.error ?? result.success ?? "تم", result.error ? "error" : "info", result.error ? undefined : "done"); });
   return { pending, run };
 }
 const v = (value: unknown) => value === null || value === undefined ? "" : String(value);
