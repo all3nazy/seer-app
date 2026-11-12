@@ -5,6 +5,7 @@ import { applicationStatusLabels, isApplicationStatus } from "../lib/admissions"
 import { relationshipLabels, relationships } from "../lib/team";
 import { riyadhToday } from "../lib/students";
 import { processingNotice } from "../lib/legal";
+import { formatFullDateTime } from "../lib/dates";
 
 export function ApplyForm({ organizationId, grades }: { organizationId: string; grades: { id: string; name: string }[] }) {
   const [state, action, pending] = useActionState(submitApplication, {});
@@ -51,7 +52,7 @@ export function StatusForm() {
     {state.status ? <div role="status" className="info-banner" style={{ display: "grid", gap: 4 }}>
       <span>{state.organization}</span>
       <strong>الحالة: {isApplicationStatus(state.status) ? applicationStatusLabels[state.status] : state.status}</strong>
-      {state.interview_at ? <span>موعد المقابلة: {new Date(state.interview_at).toLocaleString("ar-SA", { timeZone: "Asia/Riyadh", dateStyle: "full", timeStyle: "short" })}</span> : null}
+      {state.interview_at ? <span>موعد المقابلة: {formatFullDateTime(state.interview_at)}</span> : null}
     </div> : null}
   </form>;
 }

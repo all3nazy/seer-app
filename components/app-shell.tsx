@@ -13,6 +13,7 @@ import { seedSupportBadge, supportNotification, useSupportBadge } from "./suppor
 import { computerOnlySection, groupIsOpen, matches, navGroupLabels, navLinks, visibleLinks, type NavGroup } from "../lib/navigation";
 import { patternUrl, type Stage } from "../lib/stage";
 import { featureOf, featureState, type OrgFeatures } from "../lib/subscriptions";
+import { arNumber } from "../lib/dates";
 
 type ShellProps = { children: React.ReactNode; stage: Stage; organizations: { id: string; name: string }[]; manager?: boolean; userId?: string;
   sections?: OrgFeatures | null; brand?: { primary: string | null; onPrimary: string | null; accent: string | null } | null;
@@ -28,7 +29,7 @@ export function AppShell({ children, stage, organizations, manager = true, userI
   // «الدعم»: a platform admin goes to the team inbox; everyone else to their tickets.
   const supportHref = platformAdmin ? "/admin/support" : "/dashboard/support";
   const supportCount = platformAdmin ? badge.team ?? 0 : badge.mine;
-  const supportLabel = platformAdmin ? `الدعم${supportCount ? `: ${supportCount.toLocaleString("ar-SA")} بانتظار ردّك` : ""}` : `الدعم${supportCount ? `: ${supportCount.toLocaleString("ar-SA")} فيها رد جديد` : ""}`;
+  const supportLabel = platformAdmin ? `الدعم${supportCount ? `: ${arNumber(supportCount)} بانتظار ردّك` : ""}` : `الدعم${supportCount ? `: ${arNumber(supportCount)} فيها رد جديد` : ""}`;
   const path = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   useEffect(() => { try { setCollapsed(localStorage.getItem("seer-sidebar") === "rail"); } catch { /* storage unavailable */ } }, []);
@@ -67,7 +68,7 @@ export function AppShell({ children, stage, organizations, manager = true, userI
           const open = groupIsOpen(group, savedGroups, currentGroup, collapsed);
           return <div key={group} className={`nav-group${open ? " is-open" : ""}`}>
           <button type="button" className="nav-group-label" aria-expanded={open} aria-controls={`nav-group-${group}`} onClick={() => toggleGroup(group, open)} disabled={collapsed || group === currentGroup}>
-            <span>{navGroupLabels[group]}</span>{open ? null : <span className="nav-group-count" aria-label={`${links.length.toLocaleString("ar-SA")} أقسام`}>{links.length.toLocaleString("ar-SA")}</span>}
+            <span>{navGroupLabels[group]}</span>{open ? null : <span className="nav-group-count" aria-label={`${arNumber(links.length)} أقسام`}>{arNumber(links.length)}</span>}
             <span className="nav-group-chevron" aria-hidden="true">▾</span>
           </button>
           <div id={`nav-group-${group}`} className="nav-group-links" hidden={!open}>
@@ -85,7 +86,7 @@ export function AppShell({ children, stage, organizations, manager = true, userI
       <div className="sidebar-foot">
         {platformAdmin ? <Link className="nav-link" href="/admin" title="لوحة مسؤول المنصة"><Icon name="shield" /><span className="nav-text">لوحة المسؤول</span></Link> : null}
         <Link className="nav-link support-link" href={supportHref} aria-current={path.startsWith("/dashboard/support") ? "page" : undefined} title={supportLabel} aria-label={supportLabel}>
-          <Icon name="help" /><span className="nav-text">الدعم</span>{supportCount ? <span className="nav-badge" aria-hidden="true">{supportCount > 9 ? "9+" : supportCount.toLocaleString("ar-SA")}</span> : null}
+          <Icon name="help" /><span className="nav-text">الدعم</span>{supportCount ? <span className="nav-badge" aria-hidden="true">{supportCount > 9 ? "9+" : arNumber(supportCount)}</span> : null}
         </Link>
         <Link className="nav-link" href="/dashboard/billing" aria-current={path.startsWith("/dashboard/billing") ? "page" : undefined} title="الاشتراك"><Icon name="wallet" /><span className="nav-text">الاشتراك</span></Link>
         <Link className="nav-link" href={settings.href} aria-current={current(settings)} title={collapsed ? settings.label : undefined}><Icon name="settings" /><span className="nav-text">{settings.label}</span></Link>

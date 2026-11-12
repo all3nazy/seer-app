@@ -1,9 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { topicNames, type AssistantTopic } from "./assistant-intents";
 import { riyadhToday } from "./tasks";
+import { arNumber } from "./dates";
 
 const managerRoles=new Set(["owner","admin"]);
-const number=new Intl.NumberFormat("ar-SA");
+const number={ format: (value: number) => arNumber(value) };
 
 // Only aggregate queries leave this boundary; names and individual records are never loaded.
 export async function assistantStatus(client:SupabaseClient, organizationId:string, topic:AssistantTopic):Promise<string> {

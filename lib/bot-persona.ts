@@ -1,5 +1,6 @@
 import { normalizeArabic } from "./assistant-intents";
 import type { BotPersona } from "./stage";
+import { arNumber } from "./dates";
 
 /**
  * The bot's social side: reading the tone of a message, answering courtesy and small talk warmly,
@@ -8,7 +9,7 @@ import type { BotPersona } from "./stage";
  */
 export type Mood = "frustrated" | "urgent" | "worried" | "thanks" | "praise" | "apology" | "neutral";
 
-const n = (value: number) => value.toLocaleString("ar-SA");
+const n = (value: number) => arNumber(value);
 const clean = (value: string) => normalizeArabic(value).replace(/ئ/g, "ي").replace(/ؤ/g, "و").replace(/[؟?!.,،؛:«»"…]/g, " ").replace(/\s+/g, " ").trim();
 
 export function detectMood(text: string): Mood {
@@ -106,7 +107,7 @@ export function briefingItems(b: Briefing): BriefItem[] {
   if (b.leave) items.push({ tone: "warn", href: "/dashboard/staff", label: "الموظفين", text: `${n(b.leave)} طلب إجازة ينتظر قرارك.` });
   if (b.applications) items.push({ tone: "warn", href: "/dashboard/admissions", label: "القبول", text: `${n(b.applications)} طلب التحاق جديد أو قيد المراجعة.` });
   if (b.inquiries) items.push({ tone: "warn", href: "/dashboard/inquiries", label: "الاستفسارات", text: `${n(b.inquiries)} استفسار من الموظفين بانتظار الرد.` });
-  if (b.invoices?.overdue) items.push({ tone: "alert", href: "/dashboard/finance", label: "المالية", text: `${n(b.invoices.overdue)} فاتورة تجاوزت موعدها، المتبقي ${b.invoices.overdueAmount.toLocaleString("ar-SA", { maximumFractionDigits: 2 })} ر.س.` });
+  if (b.invoices?.overdue) items.push({ tone: "alert", href: "/dashboard/finance", label: "المالية", text: `${n(b.invoices.overdue)} فاتورة تجاوزت موعدها، المتبقي ${arNumber(b.invoices.overdueAmount, { max: 2 })} ر.س.` });
   if (b.messages?.failed) items.push({ tone: "alert", href: "/dashboard/messages", label: "الرسائل", text: `${n(b.messages.failed)} رسالة تعذّر إرسالها، تحتاج مراجعة.` });
   if (b.messages?.queued) items.push({ tone: "warn", href: "/dashboard/messages", label: "الرسائل", text: `${n(b.messages.queued)} رسالة بانتظار الإرسال.` });
   if (b.notices) items.push({ tone: "warn", href: "/dashboard/attendance", label: "الحضور", text: `${n(b.notices)} إشعار غياب من أولياء الأمور لليوم.` });

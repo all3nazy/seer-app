@@ -1,4 +1,5 @@
 import { ValidationError, uuid } from "./operations";
+import { formatDay, riyadhDate } from "./dates";
 
 export const taskStatuses = ["todo", "doing", "review", "done"] as const;
 export type TaskStatus = (typeof taskStatuses)[number];
@@ -51,7 +52,7 @@ export function taskId(value: unknown): string { return uuid(value); }
 
 /** Today's date in Riyadh, so «متأخرة» matches what people see on their wall calendar. */
 export function riyadhToday(now = new Date()): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Riyadh", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+  return riyadhDate(now);
 }
 export function isOverdue(task: Pick<Task, "status" | "due_date">, today = riyadhToday()): boolean {
   return task.status !== "done" && !!task.due_date && task.due_date < today;
@@ -62,7 +63,7 @@ export function dueLabel(due: string | null, today = riyadhToday()): string | nu
   const days = Math.round((Date.parse(due) - Date.parse(today)) / 86_400_000);
   if (days === 1) return "غدًا";
   if (days === -1) return "أمس";
-  return new Intl.DateTimeFormat("ar-SA-u-ca-gregory", { day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(due));
+  return formatDay(due);
 }
 export function neighbourStatus(status: TaskStatus, direction: 1 | -1): TaskStatus | null {
   return taskStatuses[taskStatuses.indexOf(status) + direction] ?? null;

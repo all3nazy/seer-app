@@ -6,6 +6,7 @@ import { readXlsx } from "../lib/xlsx";
 import { parseDelimited } from "../lib/import";
 import { importStudents, type ImportResult } from "../app/dashboard/children/import/actions";
 import { notify } from "./feedback";
+import { arNumber } from "../lib/dates";
 
 /** Upload or paste a sheet, review every row, then import the valid ones. */
 export function ImportStudents({ organizationId, sectionNames }: { organizationId: string; sectionNames: string[] }) {
@@ -48,7 +49,7 @@ export function ImportStudents({ organizationId, sectionNames }: { organizationI
     </section>
     {rows ? <section className="card" style={{ display: "grid", gap: 12 }}>
       <h2 style={{ fontSize: 17, margin: 0 }}>٣. راجع قبل الحفظ</h2>
-      <p style={{ margin: 0 }}>{rows.length.toLocaleString("ar-SA")} صف: <strong>{valid.length.toLocaleString("ar-SA")} جاهز</strong>{rows.length - valid.length ? ` و${(rows.length - valid.length).toLocaleString("ar-SA")} فيه ملاحظات وما راح ينحفظ حتى تصلحه` : ""}.</p>
+      <p style={{ margin: 0 }}>{arNumber(rows.length)} صف: <strong>{arNumber(valid.length)} جاهز</strong>{rows.length - valid.length ? ` و${arNumber((rows.length - valid.length))} فيه ملاحظات وما راح ينحفظ حتى تصلحه` : ""}.</p>
       <div className="table-wrap"><table className="links-table import-table"><thead><tr><th>#</th><th>الطالب</th><th>الفصل</th><th>ولي الأمر</th><th>الجوال</th><th>الحالة</th></tr></thead>
         <tbody>{rows.slice(0, 300).map(row => <tr key={row.line} className={row.errors.length ? "bad" : ""}>
           <td>{row.line}</td><td>{row.values.full_name}</td><td>{row.values.section || "—"}</td><td>{row.values.guardian_name || "—"}</td><td dir="ltr">{row.values.guardian_phone || "—"}</td>
@@ -58,11 +59,11 @@ export function ImportStudents({ organizationId, sectionNames }: { organizationI
       <span><button type="button" className="btn btn-primary" disabled={pending || !valid.length} onClick={() => start(async () => {
         const outcome = await importStudents(organizationId, valid.map(row => ({ line: row.line, values: row.values })));
         setResult(outcome);
-        notify(outcome.error ?? `أُضيف ${outcome.created?.toLocaleString("ar-SA")} طالب.`, outcome.error ? "error" : "info", outcome.error ? undefined : "done");
-      })}>{pending ? "جارٍ الاستيراد…" : `استيراد ${valid.length.toLocaleString("ar-SA")} طالب`}</button></span>
+        notify(outcome.error ?? `أُضيف ${arNumber(outcome.created)} طالب.`, outcome.error ? "error" : "info", outcome.error ? undefined : "done");
+      })}>{pending ? "جارٍ الاستيراد…" : `استيراد ${arNumber(valid.length)} طالب`}</button></span>
     </section> : null}
     {result && !result.error ? <section className="card info-banner" role="status">
-      <p style={{ margin: 0 }}>✓ أُضيف {result.created?.toLocaleString("ar-SA")} طالب و{result.guardians?.toLocaleString("ar-SA")} ولي أمر جديد، وانربط كل طالب بولي أمره.</p>
+      <p style={{ margin: 0 }}>✓ أُضيف {arNumber(result.created)} طالب و{arNumber(result.guardians)} ولي أمر جديد، وانربط كل طالب بولي أمره.</p>
       {result.skipped?.length ? <ul>{result.skipped.map(item => <li key={item.line}>صف {item.line}: {item.reason}</li>)}</ul> : null}
       <Link href="/dashboard/children">عرض الطلاب</Link>
     </section> : null}

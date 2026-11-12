@@ -17,6 +17,7 @@ import { botPersonas, tipOfDay, type Stage } from "../lib/stage";
 import { featureOf } from "../lib/subscriptions";
 import { Icon } from "./icons";
 import { SupportNew } from "./support-new";
+import { arNumber, formatTime, riyadhHour } from "../lib/dates";
 
 type Action = { href: string; label: string; external?: boolean };
 /** A proposal waiting for the person's confirmation; nothing runs before they press it. */
@@ -35,8 +36,7 @@ const suggestions: Suggestion[] = [
   { label: "نصيحة اليوم", text: "نصيحة اليوم" },
 ];
 const help = "أقدر أعطيك ملخص يومك وأولوياتك («ملخص اليوم»)، وأعرض مهامك وأقفلها («مهامي»)، وأسلّم الطالب لولي أمره بتأكيد («سلّم ريم»)، وأعرض طلبات الإجازة وأعتمدها للمدير («الإجازات»)، وإشعاراتك الجديدة («الإشعارات»)، وأسجّل الحضور («سجّل ريم متأخرة»)، وأبحث عن طالب («وين سارة»)، وأعرض مين غايب أو متأخر اليوم، وأنشئ مهمة («أنشئ مهمة: تجهيز القاعة بكرة»)، وأفتح الفصل المباشر، وأعطيك ملخص المهام والتسجيل والفواتير حسب صلاحيتك، وأشرح لك أي قسم في المنصة («كيف أضيف موظف؟»، «وين ألقى رابط التسجيل؟»)، وأحوّلك للدعم إذا احتجت. أي تغيير أعرضه عليك أول، وما ينفّذ إلا بعد ما تضغط «تأكيد»، وينحفظ باسمك في سجل المنصة.";
-const time = (iso: string) => new Date(iso).toLocaleTimeString("ar-SA", { timeZone: "Asia/Riyadh", hour: "numeric", minute: "2-digit" });
-const riyadhHour = () => Number(new Intl.DateTimeFormat("en-US", { hour: "numeric", hourCycle: "h23", timeZone: "Asia/Riyadh" }).format(new Date()));
+const time = (iso: string) => formatTime(iso);
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export function AssistantPanel({ organizations, stage = "school", disabled = [] }: { organizations: { id: string; name: string }[]; stage?: Stage; disabled?: string[] }) {
@@ -65,7 +65,7 @@ export function AssistantPanel({ organizations, stage = "school", disabled = [] 
     const students = found.data ?? [];
     if (!students.length) return { text: `ما لقيت طالب باسم «${name}». تأكد من الاسم أو جرّب جزء منه.` };
     if (students.length === 1) return next(students[0]);
-    return { text: `لقيت ${students.length.toLocaleString("ar-SA")} بهذا الاسم. أي واحد تقصد؟`, choices: students.map(student => ({ label: student.full_name, sub: student.section, pick: () => next(student) })) };
+    return { text: `لقيت ${arNumber(students.length)} بهذا الاسم. أي واحد تقصد؟`, choices: students.map(student => ({ label: student.full_name, sub: student.section, pick: () => next(student) })) };
   }
   async function runCommand(command: BotCommand): Promise<Reply> {
     if (command.kind === "tip") return { text: `💡 ${tipOfDay(stage)}` };
@@ -110,7 +110,7 @@ export function AssistantPanel({ organizations, stage = "school", disabled = [] 
       const tasks = result.data ?? [];
       if (!tasks.length) return { text: "ما عندك مهام مفتوحة. يعطيك العافية 🌿", actions: [{ href: `/dashboard/my?org=${orgParam}`, label: "مهامي" }] };
       return {
-        text: `عندك ${tasks.length.toLocaleString("ar-SA")} مهمة مفتوحة. اختر وحدة إذا خلصتها وأقفلها لك:`,
+        text: `عندك ${arNumber(tasks.length)} مهمة مفتوحة. اختر وحدة إذا خلصتها وأقفلها لك:`,
         choices: tasks.map(task => ({ label: task.title, sub: task.due_date ? `موعدها ${task.due_date}` : "بدون موعد", pick: () => ({
           text: `أقفل «${task.title}» كمنجزة؟`, confirm: { summary: task.title, run: () => botCompleteTask(org, task.id) },
         }) })),
@@ -123,8 +123,8 @@ export function AssistantPanel({ organizations, stage = "school", disabled = [] 
       const rows = result.data ?? [];
       if (!rows.length) return { text: "ما فيه طلبات إجازة معلّقة. 👍", actions: [{ href: `/dashboard/staff?org=${orgParam}`, label: "الموظفين" }] };
       return {
-        text: `فيه ${rows.length.toLocaleString("ar-SA")} طلب إجازة ينتظر قرارك:`,
-        choices: rows.map(row => ({ label: row.who, sub: `${row.starts_on}${row.ends_on !== row.starts_on ? ` ← ${row.ends_on}` : ""} · ${row.days.toLocaleString("ar-SA")} يوم`, pick: () => ({
+        text: `فيه ${arNumber(rows.length)} طلب إجازة ينتظر قرارك:`,
+        choices: rows.map(row => ({ label: row.who, sub: `${row.starts_on}${row.ends_on !== row.starts_on ? ` ← ${row.ends_on}` : ""} · ${arNumber(row.days)} يوم`, pick: () => ({
           text: `وش قرارك في إجازة ${row.who}؟`,
           choices: [
             { label: "اعتماد", pick: () => ({ text: `أعتمد إجازة ${row.who}؟`, confirm: { summary: `اعتماد إجازة ${row.who}`, run: () => botDecideLeave(org, row.id, true) } }) },
@@ -141,8 +141,8 @@ export function AssistantPanel({ organizations, stage = "school", disabled = [] 
       if (!issues.length) return { text: "فحصت النظام: كل شيء سليم ✓ ما فيه رسائل عالقة ولا دفعات معلّقة ولا أخطاء جديدة.", actions: [{ href: `/dashboard/health?org=${orgParam}`, label: "صحة النظام" }] };
       const fixable = issues.filter(check => check.fixable);
       return {
-        text: `فحصت النظام: ${issues.length.toLocaleString("ar-SA")} بند يحتاج انتباه.${fixable.length ? " أقدر أصلح الآمن منها الحين:" : ""}`,
-        list: issues.map(check => ({ label: `${check.label}: ${check.count.toLocaleString("ar-SA")}`, sub: check.fixable ? "يُصلح تلقائيًا" : null, href: `${check.href}${check.href.includes("?") ? "&" : "?"}org=${orgParam}` })),
+        text: `فحصت النظام: ${arNumber(issues.length)} بند يحتاج انتباه.${fixable.length ? " أقدر أصلح الآمن منها الحين:" : ""}`,
+        list: issues.map(check => ({ label: `${check.label}: ${arNumber(check.count)}`, sub: check.fixable ? "يُصلح تلقائيًا" : null, href: `${check.href}${check.href.includes("?") ? "&" : "?"}org=${orgParam}` })),
         choices: fixable.map(check => ({ label: `إصلاح: ${check.label}`, pick: () => ({ text: `أصلح «${check.label}»؟`, confirm: { summary: check.label, run: () => botRepair(org, check.id) } }) })),
         actions: [{ href: `/dashboard/health?org=${orgParam}`, label: "صحة النظام" }],
       };
@@ -152,7 +152,7 @@ export function AssistantPanel({ organizations, stage = "school", disabled = [] 
       if (result.error) return { text: result.error };
       const rows = result.data ?? [];
       if (!rows.length) return { text: "ما فيه إشعارات جديدة. كل شيء مقروء ✓" };
-      return { text: `عندك ${rows.length.toLocaleString("ar-SA")} إشعار جديد:`, list: rows.map(row => ({ label: row.title, sub: row.body, href: row.url ?? undefined })) };
+      return { text: `عندك ${arNumber(rows.length)} إشعار جديد:`, list: rows.map(row => ({ label: row.title, sub: row.body, href: row.url ?? undefined })) };
     }
     if (command.kind === "task") {
       if (!command.title) return { text: "وش عنوان المهمة؟ اكتب مثلًا: «أنشئ مهمة: تجهيز القاعة بكرة»." };
@@ -169,7 +169,7 @@ export function AssistantPanel({ organizations, stage = "school", disabled = [] 
     const result = await botToday(org, command.status);
     if (result.error || !result.data) return { text: result.error ?? "تعذر قراءة الحضور." };
     const { counts, names, total } = result.data;
-    const n = (value: number) => value.toLocaleString("ar-SA");
+    const n = (value: number) => arNumber(value);
     const line = `اليوم: ${n(counts.present)} حاضر، ${n(counts.late)} متأخر، ${n(counts.absent)} غائب، ${n(counts.excused)} بعذر، و${n(counts.pending)} ما تسجّل حضورهم من ${n(total)}.`;
     if (!command.status) return { text: line, actions: [{ href: `/dashboard/classes?org=${orgParam}`, label: "متابعة الفصول" }] };
     const label = command.status === "pending" ? "ما تسجّل حضورهم" : attendanceLabels[command.status as AttendanceStatus];

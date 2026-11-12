@@ -4,6 +4,7 @@ import { addBehavior, createAssessment, deleteRecord, saveGrades, saveSubject, s
 import { assessmentKinds, assessmentLabels, behaviorCategories, behaviorLabels } from "../lib/learning";
 import { notify } from "./feedback";
 import { confirmAction } from "./confirm";
+import { arNumber } from "../lib/dates";
 
 type Option = { id: string; name: string };
 function useToast(state: LearnResult, after?: () => void) {
@@ -77,7 +78,7 @@ export function GradeSheet({ organizationId, assessmentId, maxScore, students, g
   const average = numbers.length ? Math.round((numbers.reduce((a, b) => a + b, 0) / numbers.length) * 10) / 10 : null;
   return <form action={action} className="grade-sheet">
     <input type="hidden" name="organization_id" value={organizationId} /><input type="hidden" name="assessment_id" value={assessmentId} /><input type="hidden" name="max_score" value={maxScore} />
-    <p className="hint">اكتب الدرجة من {maxScore}، أو «غ» للغائب. مُدخل {filled.toLocaleString("ar-SA")} من {students.length.toLocaleString("ar-SA")}{average !== null ? ` · المتوسط ${average.toLocaleString("ar-SA")}` : ""}</p>
+    <p className="hint">اكتب الدرجة من {maxScore}، أو «غ» للغائب. مُدخل {arNumber(filled)} من {arNumber(students.length)}{average !== null ? ` · المتوسط ${arNumber(average)}` : ""}</p>
     <ol>{students.map((student, index) => { const value = values[student.id]; const bad = value && !/^(غ|a)$/i.test(value) && !(Number(value) >= 0 && Number(value) <= maxScore);
       return <li key={student.id}><span>{student.name}</span>
         <input name={`score:${student.id}`} inputMode="decimal" dir="ltr" aria-label={`درجة ${student.name}`} aria-invalid={bad ? true : undefined} value={value}

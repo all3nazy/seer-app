@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "../lib/supabase";
 import { templatePages, templatePathPattern, templateText, type SupportTemplate } from "../lib/support-templates";
 import { notify } from "./feedback";
+import { arNumber } from "../lib/dates";
 
 type Draft = { id: number | null; title: string; body: string; path: string; keywords: string };
 const empty: Draft = { id: null, title: "", body: "", path: "", keywords: "" };
@@ -74,7 +75,7 @@ export function SupportTemplatesEditor({ templates, site }: { templates: Support
 
   return <section className="card" aria-labelledby="templates-title">
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
-      <h2 id="templates-title" style={{ margin: 0, fontSize: 18 }}>القوالب ({templates.length.toLocaleString("ar-SA")})</h2>
+      <h2 id="templates-title" style={{ margin: 0, fontSize: 18 }}>القوالب ({arNumber(templates.length)})</h2>
       <button type="button" className="btn btn-primary" onClick={() => setDraft({ ...empty })} disabled={draft?.id === null}>قالب جديد</button>
     </div>
     {draft?.id === null ? form : null}

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { getSupabaseBrowserClient } from "../../../lib/supabase";
 import { ActivationError, requestActivationEmail, verifyActivationInput } from "../../../lib/activation";
 import { Logo } from "../../../components/icons";
+import { arNumber } from "../../../lib/dates";
 
 export default function ActivateAccount() {
   const [email, setEmail] = useState("");
@@ -62,7 +63,7 @@ export default function ActivateAccount() {
       <form method="post" onSubmit={requestEmail} className="login-form" aria-busy={busy === "request"}>
         <label htmlFor="activation-email">البريد الإلكتروني</label>
         <input id="activation-email" name="email" type="email" dir="ltr" inputMode="email" required autoComplete="email" autoCapitalize="none" spellCheck={false} maxLength={254} value={email} onChange={event => setEmail(event.target.value)} readOnly={busy !== null} />
-        <button className="primary-button" disabled={busy !== null || cooldown > 0}>{busy === "request" ? "جارٍ طلب الرسالة…" : cooldown > 0 ? `يمكن إعادة الطلب بعد ${cooldown.toLocaleString("ar-SA")} ثانية` : "إرسال رسالة التفعيل"}</button>
+        <button className="primary-button" disabled={busy !== null || cooldown > 0}>{busy === "request" ? "جارٍ طلب الرسالة…" : cooldown > 0 ? `يمكن إعادة الطلب بعد ${arNumber(cooldown)} ثانية` : "إرسال رسالة التفعيل"}</button>
       </form>
       {message ? <p role="status">{message}</p> : null}
       <h2>إكمال التفعيل أو استعادة الرابط</h2>

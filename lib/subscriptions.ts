@@ -1,3 +1,4 @@
+import { arNumber } from "./dates";
 /**
  * Subscriptions in the app: section (feature) names, which page belongs to which section, plan
  * pricing for display (the database computes the amount that is actually charged), and states.
@@ -37,8 +38,8 @@ export type Duration = { months: number; discount: number };
 export function priceFor(plan: Pick<Plan, "monthly_price">, duration: Duration): number {
   return Math.round(Number(plan.monthly_price) * duration.months * (1 - Number(duration.discount) / 100) * 100) / 100;
 }
-export const durationLabel = (months: number) => months === 1 ? "شهر" : months === 12 ? "سنة" : `${months.toLocaleString("ar-SA")} أشهر`;
-export const riyal = (value: number) => `${Number(value).toLocaleString("ar-SA", { maximumFractionDigits: 2 })} ر.س`;
+export const durationLabel = (months: number) => months === 1 ? "شهر" : months === 12 ? "سنة" : `${arNumber(months)} أشهر`;
+export const riyal = (value: number) => `${arNumber(Number(value), { max: 2 })} ر.س`;
 
 export type Access = "active" | "grace" | "locked";
 export const accessLabels: Record<Access, string> = { active: "فعّال", grace: "مهلة التجديد", locked: "مقفل" };
@@ -51,11 +52,11 @@ export function renewalNotice(org: Pick<MyOrg, "access" | "status" | "days_left"
   if (!org || org.days_left === null || org.status === "suspended") return null;
   if (org.access === "grace") {
     const left = graceDays + org.days_left;
-    return `انتهى الاشتراك. المنصة تعمل في مهلة التجديد${left >= 0 ? ` لمدة ${left.toLocaleString("ar-SA")} يوم` : ""}، وتنقفل بعدها حتى التجديد.`;
+    return `انتهى الاشتراك. المنصة تعمل في مهلة التجديد${left >= 0 ? ` لمدة ${arNumber(left)} يوم` : ""}، وتنقفل بعدها حتى التجديد.`;
   }
   if (org.access === "active" && org.days_left >= 0 && org.days_left <= 7) {
     const trial = org.status === "trial";
-    return org.days_left === 0 ? `${trial ? "التجربة المجانية" : "الاشتراك"} ينتهي اليوم.` : `باقي ${org.days_left.toLocaleString("ar-SA")} يوم على نهاية ${trial ? "التجربة المجانية" : "الاشتراك"}.`;
+    return org.days_left === 0 ? `${trial ? "التجربة المجانية" : "الاشتراك"} ينتهي اليوم.` : `باقي ${arNumber(org.days_left)} يوم على نهاية ${trial ? "التجربة المجانية" : "الاشتراك"}.`;
   }
   return null;
 }

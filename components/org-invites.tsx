@@ -7,11 +7,12 @@ import { inviteLink, inviteMessage, inviteStatusLabels, orgTypeLabels, trialLabe
 import { whatsappLink } from "../lib/share";
 import { confirmAction } from "./confirm";
 import { notify } from "./feedback";
+import { formatDate } from "../lib/dates";
 
 export type InviteRow = { id: string; org_name: string; org_type: string; plan: string; trial_months: number; note: string | null; status: string; created_at: string; expires_at: string; used_at: string | null; organization_id: string | null; organization: string | null };
 type Plan = { id: string; key: string; name: string };
 const errorText = (code?: string) => code === "42501" ? "لمسؤول المنصة فقط." : code === "22023" ? "تحقق من الاسم والنوع وعدد الأشهر (١ إلى ١٢)." : "تعذر التنفيذ. حاول مرة ثانية.";
-const date = (iso: string) => new Date(iso).toLocaleDateString("ar-SA", { timeZone: "Asia/Riyadh", day: "numeric", month: "short" });
+const date = (iso: string) => formatDate(iso);
 
 /** A new link, shown once: copy it or send it on WhatsApp. Only its hash is stored. */
 export function FreshLink({ token, orgName, months, phone = null, onDone }: { token: string; orgName: string; months: number; phone?: string | null; onDone: () => void }) {

@@ -28,3 +28,17 @@ test.describe("support replies: links and templates", () => {
     await expect(box).toHaveValue(/إنشاء رابط انضمام[^]*\n\n🔗 https:\/\/seersa\.vercel\.app\/dashboard\/team$/);
   });
 });
+
+test.describe("no hydration mismatch in dates (React #418)", () => {
+  test.use({ timezoneId: "America/New_York", locale: "en-US" });
+  test("a ticket renders the same on the server and in a browser with another time zone and language", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", error => errors.push(error.message));
+    page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
+    await page.goto("/e2e/support-thread");
+    // 08:05 UTC is 11:05 in Riyadh, whatever the device says.
+    await expect(page.locator(".support-messages time").nth(1)).toHaveText("١٢ نوفمبر، ١١:٠٥ ص");
+    await page.waitForLoadState("networkidle").catch(() => undefined);
+    expect(errors.filter(text => /418|hydrat|did not match|server rendered/i.test(text))).toEqual([]);
+  });
+});

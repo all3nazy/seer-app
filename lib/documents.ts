@@ -1,5 +1,6 @@
 import { ValidationError } from "./operations";
 import type { FeeKind } from "./finance";
+import { arNumber } from "./dates";
 
 /** The organization's identity printed on its invoices, receipts and quotes. */
 export type OrgProfile = {
@@ -34,7 +35,7 @@ const optional = (data: FormData, key: string, max: number, pattern?: RegExp, me
   if (typeof raw !== "string") throw new ValidationError("قيمة غير صالحة.");
   const value = raw.trim();
   if (!value) return null;
-  if (value.length > max) throw new ValidationError(`النص لا يتجاوز ${max.toLocaleString("ar-SA")} حرف.`);
+  if (value.length > max) throw new ValidationError(`النص لا يتجاوز ${arNumber(max)} حرف.`);
   if (pattern && !pattern.test(value)) throw new ValidationError(message ?? "قيمة غير صالحة.");
   return value;
 };
@@ -89,7 +90,7 @@ export function quoteLines(items: { id: string; name: string; kind: FeeKind; amo
 }
 
 export function docLabel(kind: DocKind, number: number | null): string {
-  const n = number ? ` رقم ${number.toLocaleString("ar-SA", { useGrouping: false })}` : "";
+  const n = number ? ` رقم ${arNumber(number, { grouping: false })}` : "";
   return kind === "quote" ? `عرض سعر${n}` : kind === "receipt" ? `إيصال استلام${n}` : `فاتورة${n}`;
 }
 export function shareMessage({ kind, organization, number, recipient, total, link }: { kind: "invoice" | "quote"; organization: string; number: number | null; recipient: string | null; total: string; link: string }): string {

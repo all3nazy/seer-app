@@ -4,14 +4,15 @@ import Link from "next/link";
 import { getSupabaseBrowserClient } from "../lib/supabase";
 import { Icon } from "./icons";
 import { notify } from "./feedback";
+import { arNumber, formatDate } from "../lib/dates";
 
 type Item = { id: string; kind: string; title: string; body: string | null; url: string | null; read_at: string | null; created_at: string };
 const ago = (iso: string) => {
   const minutes = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000));
   if (minutes < 1) return "الآن";
-  if (minutes < 60) return `قبل ${minutes.toLocaleString("ar-SA")} د`;
+  if (minutes < 60) return `قبل ${arNumber(minutes)} د`;
   const hours = Math.round(minutes / 60);
-  return hours < 24 ? `قبل ${hours.toLocaleString("ar-SA")} س` : new Date(iso).toLocaleDateString("ar-SA", { day: "numeric", month: "short" });
+  return hours < 24 ? `قبل ${arNumber(hours)} س` : formatDate(iso);
 };
 
 /**
@@ -81,7 +82,7 @@ export function NotificationBell({ userId }: { userId: string }) {
   };
   return <div className="bell" ref={box}>
     <button type="button" className="bell-button" aria-expanded={open} aria-label={unread ? `الإشعارات: ${unread} جديدة` : "الإشعارات"} onClick={() => setOpen(value => !value)}>
-      <Icon name="bell" />{unread ? <span className="bell-count" aria-hidden="true">{unread > 9 ? "9+" : unread.toLocaleString("ar-SA")}</span> : null}
+      <Icon name="bell" />{unread ? <span className="bell-count" aria-hidden="true">{unread > 9 ? "9+" : arNumber(unread)}</span> : null}
     </button>
     {open ? <div className="bell-panel" role="dialog" aria-label="الإشعارات">
       <div className="bell-head"><strong>الإشعارات</strong>{unread ? <button type="button" className="btn btn-sm" onClick={() => void markAll()}>تعليم الكل كمقروء</button> : null}</div>

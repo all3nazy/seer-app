@@ -1,4 +1,5 @@
 import { attendanceLabels, type AttendanceStatus } from "./students";
+import { formatTime } from "./dates";
 
 /**
  * The live class view: where each student is right now, and a timeline of today's movements.
@@ -49,7 +50,7 @@ export function timeline(events: LiveEvent[], pickups: LivePickup[], names: Map<
 }
 
 export function riyadhTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString("ar-SA", { timeZone: "Asia/Riyadh", hour: "numeric", minute: "2-digit" });
+  return formatTime(iso);
 }
 export function initials(name: string): string {
   return name.trim().split(/\s+/).slice(0, 2).map(part => part[0] ?? "").join(" ");
