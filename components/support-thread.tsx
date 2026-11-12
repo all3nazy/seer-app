@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { getSupabaseBrowserClient } from "../lib/supabase";
 import { newTicketPath } from "../lib/support";
+import { linkify } from "../lib/linkify";
+import { templateText, type SupportTemplate } from "../lib/support-templates";
 import { confirmAction } from "./confirm";
 import { notify } from "./feedback";
 import { viewingSupportThread } from "./support-badge";
@@ -15,7 +17,16 @@ const errorText = (code?: string) => code === "54000" ? "رسائل كثيرة �
  * One support conversation, live: new messages arrive through Supabase Realtime (one channel, closed
  * when the page closes). Sending appends the message at once; its realtime echo is ignored by id.
  */
-export function SupportThread({ threadId, initialMessages, initialStatus, side }: { threadId: string; initialMessages: SupportMessage[]; initialStatus: "open" | "closed"; side: "user" | "admin" }) {
+/** A message's text, with links to the platform's own pages clickable (other addresses stay text). */
+export function MessageText({ body }: { body: string }) {
+  const [host, setHost] = useState<string | null>(null);
+  useEffect(() => setHost(window.location.host), []);
+  return <p>{linkify(body, host).map((piece, index) => piece.href
+    ? <Link key={index} href={piece.href} dir="ltr" className="msg-link">{piece.text}</Link>
+    : <span key={index}>{piece.text}</span>)}</p>;
+}
+
+export function SupportThread({ threadId, initialMessages, initialStatus, side, templates = [], site = "" }: { threadId: string; initialMessages: SupportMessage[]; initialStatus: "open" | "closed"; side: "user" | "admin"; templates?: SupportTemplate[]; site?: string }) {
   const [messages, setMessages] = useState(initialMessages);
   const [status, setStatus] = useState(initialStatus);
   const [draft, setDraft] = useState("");
@@ -56,6 +67,14 @@ export function SupportThread({ threadId, initialMessages, initialStatus, side }
     setDraft("");
     setMessages(current => current.some(item => item.id === data) ? current : [...current, { id: String(data), body, from_admin: side === "admin", created_at: new Date().toISOString() }]);
   }
+  // A template fills the reply box (edited before sending); it replaces what is typed only after asking.
+  async function insertTemplate(id: string) {
+    const chosen = templates.find(template => String(template.id) === id);
+    if (!chosen) return;
+    if (draft.trim() && !(await confirmAction("استبدال النص المكتوب بالقالب؟"))) return;
+    setDraft(templateText(chosen, site || window.location.origin));
+    document.getElementById(`reply-${threadId}`)?.focus();
+  }
   async function close() {
     if (!(await confirmAction(side === "admin" ? "إغلاق التذكرة؟ يوصل المستخدم إشعار بالإغلاق." : "إغلاق التذكرة؟ تقدر تفتح تذكرة جديدة متى ما احتجت."))) return;
     const { error } = await getSupabaseBrowserClient().rpc("close_support_thread", { thread: threadId });
@@ -67,12 +86,17 @@ export function SupportThread({ threadId, initialMessages, initialStatus, side }
     <ol className="support-messages" ref={log} aria-label="الرسائل" aria-live="polite">
       {messages.map(message => <li key={message.id} className={message.from_admin ? "from-team" : "from-user"}>
         <span className="support-who">{message.from_admin ? "فريق سِير" : side === "admin" ? "المستخدم" : "أنت"}</span>
-        <p>{message.body}</p>
+        <MessageText body={message.body} />
         <time dateTime={message.created_at}>{time(message.created_at)}</time>
       </li>)}
     </ol>
     {status === "open" ? <form className="support-reply" onSubmit={send}>
       <label className="sr-only" htmlFor={`reply-${threadId}`}>ردّك</label>
+      {side === "admin" && templates.length ? <label className="support-template-pick">إدراج قالب
+        <select value="" onChange={event => void insertTemplate(event.target.value)}>
+          <option value="">اختر قالبًا يعبّي خانة الرد…</option>
+          {templates.map(template => <option key={template.id} value={template.id}>{template.suggested ? `⭐ المقترح: ${template.title}` : template.title}</option>)}
+        </select></label> : null}
       <textarea id={`reply-${threadId}`} value={draft} onChange={event => setDraft(event.target.value)} maxLength={2000} required placeholder={side === "admin" ? "اكتب ردّك للمستخدم" : "اكتب ردّك لفريق سِير"} disabled={sending} />
       <div className="support-reply-actions">
         <button type="submit" className="btn btn-primary" disabled={sending || !draft.trim()}>{sending ? "جارٍ الإرسال…" : "إرسال"}</button>

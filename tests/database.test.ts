@@ -153,6 +153,9 @@ beforeAll(async () => {
   const telegram = readdirSync("supabase/migrations").filter(name => name.endsWith("_telegram.sql"));
   if (telegram.length !== 1) throw new Error("Expected exactly one telegram migration");
   await db.exec(readFileSync(`supabase/migrations/${telegram[0]}`, "utf8"));
+  const templates = readdirSync("supabase/migrations").filter(name => name.endsWith("_reply_templates.sql"));
+  if (templates.length !== 1) throw new Error("Expected exactly one reply templates migration");
+  await db.exec(readFileSync(`supabase/migrations/${templates[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -2144,7 +2147,7 @@ describe("telegram for platform admins", () => {
     expect(queued.body).toContain("تذكرة دعم جديدة");
     expect(queued.body).toContain("الصفحة: /dashboard/attendance");
     expect(queued.body).toContain("ضغطت حفظ وما صار شي");
-    expect(queued.buttons).toEqual([{ text: "إقفال", data: `sc:${thread}` }, { text: "فتح في اللوحة", url: `/admin/support/${thread}` }]);
+    expect(queued.buttons).toEqual([{ text: "قوالب الرد", data: `tl:${thread}:0` }, { text: "إقفال", data: `sc:${thread}` }, { text: "فتح في اللوحة", url: `/admin/support/${thread}` }]);
     // The dispatcher sends it and records the Telegram message id; the text is not kept.
     await db.exec("set role service_role");
     const claimed = await rows("select id from public.telegram_claim(10)");
@@ -2262,5 +2265,140 @@ describe("telegram for platform admins", () => {
     await db.exec(`delete from private.platform_admins where user_id='${platformAdmin}'`);
     expect(await rows("select * from private.telegram_links")).toEqual([]);
     await db.exec(`insert into private.platform_admins(user_id) values ('${platformAdmin}')`);
+  });
+});
+
+describe("support reply templates", () => {
+  const platformAdmin = "60000000-0000-0000-0000-0000000000ad";
+  const chat = 778001;
+  type Handled = { replies?: { chat_id: number; text?: string; buttons?: { text: string; data?: string; url?: string; wide?: boolean }[] }[]; answer?: { text: string }; clear?: unknown };
+  const handle = async (update: unknown, site = "https://seersa.vercel.app") => {
+    await db.exec("reset role");
+    await db.exec("set role service_role");
+    const result = (await db.query<{ r: Handled }>("select public.telegram_handle($1::jsonb, $2) as r", [JSON.stringify(update), site])).rows[0].r;
+    await db.exec("reset role");
+    return result;
+  };
+  let id = 50000;
+  const button = (data: string) => ({ update_id: id++, callback_query: { id: `cb${id}`, data, message: { message_id: 1, chat: { id: chat, type: "private" } } } });
+  const text = (body: string) => ({ update_id: id, message: { message_id: id++, chat: { id: chat, type: "private" }, text: body } });
+  const openTicket = async (subject: string, body: string) => {
+    await as("authenticated", staff);
+    const thread = (await rows(`select public.open_support_thread('${orgA}','${subject}','${body}',null)::text as id`))[0].id as string;
+    await db.exec("reset role");
+    return thread;
+  };
+  beforeAll(async () => {
+    await db.exec("reset role");
+    await db.exec(`insert into auth.users(id,email,email_confirmed_at) values ('${platformAdmin}','admin@seer.test',now()) on conflict do nothing;
+      insert into private.platform_admins(user_id) values ('${platformAdmin}') on conflict do nothing;
+      delete from private.telegram_links; insert into private.telegram_links(user_id, chat_id) values ('${platformAdmin}', ${chat});
+      delete from public.support_threads; delete from private.telegram_outbox;`);
+  });
+
+  it("are seeded for the common questions, each with steps and a page inside the platform", async () => {
+    const seeded = await rows("select title, body, path from private.support_templates order by sort_order") as { title: string; body: string; path: string }[];
+    expect(seeded.length).toBeGreaterThanOrEqual(14);
+    for (const title of ["إضافة موظف أو مستخدم", "إضافة طالب واستيراد Excel", "ربط ولي الأمر والمصرّح لهم بالاستلام", "الفصول والهيكل الدراسي", "تسجيل الحضور", "التقرير اليومي", "الإعلانات", "رابط بوابة ولي الأمر", "تشغيل وإطفاء الأقسام", "تغيير كلمة المرور", "تثبيت التطبيق والإشعارات", "المالية والفواتير", "النقل", "الاشتراك"]) {
+      expect(seeded.map(row => row.title)).toContain(title);
+    }
+    for (const row of seeded) expect(row.path).toMatch(/^\/dashboard(\/[a-z-]+)*(#[a-z]+)?$/);
+    expect(seeded.find(row => row.title === "إضافة موظف أو مستخدم")?.body).toContain("إنشاء رابط انضمام");
+    expect(seeded.find(row => row.title === "تغيير كلمة المرور")?.body).toContain("كلمة مرور جديدة");
+  });
+
+  it("are for platform admins only: reading, adding and editing", async () => {
+    for (const user of [owner, staff, outsider]) {
+      await as("authenticated", user);
+      await expect(db.exec("select * from public.admin_support_templates()")).rejects.toMatchObject({ code: "42501" });
+      await expect(db.exec("select public.admin_save_support_template(null,'عنوان','نص الرد هنا')")).rejects.toMatchObject({ code: "42501" });
+      await expect(db.exec("select * from private.support_templates")).rejects.toBeDefined();
+    }
+    await as("anon");
+    await expect(db.exec("select * from public.admin_support_templates()")).rejects.toBeDefined();
+    await as("authenticated", platformAdmin);
+    const created = (await rows("select public.admin_save_support_template(null,'تجربة قالب','هذا نص تجربة','/dashboard/team',array['تجربه'],999,true) as id"))[0].id as number;
+    await expect(db.exec("select public.admin_save_support_template(null,'رابط خارجي','هذا نص تجربة','https://evil.test')")).rejects.toMatchObject({ code: "22023" });
+    await expect(db.exec("select public.admin_save_support_template(null,'رابط','هذا نص تجربة','/admin/support')")).rejects.toMatchObject({ code: "22023" });
+    await expect(db.exec("select public.admin_save_support_template(null,'x','نص')")).rejects.toMatchObject({ code: "22023" });
+    await expect(db.exec("select public.admin_save_support_template(987654,'عنوان','هذا نص تجربة')")).rejects.toMatchObject({ code: "P0002" });
+    await db.exec(`select public.admin_save_support_template(${created},'تجربة معدّلة','نص معدّل للتجربة',null,null,null,false)`);
+    expect(await rows(`select title, path, keywords, sort_order, is_active from public.admin_support_templates() where id=${created}`)).toEqual([{ title: "تجربة معدّلة", path: null, keywords: ["تجربه"], sort_order: 999, is_active: false }]);
+    await db.exec("reset role");
+    expect((await rows("select action from private.platform_audit where action like 'template_%' order by id")).map(row => row.action)).toEqual(["template_created", "template_updated"]);
+    await db.exec(`delete from private.support_templates where id=${created}`);
+  });
+
+  it("suggests the closest template from the ticket's words, and none when nothing matches", async () => {
+    const attendance = await openTicket("مشكلة في الحضور", "ما أعرف أسجّل غياب الطلاب");
+    const nothing = await openTicket("سؤال", "شكرًا لكم");
+    await as("authenticated", platformAdmin);
+    const [first] = await rows(`select title, suggested from public.admin_support_templates('${attendance}')`);
+    expect(first).toEqual({ title: "تسجيل الحضور", suggested: true });
+    expect((await rows(`select count(*)::int as n from public.admin_support_templates('${nothing}') where suggested`))[0].n).toBe(0);
+    expect((await rows(`select title from public.admin_support_templates('${nothing}') limit 1`))[0].title).toBe("إضافة موظف أو مستخدم");
+  });
+
+  it("Telegram: «قوالب الرد» lists them (suggested first, in pages); choosing one replies with the full link, as the linked admin", async () => {
+    const thread = await openTicket("كيف أضيف معلمة", "أبي أضيف موظفه جديدة للفريق");
+    const menu = await handle(button(`tl:${thread}:0`));
+    const buttons = menu.replies?.[0].buttons ?? [];
+    expect(buttons[0]).toMatchObject({ text: "⭐ المقترح: إضافة موظف أو مستخدم", wide: true });
+    expect(buttons.filter(b => b.data?.startsWith("ts:"))).toHaveLength(7);
+    expect(buttons.at(-1)).toEqual({ text: "التالي ›", data: `tl:${thread}:1` });
+    for (const b of buttons) expect(new TextEncoder().encode(b.data ?? "").length).toBeLessThanOrEqual(64);
+    const second = (await handle(button(`tl:${thread}:1`))).replies?.[0].buttons ?? [];
+    expect(second.some(b => b.text.startsWith("⭐"))).toBe(false);
+    expect(second.map(b => b.text)).toContain("‹ السابق");
+    const allTitles = [...buttons, ...second, ...((await handle(button(`tl:${thread}:2`))).replies?.[0].buttons ?? [])].filter(b => b.data?.startsWith("ts:")).map(b => b.text);
+    expect(new Set(allTitles).size).toBe(allTitles.length);
+
+    const sent = await handle(button(buttons[0].data!), "https://seersa.vercel.app");
+    expect(sent.answer?.text).toContain("أُرسل");
+    expect(sent.replies?.[0].text).toContain("«إضافة موظف أو مستخدم»");
+    const [reply] = await rows(`select body, from_admin, sender_id::text as who from public.support_messages where thread_id='${thread}' and from_admin`) as { body: string; from_admin: boolean; who: string }[];
+    expect(reply.who).toBe(platformAdmin);
+    expect(reply.body).toContain("إنشاء رابط انضمام");
+    expect(reply.body.endsWith("🔗 https://seersa.vercel.app/dashboard/team")).toBe(true);
+    expect((await rows(`select count(*)::int as n from private.platform_audit where action='telegram_template_reply' and actor_id='${platformAdmin}'`))[0].n).toBe(1);
+    // A disabled template or a closed ticket is refused.
+    await db.exec(`update private.support_templates set is_active=false where title='النقل'`);
+    const transport = (await rows("select id from private.support_templates where title='النقل'"))[0].id;
+    expect((await handle(button(`ts:${thread}:${transport}`))).answer?.text).toContain("معطّل");
+    await db.exec(`update private.support_templates set is_active=true where title='النقل'`);
+    await db.exec(`update public.support_threads set status='closed' where id='${thread}'`);
+    expect((await handle(button(`ts:${thread}:${transport}`))).answer?.text).toContain("مغلقة");
+  });
+
+  it("Telegram: /templates lists them; unlinked chats get nothing; a non-official site is ignored", async () => {
+    const listed = await handle(text("/templates"));
+    expect(listed.replies?.[0].text).toContain("• تسجيل الحضور — /dashboard/attendance");
+    expect(listed.replies?.[0].buttons).toEqual([{ text: "إدارة القوالب", url: "/admin/support/templates" }]);
+    expect((await handle(text("/help"))).replies?.[0].text).toContain("/templates");
+    expect(await handle({ update_id: 1, message: { message_id: 1, chat: { id: 4242, type: "private" }, text: "/templates" } })).toEqual({});
+    const thread = await openTicket("الاشتراك", "متى ينتهي الاشتراك");
+    const menu = await handle(button(`tl:${thread}:0`));
+    await handle(button(menu.replies![0].buttons![0].data!), "javascript:alert(1)");
+    const [reply] = await rows(`select body from public.support_messages where thread_id='${thread}' and from_admin`) as { body: string }[];
+    expect(reply.body.endsWith("🔗 https://seersa.vercel.app/dashboard/billing")).toBe(true);
+  });
+
+  it("every function the service-role routes call is executable by service_role (public and private)", async () => {
+    const files = ["app/api/telegram/webhook/route.ts", "app/api/telegram/dispatch/route.ts", "app/api/messages/dispatch/route.ts", "app/api/payments/webhook/[provider]/route.ts"];
+    for (const file of readdirSync("app/api", { recursive: true }).map(String).filter(name => name.endsWith(".ts")).map(name => `app/api/${name}`)) {
+      if (/serviceClient\(|SUPABASE_SERVICE_ROLE_KEY/.test(readFileSync(file, "utf8"))) expect(files).toContain(file);
+    }
+    const names = new Set<string>();
+    for (const file of files) for (const match of readFileSync(file, "utf8").matchAll(/\.rpc\("([a-z_]+)"/g)) names.add(match[1]);
+    expect([...names]).toEqual(expect.arrayContaining(["telegram_handle", "telegram_claim_kick", "telegram_claim", "telegram_report", "telegram_track"]));
+    await db.exec("reset role");
+    const missing: string[] = [];
+    for (const name of names) {
+      const found = await rows(`select n.nspname as schema, p.oid::regprocedure::text as signature, has_function_privilege('service_role', p.oid, 'execute') as allowed
+        from pg_proc p join pg_namespace n on n.oid = p.pronamespace where p.proname = '${name}' and n.nspname in ('public','private')`) as { schema: string; signature: string; allowed: boolean }[];
+      if (!found.some(row => row.schema === "public")) missing.push(`public.${name} does not exist`);
+      for (const row of found) if (!row.allowed) missing.push(row.signature);
+    }
+    expect(missing).toEqual([]);
   });
 });

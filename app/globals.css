@@ -1052,3 +1052,14 @@ a.stat:hover,a.list-row:hover,a.tile:hover,.org-tile:hover,.sidebar .nav-link:ho
 .lp-hp,.lp-join-form .lp-hp input{position:absolute!important;width:1px;height:1px;min-height:0;padding:0;margin:0;border:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;opacity:0}
 .lp-mail a{color:#fff}
 @media (max-width:600px){.lp-join-form{grid-template-columns:1fr}}
+.msg-link{color:var(--primary);text-decoration:underline;word-break:break-all;unicode-bidi:isolate}
+.support-template-pick{display:grid;gap:4px;font-size:13px;color:var(--text-2)}
+.template-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.template-list li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:12px 14px;border-radius:14px;background:var(--surface-2)}
+.template-list li.off{opacity:.6}
+.template-list .template-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.template-form{display:grid;gap:12px;padding:16px;margin-top:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg)}
+.template-form label{display:grid;gap:4px}
+.template-form textarea{min-height:160px}
+.template-preview{white-space:pre-wrap;line-height:1.7;margin:0;padding:12px 14px;border-radius:14px;background:color-mix(in srgb,var(--primary) 10%,var(--surface))}
+@media (max-width:640px){.template-list li{grid-template-columns:1fr}.template-list .template-actions{justify-content:flex-start}}

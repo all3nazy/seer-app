@@ -17,10 +17,11 @@ export async function POST(request: NextRequest) {
   if (!client || !process.env.TELEGRAM_BOT_TOKEN) return NextResponse.json({ error: "Not configured" }, { status: 503 });
   const update = await request.json().catch(() => null) as Record<string, unknown> | null;
   if (!update || typeof update !== "object") return NextResponse.json({ ok: true });
-  const { data, error } = await client.rpc("telegram_handle", { update });
+  // The official address goes with the update so template links point to it.
+  const base = siteBase(process.env, request.nextUrl.origin);
+  const { data, error } = await client.rpc("telegram_handle", { update, site: base });
   if (error) { console.error("telegram webhook: the database could not handle the update"); return NextResponse.json({ ok: true }); }
   const handled = (data ?? {}) as Handled;
-  const base = siteBase(process.env, request.nextUrl.origin);
   for (const reply of handled.replies ?? []) {
     if (reply.invite) {
       const rendered = inviteReply(reply.invite, base);

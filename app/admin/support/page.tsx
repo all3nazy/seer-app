@@ -17,7 +17,7 @@ export default async function AdminSupportPage() {
   const waiting = open.filter(row => row.last_sender === "user").length;
   return <>
     <AdminSupportLive />
-    <header className="page-head"><div><h1>الدعم</h1><p>{open.length.toLocaleString("ar-SA")} تذكرة مفتوحة، منها {waiting.toLocaleString("ar-SA")} بانتظار ردّك.</p></div></header>
+    <header className="page-head"><div><h1>الدعم</h1><p>{open.length.toLocaleString("ar-SA")} تذكرة مفتوحة، منها {waiting.toLocaleString("ar-SA")} بانتظار ردّك.</p></div><Link className="btn" href="/admin/support/templates">قوالب الرد</Link></header>
     {error ? <p className="info-banner" role="alert">تعذر تحميل التذاكر. حدّث الصفحة.</p> : null}
     <section className="card">
       {rows.length ? <ul className="records">{rows.map(row => <li key={row.id}>
