@@ -14,7 +14,7 @@ async function botInfo(): Promise<BotInfo> {
 }
 
 export const metadata = { title: "إعدادات الدفع" };
-const actions: Record<string, string> = { telegram_link_code: "رمز ربط تيليقرام", telegram_linked: "ربط تيليقرام", telegram_unlinked: "فك ربط تيليقرام", join_request_invite: "دعوة من طلب انضمام", join_request_reject: "رفض طلب انضمام", org_invite_created: "إنشاء دعوة منشأة", org_invite_revoked: "إلغاء دعوة منشأة", org_invite_reissued: "رابط دعوة جديد", org_invite_used: "تفعيل منشأة بدعوة", plan_created: "إضافة باقة", plan_updated: "تعديل باقة", duration_updated: "تعديل خصم مدة", settings_updated: "تعديل إعدادات الدفع" };
+const actions: Record<string, string> = { telegram_link_code: "رمز ربط تيليقرام", telegram_close_ticket: "تيليقرام: إقفال تذكرة", telegram_reply_ticket: "تيليقرام: رد على تذكرة", telegram_approve_payment: "تيليقرام: اعتماد تحويل", telegram_reject_payment: "تيليقرام: رفض تحويل", telegram_invite_join_request: "تيليقرام: دعوة من طلب انضمام", telegram_reject_join_request: "تيليقرام: رفض طلب انضمام", telegram_linked: "ربط تيليقرام", telegram_unlinked: "فك ربط تيليقرام", join_request_invite: "دعوة من طلب انضمام", join_request_reject: "رفض طلب انضمام", org_invite_created: "إنشاء دعوة منشأة", org_invite_revoked: "إلغاء دعوة منشأة", org_invite_reissued: "رابط دعوة جديد", org_invite_used: "تفعيل منشأة بدعوة", plan_created: "إضافة باقة", plan_updated: "تعديل باقة", duration_updated: "تعديل خصم مدة", settings_updated: "تعديل إعدادات الدفع" };
 
 export default async function AdminSettings() {
   const { client } = await requestSession();

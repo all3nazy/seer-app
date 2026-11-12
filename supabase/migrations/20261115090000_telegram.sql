@@ -331,15 +331,23 @@ begin
 end $$;
 
 -- 6) Buttons and replies from the linked admin -----------------------------------------------------
+-- Every action from Telegram is also written to the platform audit (who, what, on which record).
+create function private.telegram_audit(what text, target uuid) returns void language sql security definer set search_path = '' as $$
+ insert into private.platform_audit(actor_id, action, detail) values (auth.uid(), 'telegram_' || what, jsonb_build_object('target', target, 'via', 'telegram'))
+$$;
+revoke all on function private.telegram_audit(text,uuid) from public,anon,authenticated;
+
 create function private.telegram_on_button(chat bigint, cb jsonb) returns jsonb language plpgsql security definer set search_path = '' as $$
 declare data text := coalesce(cb ->> 'data', ''); action text := split_part(data, ':', 1); target uuid; done date; invite jsonb;
 begin
  begin target := split_part(data, ':', 2)::uuid; exception when others then return jsonb_build_object('toast', 'زر غير معروف'); end;
  if action = 'sc' then
   perform private.close_support_thread(target);
+  perform private.telegram_audit('close_ticket', target);
   return jsonb_build_object('toast', 'أُغلقت التذكرة ✓', 'clear', true);
  elsif action = 'pa' then
   done := private.admin_approve_payment(target);
+  perform private.telegram_audit('approve_payment', target);
   return jsonb_build_object('toast', 'اعتُمد التحويل ✓', 'clear', true, 'replies', jsonb_build_array(private.telegram_reply(chat, '✅ اعتُمد التحويل وتفعّل الاشتراك حتى ' || to_char(done, 'YYYY-MM-DD') || '. وصل المشترك إشعار.')));
  elsif action = 'pr' then
   if not exists (select 1 from public.subscription_payments p where p.id = target and p.status = 'pending') then return jsonb_build_object('toast', 'هذا التحويل ما عاد بانتظار القرار', 'clear', true); end if;
@@ -348,10 +356,12 @@ begin
   return jsonb_build_object('toast', 'اكتب سبب الرفض', 'replies', jsonb_build_array(private.telegram_reply(chat, '✍️ اكتب سبب رفض التحويل في رسالة (يوصل للمشترك كما هو).')));
  elsif action = 'ji' then
   invite := private.admin_decide_join_request(target, 'invite');
+  perform private.telegram_audit('invite_join_request', target);
   -- The webhook builds the link and the WhatsApp message from this; the token is not stored.
   return jsonb_build_object('toast', 'انشأت الدعوة ✓', 'clear', true, 'replies', jsonb_build_array(jsonb_build_object('chat_id', chat, 'invite', invite)));
  elsif action = 'jr' then
   perform private.admin_decide_join_request(target, 'reject');
+  perform private.telegram_audit('reject_join_request', target);
   return jsonb_build_object('toast', 'رُفض الطلب', 'clear', true);
  end if;
  return jsonb_build_object('toast', 'زر غير معروف');
@@ -371,6 +381,7 @@ begin
   if p.action = 'reject_payment' then
    begin
     perform private.admin_reject_payment(p.target, body);
+    perform private.telegram_audit('reject_payment', p.target);
     return jsonb_build_array(private.telegram_reply(chat, '❌ رُفض التحويل ووصل السبب للمشترك.'));
    exception when others then
     return jsonb_build_array(private.telegram_reply(chat, 'تعذّر رفض التحويل (ربما تم التعامل معه، أو السبب قصير جدًا).'));
@@ -383,6 +394,7 @@ begin
   if context ? 'thread' then
    begin
     perform private.reply_support((context ->> 'thread')::uuid, left(body, 2000));
+    perform private.telegram_audit('reply_ticket', (context ->> 'thread')::uuid);
     return jsonb_build_array(private.telegram_reply(chat, '✓ وصل ردك للمستخدم داخل المنصة.'));
    exception when others then
     return jsonb_build_array(private.telegram_reply(chat, 'تعذّر إرسال الرد: التذكرة مغلقة أو ما عاد لك صلاحية عليها.'));

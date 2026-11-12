@@ -2162,6 +2162,8 @@ describe("telegram for platform admins", () => {
     expect(closed.answer?.text).toContain("أُغلقت");
     expect(closed.clear).toBeTruthy();
     expect((await rows(`select status from public.support_threads where id='${thread}'`))[0].status).toBe("closed");
+    expect(await rows(`select action, actor_id::text as actor from private.platform_audit where action in ('telegram_reply_ticket','telegram_close_ticket') order by id`)).toEqual([
+      { action: "telegram_reply_ticket", actor: platformAdmin }, { action: "telegram_close_ticket", actor: platformAdmin }]);
   });
 
   it("transfer buttons: «اعتماد» approves as the linked admin; «رفض» asks for the reason and rejects with it", async () => {
