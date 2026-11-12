@@ -6,13 +6,14 @@ import { whatsappLink } from "./share";
  * Telegram Bot API for the platform admins. The bot token comes from TELEGRAM_BOT_TOKEN and is only
  * placed in the request address; it is never returned, logged or put in an error message.
  */
-export type Button = { text: string; data?: string; url?: string };
+export type Button = { text: string; data?: string; url?: string; wide?: boolean };
 export type Reply = { chat_id: number; text?: string; buttons?: Button[]; track?: Record<string, string>; invite?: Invite };
 export type Invite = { token: string; org_name: string; contact_name?: string; phone?: string; trial_months: number };
 export type Handled = { replies?: Reply[]; answer?: { id: string; text: string }; clear?: { chat_id: number; message_id: number } };
 
 export const telegramCommands = [
   { command: "summary", description: "ملخص المنصة الآن" },
+  { command: "templates", description: "قوالب الرد الجاهزة" },
   { command: "link", description: "ربط هذه المحادثة بحسابك" },
   { command: "help", description: "الأوامر" },
   { command: "start", description: "البداية" },
@@ -29,18 +30,21 @@ export function siteBase(env: Record<string, string | undefined> = process.env, 
   return host ? `https://${host}` : fallback;
 }
 
-/** Inline buttons, two per row; relative links point to the official address. */
+/** Inline buttons, two per row (a «wide» button takes its own row); relative links point to the official address. */
 type Key = { text: string; callback_data: string } | { text: string; url: string };
 export function replyMarkup(buttons: Button[] | undefined, base: string): { inline_keyboard: Key[][] } | undefined {
-  const keys: Key[] = [];
-  for (const button of buttons ?? []) {
-    if (button.data && button.data.length <= 64) keys.push({ text: button.text, callback_data: button.data });
-    else if (button.url) keys.push({ text: button.text, url: button.url.startsWith("/") ? `${base}${button.url}` : button.url });
-  }
-  if (!keys.length) return undefined;
   const rows: Key[][] = [];
-  for (let index = 0; index < keys.length; index += 2) rows.push(keys.slice(index, index + 2));
-  return { inline_keyboard: rows };
+  let open: Key[] | null = null;
+  for (const button of buttons ?? []) {
+    let key: Key | null = null;
+    if (button.data && new TextEncoder().encode(button.data).length <= 64) key = { text: button.text, callback_data: button.data };
+    else if (button.url) key = { text: button.text, url: button.url.startsWith("/") ? `${base}${button.url}` : button.url };
+    if (!key) continue;
+    if (button.wide) { rows.push([key]); open = null; continue; }
+    if (open && open.length < 2) open.push(key);
+    else { open = [key]; rows.push(open); }
+  }
+  return rows.length ? { inline_keyboard: rows } : undefined;
 }
 
 /** The message after «أرسل دعوة»: the link, and a button that opens WhatsApp with the message ready. */

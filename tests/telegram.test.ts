@@ -51,7 +51,7 @@ describe("telegram webhook", () => {
     mocks.rpc.mockResolvedValueOnce({ data: {}, error: null });
     const response = await webhook(post({ update_id: 2, message: { text: "hello", chat: { id: 99, type: "private" } } }, SECRET));
     expect(response.status).toBe(200);
-    expect(mocks.rpc).toHaveBeenCalledWith("telegram_handle", { update: expect.objectContaining({ update_id: 2 }) });
+    expect(mocks.rpc).toHaveBeenCalledWith("telegram_handle", { update: expect.objectContaining({ update_id: 2 }), site: "https://seersa.vercel.app" });
     expect(calls).toEqual([]);
   });
   it("sends the database's replies, answers the button and removes its keyboard", async () => {
@@ -67,7 +67,7 @@ describe("telegram webhook", () => {
   it("a reply to a ticket goes through the database (reply_support as the linked admin) and is confirmed", async () => {
     mocks.rpc.mockResolvedValueOnce({ data: { replies: [{ chat_id: 5, text: "✓ وصل ردك للمستخدم داخل المنصة." }] }, error: null });
     await webhook(post({ update_id: 4, message: { message_id: 10, text: "تم الحل", chat: { id: 5, type: "private" }, reply_to_message: { message_id: 9001 } } }, SECRET));
-    expect(mocks.rpc).toHaveBeenCalledWith("telegram_handle", { update: expect.objectContaining({ message: expect.objectContaining({ reply_to_message: { message_id: 9001 } }) }) });
+    expect(mocks.rpc).toHaveBeenCalledWith("telegram_handle", { update: expect.objectContaining({ message: expect.objectContaining({ reply_to_message: { message_id: 9001 } }) }), site: "https://seersa.vercel.app" });
     expect(calls).toEqual([{ method: "sendMessage", body: expect.objectContaining({ text: "✓ وصل ردك للمستخدم داخل المنصة." }) }]);
   });
   it("«أرسل دعوة»: builds the invite link and a ready WhatsApp message to the requester", async () => {
@@ -78,6 +78,27 @@ describe("telegram webhook", () => {
     const whatsapp = new URL(sent.reply_markup.inline_keyboard[0][0].url);
     expect(whatsapp.origin + whatsapp.pathname).toBe("https://wa.me/966551112222");
     expect(whatsapp.searchParams.get("text")).toContain("حيّاكم الله");
+  });
+  it("«قوالب الرد»: shows the templates one per row, the suggested first, with paging", async () => {
+    mocks.rpc.mockResolvedValueOnce({ data: { answer: { id: "cb3", text: "قوالب الرد" }, replies: [{ chat_id: 5, text: "📋 اختر قالبًا", buttons: [
+      { text: "⭐ المقترح: تسجيل الحضور", data: "ts:t1:5", wide: true }, { text: "الإعلانات", data: "ts:t1:7", wide: true }, { text: "‹ السابق", data: "tl:t1:0" }, { text: "التالي ›", data: "tl:t1:2" }] }] }, error: null });
+    await webhook(post({ update_id: 7, callback_query: { id: "cb3", data: "tl:t1:1" } }, SECRET));
+    expect(calls[0].body.reply_markup).toEqual({ inline_keyboard: [
+      [{ text: "⭐ المقترح: تسجيل الحضور", callback_data: "ts:t1:5" }], [{ text: "الإعلانات", callback_data: "ts:t1:7" }],
+      [{ text: "‹ السابق", callback_data: "tl:t1:0" }, { text: "التالي ›", callback_data: "tl:t1:2" }]] });
+    expect(calls[1]).toEqual({ method: "answerCallbackQuery", body: { callback_query_id: "cb3", text: "قوالب الرد" } });
+  });
+  it("choosing a template: the database sends it as the reply; the admin gets a confirmation and the menu is cleared", async () => {
+    mocks.rpc.mockResolvedValueOnce({ data: { answer: { id: "cb4", text: "أُرسل القالب ✓" }, clear: { chat_id: 5, message_id: 80 }, replies: [{ chat_id: 5, text: "✓ أُرسل قالب «تسجيل الحضور» كرد على التذكرة." }] }, error: null });
+    await webhook(post({ update_id: 8, callback_query: { id: "cb4", data: "ts:t1:5" } }, SECRET));
+    expect(mocks.rpc).toHaveBeenCalledWith("telegram_handle", { update: expect.objectContaining({ callback_query: expect.objectContaining({ data: "ts:t1:5" }) }), site: "https://seersa.vercel.app" });
+    expect(calls.map(call => call.method)).toEqual(["sendMessage", "answerCallbackQuery", "editMessageReplyMarkup"]);
+    expect(calls[0].body.text).toContain("تسجيل الحضور");
+  });
+  it("passes the official address even when called on another host", async () => {
+    mocks.rpc.mockResolvedValueOnce({ data: {}, error: null });
+    await webhook(new NextRequest("https://seer-app-psi.vercel.app/api/telegram/webhook", { method: "POST", body: JSON.stringify({ update_id: 9 }), headers: { "x-telegram-bot-api-secret-token": SECRET } }));
+    expect(mocks.rpc).toHaveBeenCalledWith("telegram_handle", { update: { update_id: 9 }, site: "https://seersa.vercel.app" });
   });
   it("records sent messages that can be answered (tickets)", async () => {
     mocks.rpc.mockResolvedValueOnce({ data: { replies: [{ chat_id: 5, text: "تذكرة", track: { thread: "t1" } }] }, error: null }).mockResolvedValue({ data: null, error: null });
@@ -116,6 +137,8 @@ describe("telegram helpers", () => {
   it("puts two buttons per row and makes panel links absolute", () => {
     expect(replyMarkup([{ text: "أ", data: "a:1" }, { text: "ب", data: "b:1" }, { text: "ج", url: "/admin" }], "https://x.test")).toEqual({ inline_keyboard: [[{ text: "أ", callback_data: "a:1" }, { text: "ب", callback_data: "b:1" }], [{ text: "ج", url: "https://x.test/admin" }]] });
     expect(replyMarkup([], "https://x.test")).toBeUndefined();
+    expect(replyMarkup([{ text: "أ", data: "a" }, { text: "ب", data: "b", wide: true }, { text: "ج", data: "c" }, { text: "د", data: "d" }, { text: "طويل", data: "x".repeat(65) }], "https://x.test")).toEqual({ inline_keyboard: [
+      [{ text: "أ", callback_data: "a" }], [{ text: "ب", callback_data: "b" }], [{ text: "ج", callback_data: "c" }, { text: "د", callback_data: "d" }]] });
   });
   it("uses the official address for links", () => {
     expect(siteBase({ SEER_CANONICAL_HOST: "seersa.vercel.app" })).toBe("https://seersa.vercel.app");

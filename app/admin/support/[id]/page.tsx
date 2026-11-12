@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { requestSession } from "../../../../lib/supabase/server";
 import { SupportThread, type SupportMessage } from "../../../../components/support-thread";
 import { BackLink } from "../../../../components/back-link";
+import { siteBase } from "../../../../lib/telegram";
+import type { SupportTemplate } from "../../../../lib/support-templates";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "تذكرة دعم" };
@@ -15,17 +17,20 @@ export default async function AdminTicketPage({ params }: { params: Promise<{ id
   const { id } = await params;
   if (!uuid.test(id)) notFound();
   const { client } = await requestSession();
-  const [threadResult, messagesResult, listResult] = await Promise.all([
+  const [threadResult, messagesResult, listResult, templatesResult] = await Promise.all([
     client.from("support_threads").select("id,subject,status,organization_id,page,assistant_questions,created_at").eq("id", id).maybeSingle(),
     client.from("support_messages").select("id,body,from_admin,created_at").eq("thread_id", id).order("created_at").limit(500),
     client.rpc("admin_support_threads", { one_thread: id }),
+    client.rpc("admin_support_templates", { for_thread: id }),
   ]);
+  // Active templates for «إدراج قالب», the suggested one first. Links use the official address.
+  const templates = ((templatesResult.data ?? []) as SupportTemplate[]).filter(template => template.is_active);
   const thread = threadResult.data as Thread | null;
   if (!thread) notFound();
   const who = ((listResult.data ?? []) as { id: string; organization: string; user_name: string | null; user_email: string | null }[])[0];
   return <div style={{ maxWidth: 860 }}>
     <BackLink href="/admin/support" label="رجوع إلى التذاكر" />
-    <header className="page-head"><div><h1>{thread.subject}</h1></div></header>
+    <header className="page-head"><div><h1>{thread.subject}</h1></div><Link className="btn" href="/admin/support/templates">قوالب الرد</Link></header>
     <section className="support-context" aria-label="تفاصيل التذكرة">
       <span><strong>المنشأة:</strong> <Link href={`/admin/subscribers/${thread.organization_id}`}>{who?.organization ?? "—"}</Link></span>
       <span><strong>المستخدم:</strong> {who?.user_name || "—"} {who?.user_email ? <span dir="ltr">({who.user_email})</span> : null}</span>
@@ -33,6 +38,6 @@ export default async function AdminTicketPage({ params }: { params: Promise<{ id
       {thread.assistant_questions.length ? <span><strong>آخر أسئلته للمساعد:</strong> {thread.assistant_questions.map(q => `«${q}»`).join("، ")}</span> : null}
       <span><strong>فُتحت:</strong> {new Date(thread.created_at).toLocaleString("ar-SA", { timeZone: "Asia/Riyadh" })}</span>
     </section>
-    <section className="card" style={{ marginTop: 16 }}><SupportThread threadId={thread.id} initialMessages={(messagesResult.data ?? []) as SupportMessage[]} initialStatus={thread.status} side="admin" /></section>
+    <section className="card" style={{ marginTop: 16 }}><SupportThread threadId={thread.id} initialMessages={(messagesResult.data ?? []) as SupportMessage[]} initialStatus={thread.status} side="admin" templates={templates} site={siteBase(process.env, "")} /></section>
   </div>;
 }
