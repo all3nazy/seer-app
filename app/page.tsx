@@ -3,6 +3,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { Icon, Logo } from "../components/icons";
 import { LandingPreviews } from "../components/landing-previews";
+import { JoinRequestForm } from "../components/join-request-form";
 import { joinMailto, landing, landingFeatures, landingSecurity, landingSteps } from "../lib/landing";
 import { pilotMode } from "../lib/pilot";
 import { canonicalHost } from "../lib/canonical";
@@ -84,9 +85,9 @@ export default async function Home() {
 
       <section className="lp-join" id="join" aria-labelledby="join-title">
         <h2 id="join-title">{pilot ? "تبي تنضم للتجربة؟" : "عندكم سؤال قبل ما تبدأون؟"}</h2>
-        <p>{pilot ? "سِير حاليًا بدعوة لعدد محدود من المدارس والحضانات. اكتب لنا ونرسل لكم رابط الدعوة." : "اكتب لنا ونرد عليكم، أو ابدأوا تجربتكم المجانية مباشرة."}</p>
-        <a className="lp-btn light" href={joinMailto}>راسلنا على البريد</a>
-        <span className="lp-mail" dir="ltr">{supportEmail}</span>
+        <p>{pilot ? "سِير حاليًا بدعوة لعدد محدود من المدارس والحضانات. عبّوا الطلب ونتواصل معكم ونرسل لكم رابط الدعوة." : "اكتب لنا ونرد عليكم، أو ابدأوا تجربتكم المجانية مباشرة."}</p>
+        {pilot ? <JoinRequestForm /> : <a className="lp-btn light" href={joinMailto}>راسلنا على البريد</a>}
+        <span className="lp-mail">{pilot ? "أو راسلنا على " : ""}<a href={joinMailto} dir="ltr">{supportEmail}</a></span>
       </section>
     </main>
 
