@@ -5,6 +5,7 @@ import { getSupabaseBrowserClient } from "../lib/supabase";
 import { newTicketPath } from "../lib/support";
 import { confirmAction } from "./confirm";
 import { notify } from "./feedback";
+import { viewingSupportThread } from "./support-badge";
 
 export type SupportMessage = { id: string; body: string; from_admin: boolean; created_at: string };
 const time = (iso: string) => new Date(iso).toLocaleString("ar-SA", { timeZone: "Asia/Riyadh", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
@@ -20,12 +21,21 @@ export function SupportThread({ threadId, initialMessages, initialStatus, side }
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const log = useRef<HTMLOListElement>(null);
+  // Opening the thread marks it read for this side (owner or team), and so does a reply that arrives
+  // while it is on screen; the badge drops it at once.
+  useEffect(() => {
+    viewingSupportThread(threadId);
+    void getSupabaseBrowserClient().rpc("mark_support_read", { thread: threadId });
+    return () => viewingSupportThread(null);
+  }, [threadId]);
   useEffect(() => {
     const client = getSupabaseBrowserClient();
     const channel = client.channel(`support-${threadId}-${Math.random().toString(36).slice(2, 8)}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "support_messages", filter: `thread_id=eq.${threadId}` }, (payload: { new: unknown }) => {
         const message = payload.new as SupportMessage;
         setMessages(current => current.some(item => item.id === message.id) ? current : [...current, message]);
+        // A message from the other side, read here: keep the thread read.
+        if (message.from_admin !== (side === "admin") && document.visibilityState === "visible") void client.rpc("mark_support_read", { thread: threadId });
       })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "support_threads", filter: `id=eq.${threadId}` }, (payload: { new: unknown }) => {
         const row = payload.new as { status?: "open" | "closed" };
@@ -33,7 +43,7 @@ export function SupportThread({ threadId, initialMessages, initialStatus, side }
       })
       .subscribe();
     return () => { void client.removeChannel(channel); };
-  }, [threadId]);
+  }, [threadId, side]);
   useEffect(() => { log.current?.lastElementChild?.scrollIntoView({ block: "nearest" }); }, [messages.length]);
   async function send(event: React.FormEvent) {
     event.preventDefault();

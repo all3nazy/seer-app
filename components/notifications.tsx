@@ -20,6 +20,9 @@ const ago = (iso: string) => {
  */
 type Store = { userId: string; items: Item[]; listeners: Set<() => void>; stop: () => void };
 let store: Store | null = null;
+const notificationListeners = new Set<(item: Item) => void>();
+/** Other parts of the page (the support badge) follow the same realtime channel; no extra connection. */
+export function onNotification(listener: (item: Item) => void) { notificationListeners.add(listener); return () => { notificationListeners.delete(listener); }; }
 const emit = () => store?.listeners.forEach(listener => listener());
 const setItems = (update: (items: Item[]) => Item[]) => { if (store) { store.items = update(store.items); emit(); } };
 function subscribe(userId: string, listener: () => void) {
@@ -35,6 +38,7 @@ function subscribe(userId: string, listener: () => void) {
         const item = payload.new as Item;
         setItems(items => [item, ...items.filter(row => row.id !== item.id)].slice(0, 20));
         notify(item.title, "info");
+        notificationListeners.forEach(listener => listener(item));
       })
       .subscribe();
     current.stop = () => { void client.removeChannel(channel); };

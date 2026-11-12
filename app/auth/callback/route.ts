@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseServerClient } from "../../../lib/supabase/server";
 import { pilotMode } from "../../../lib/pilot";
+import { afterActivation } from "../../../lib/canonical";
 
 /**
  * The link in the verification email lands here: the session is started, and a pending sign-up
@@ -16,5 +17,8 @@ export async function GET(request: NextRequest) {
   if (error) return NextResponse.redirect(new URL("/login?verified=1", request.url));
   // During the pilot sign-up is by invitation only: no organization is created from a sign-up.
   if (!pilotMode()) await client.rpc("complete_signup");
-  return NextResponse.redirect(target);
+  // An old activation link finished on an old address: the account is active; sign in on the official
+  // address (the session cookie of the old address does not carry over).
+  const official = afterActivation(request.headers.get("x-forwarded-host") ?? request.headers.get("host"), "/login?activated=1");
+  return NextResponse.redirect(official ?? target);
 }
