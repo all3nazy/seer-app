@@ -3,6 +3,7 @@ import { useActionState, useEffect, useMemo, useState } from "react";
 import { saveAttendance } from "../app/dashboard/children/actions";
 import { attendanceLabels, attendanceStatuses, attendanceTone, type AttendanceRow, type AttendanceStatus } from "../lib/students";
 import { notify } from "./feedback";
+import { arNumber } from "../lib/dates";
 
 type Student = { id: string; full_name: string; alert: boolean };
 type Props = { organizationId: string; day: string; editable: boolean; students: Student[]; records: AttendanceRow[] };
@@ -20,8 +21,8 @@ export function AttendanceSheet({ organizationId, day, editable, students, recor
     <input type="hidden" name="organization_id" value={organizationId} />
     <input type="hidden" name="attendance_date" value={day} />
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 16 }} aria-live="polite">
-      {counts.map(item => <span key={item.status} className={`chip-soft ${attendanceTone[item.status]}`}>{attendanceLabels[item.status]}: {item.count.toLocaleString("ar-SA")}</span>)}
-      <span className="chip-soft">بدون تسجيل: {unmarked.toLocaleString("ar-SA")}</span>
+      {counts.map(item => <span key={item.status} className={`chip-soft ${attendanceTone[item.status]}`}>{attendanceLabels[item.status]}: {arNumber(item.count)}</span>)}
+      <span className="chip-soft">بدون تسجيل: {arNumber(unmarked)}</span>
       {editable && unmarked ? <button type="button" className="btn btn-sm" onClick={markRemaining}>تحديد الباقين حاضرين</button> : null}
     </div>
     <div className="table-wrap"><table className="links-table" style={{ width: "100%" }}>

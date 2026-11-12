@@ -5,6 +5,7 @@ import { invitationMessage, memberName, roleLabels, type Invitation, type Member
 import { Icon } from "./icons";
 import { notify } from "./feedback";
 import { confirmAction } from "./confirm";
+import { arNumber } from "../lib/dates";
 
 type Props = { organizationId: string; organizationName: string; me: string; myRole: Role; members: Member[]; invitations: Invitation[] | null };
 
@@ -40,7 +41,7 @@ export function TeamPanel({ organizationId, organizationName, me, myRole, member
 
   return <div className="stack">
     <section aria-labelledby="members-title">
-      <h2 id="members-title" className="section-label">الأعضاء ({members.length.toLocaleString("ar-SA")})</h2>
+      <h2 id="members-title" className="section-label">الأعضاء ({arNumber(members.length)})</h2>
       <ul className="list">{sorted.map(member => <li key={member.user_id} className="list-row">
         <span className="avatar" style={{ margin: 0, width: 40, height: 40, fontSize: 16 }} aria-hidden="true">{(member.display_name?.trim()[0] ?? "؟")}</span>
         <span className="body"><span className="title">{memberName(member, member.user_id === me)}</span><span className="sub">{roleLabels[member.role]}</span></span>
@@ -68,7 +69,7 @@ export function TeamPanel({ organizationId, organizationName, me, myRole, member
     </section> : <p className="info-banner">دعوة الأعضاء وتعديل صلاحياتهم لمالك المنشأة أو مديرها.</p>}
 
     {manager && invitations ? <section aria-labelledby="pending-title">
-      <h2 id="pending-title" className="section-label">دعوات بانتظار التفعيل ({invitations.length.toLocaleString("ar-SA")})</h2>
+      <h2 id="pending-title" className="section-label">دعوات بانتظار التفعيل ({arNumber(invitations.length)})</h2>
       {invitations.length ? <ul className="list">{invitations.map(invitation => <li key={invitation.id} className="list-row">
         <span className="body"><span className="title">{invitation.display_name ?? invitation.email}</span><span className="sub" dir="ltr" style={{ textAlign: "end" }}>{invitation.email}</span></span>
         <span className="chip-soft">{roleLabels[invitation.role]}</span>

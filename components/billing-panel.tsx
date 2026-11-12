@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "../lib/supabase";
 import { durationLabel, priceFor, riyal, type Duration, type Plan } from "../lib/subscriptions";
 import { notify } from "./feedback";
+import { arNumber } from "../lib/dates";
 
 /** Pick a plan and a duration, transfer the amount, upload the receipt and send the reference. */
 export function BillingPanel({ organizationId, plans, durations, currentPlan, accounts }: { organizationId: string; plans: Plan[]; durations: Duration[]; currentPlan: string | null; accounts: { bank: string; holder: string; iban: string }[] }) {
@@ -39,7 +40,7 @@ export function BillingPanel({ organizationId, plans, durations, currentPlan, ac
       <strong>{item.name}</strong><span>{riyal(item.monthly_price)} شهريًا</span>
     </button>)}</div>
     <div className="segments" role="radiogroup" aria-label="المدة">{durations.map(item => <button key={item.months} type="button" role="radio" aria-checked={item.months === months} className="pick" aria-pressed={item.months === months} onClick={() => setMonths(item.months)}>
-      {durationLabel(item.months)}{Number(item.discount) ? ` · خصم ${Number(item.discount).toLocaleString("ar-SA")}٪` : ""}
+      {durationLabel(item.months)}{Number(item.discount) ? ` · خصم ${arNumber(Number(item.discount))}٪` : ""}
     </button>)}</div>
     <p className="billing-amount">المبلغ: <strong>{riyal(amount)}</strong> <span className="hint">(يُحسب ويتأكد في النظام)</span></p>
     <div className="bank-list">{accounts.length ? accounts.map(account => <div key={account.iban} className="bank-item">

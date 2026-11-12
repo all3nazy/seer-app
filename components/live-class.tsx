@@ -8,6 +8,7 @@ import { attendanceLabels, attendanceStatuses, type AttendanceStatus } from "../
 import { initials, inClass, riyadhTime, seatCounts, seatLabels, seatsFor, timeline, type LiveAttendance, type LiveEvent, type LivePickup, type LiveStudent, type SeatState } from "../lib/live-class";
 import { Icon } from "./icons";
 import { notify } from "./feedback";
+import { arNumber, formatTime } from "../lib/dates";
 
 type Props = {
   organizationId: string; title: string; teacher: string | null; capacity: number | null;
@@ -29,7 +30,7 @@ export function LiveClass(props: Props) {
   const { organizationId, students, attendance, pickups, events, actors } = props;
   const router = useRouter();
   const [live, setLive] = useState<"connecting" | "live" | "polling">("connecting");
-  const [updatedAt, setUpdatedAt] = useState(() => new Date());
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [open, setOpen] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
@@ -106,23 +107,23 @@ export function LiveClass(props: Props) {
     <header className="live-head">
       <div>
         <h1>{props.title}</h1>
-        <p className="hint">{[props.teacher ? `رائد الفصل: ${props.teacher}` : null, `${students.length.toLocaleString("ar-SA")} طالب${props.capacity ? ` من ${props.capacity.toLocaleString("ar-SA")}` : ""}`].filter(Boolean).join(" · ")}</p>
+        <p className="hint">{[props.teacher ? `رائد الفصل: ${props.teacher}` : null, `${arNumber(students.length)} طالب${props.capacity ? ` من ${arNumber(props.capacity)}` : ""}`].filter(Boolean).join(" · ")}</p>
       </div>
       <div className="live-status" aria-live="polite">
         <span className={`live-dot ${live}`} aria-hidden="true" />
         <span>{live === "live" ? "مباشر" : live === "connecting" ? "جارٍ الاتصال…" : "تحديث كل ٣٠ ثانية"}</span>
-        <span className="hint">آخر تحديث {updatedAt.toLocaleTimeString("ar-SA", { hour: "numeric", minute: "2-digit" })}</span>
+        <span className="hint">آخر تحديث {updatedAt ? formatTime(updatedAt) : "…"}</span>
       </div>
     </header>
 
     <div className="live-ring-row">
       <div className="live-ring" style={{ ["--share" as string]: `${share}%` }} role="img" aria-label={`في الفصل الآن ${present} من ${students.length}`}>
-        <div><strong>{present.toLocaleString("ar-SA")}</strong><span>في الفصل</span></div>
+        <div><strong>{arNumber(present)}</strong><span>في الفصل</span></div>
       </div>
       <div className="live-counts">
         {(["present", "late", "pending", "absent", "excused", "left"] as SeatState[]).map(state =>
           <button key={state} type="button" className={`live-count s-${state}`} aria-pressed={filter === state} onClick={() => setFilter(current => current === state ? "all" : state)}>
-            <strong>{counts[state].toLocaleString("ar-SA")}</strong><span>{seatLabels[state]}</span>
+            <strong>{arNumber(counts[state])}</strong><span>{seatLabels[state]}</span>
           </button>)}
       </div>
     </div>

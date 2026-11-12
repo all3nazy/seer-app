@@ -4,6 +4,7 @@ import { adjustPayrollLine, approvePayroll, checkInOut, decideLeave, generatePay
 import { contractLabels, contractTypes, leaveKinds, leaveLabels, staffAttendanceLabels, staffAttendanceStatuses, type StaffProfile } from "../lib/hr";
 import { notify } from "./feedback";
 import { confirmAction } from "./confirm";
+import { formatTime } from "../lib/dates";
 
 function useToast(state: HrResult, after?: () => void) {
   useEffect(() => { if (state.success) { notify(state.success, "info", "done"); after?.(); } else if (state.error) notify(state.error, "error"); }, [state]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -69,7 +70,7 @@ export function LeaveDecision({ organizationId, id, manager, mine }: { organizat
 
 export function CheckInButton({ organizationId, staffId, checkedIn, checkedOut }: { organizationId: string; staffId: string; checkedIn: string | null; checkedOut: string | null }) {
   const { pending, run } = useRun();
-  const time = (iso: string) => new Date(iso).toLocaleTimeString("ar-SA", { timeZone: "Asia/Riyadh", hour: "numeric", minute: "2-digit" });
+  const time = (iso: string) => formatTime(iso);
   if (checkedOut) return <p className="chip-soft ok">حضرت {checkedIn ? time(checkedIn) : ""} وانصرفت {time(checkedOut)}</p>;
   return <button type="button" className={`checkin${checkedIn ? " out" : ""}`} disabled={pending} onClick={() => run(() => checkInOut(organizationId, staffId))}>
     <strong>{checkedIn ? "تسجيل الانصراف" : "تسجيل الحضور"}</strong><span>{checkedIn ? `حضرت الساعة ${time(checkedIn)}` : "اضغط عند وصولك"}</span>

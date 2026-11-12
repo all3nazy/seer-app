@@ -1,7 +1,9 @@
 import { docLabel, onColor, type DocData, type DocKind, type DocLine, type DocPayment, type OrgProfile } from "../lib/documents";
+import { arNumber, formatDay } from "../lib/dates";
 import { feeKindLabels, paymentMethodLabels, sar, type PaymentMethod } from "../lib/finance";
 
-const date = (value: string | null | undefined) => value ? new Date(value).toLocaleDateString("ar-SA", { timeZone: "UTC", day: "numeric", month: "long", year: "numeric" }) : "—";
+// The document's day as stored (UTC), e.g. «١٢ نوفمبر ٢٠٢٦».
+const date = (value: string | null | undefined) => value && Number.isFinite(Date.parse(value)) ? formatDay(new Date(value).toISOString().slice(0, 10), { year: true }) : "—";
 const net = (line: DocLine) => Math.round(Number(line.quantity) * Number(line.unit_price) * 100) / 100 - Number(line.discount);
 const stamps: Record<string, string> = { paid: "مسددة", draft: "مسودة", void: "ملغاة", accepted: "مقبول", rejected: "مرفوض", invoiced: "تحوّل لفاتورة" };
 
@@ -60,8 +62,8 @@ export function FinanceDocument({ kind, profile, doc, lines, payments = [], rece
         <thead><tr><th>البند</th><th>الكمية</th><th>السعر</th><th>الخصم</th><th>الضريبة</th><th>الصافي</th></tr></thead>
         <tbody>{lines.map((line, index) => <tr key={index}>
           <td>{line.description}<small>{feeKindLabels[line.kind] ?? ""}</small></td>
-          <td>{Number(line.quantity).toLocaleString("ar-SA")}</td><td>{sar(line.unit_price)}</td>
-          <td>{Number(line.discount) ? `− ${sar(line.discount)}` : "—"}</td><td>{Number(line.vat_rate).toLocaleString("ar-SA")}٪</td><td>{sar(net(line))}</td>
+          <td>{arNumber(Number(line.quantity))}</td><td>{sar(line.unit_price)}</td>
+          <td>{Number(line.discount) ? `− ${sar(line.discount)}` : "—"}</td><td>{arNumber(Number(line.vat_rate))}٪</td><td>{sar(net(line))}</td>
         </tr>)}
           {!lines.length ? <tr><td colSpan={6} className="fdoc-muted">بدون بنود تفصيلية.</td></tr> : null}
         </tbody>

@@ -1,4 +1,5 @@
 import { uuid, ValidationError } from "./operations";
+import { arNumber } from "./dates";
 
 export const genders = ["male", "female"] as const;
 export const genderLabels: Record<(typeof genders)[number], string> = { male: "ذكر", female: "أنثى" };
@@ -37,8 +38,8 @@ export function age(dateOfBirth: string | null, today = riyadhToday()): string |
   if (months < 0) return null;
   const years = Math.floor(months / 12);
   months %= 12;
-  if (years === 0) return `${months.toLocaleString("ar-SA")} شهر`;
-  return months ? `${years.toLocaleString("ar-SA")} سنة و${months.toLocaleString("ar-SA")} شهر` : `${years.toLocaleString("ar-SA")} سنة`;
+  if (years === 0) return `${arNumber(months)} شهر`;
+  return months ? `${arNumber(years)} سنة و${arNumber(months)} شهر` : `${arNumber(years)} سنة`;
 }
 
 function optionalText(data: FormData, key: string, max: number, message: string): string | null {

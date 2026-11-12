@@ -1,5 +1,6 @@
 import { uuid, ValidationError } from "./operations";
 import { isIsoDate } from "./students";
+import { arNumber } from "./dates";
 
 export const stages = ["nursery", "kindergarten", "primary", "intermediate", "secondary"] as const;
 export const stageLabels: Record<(typeof stages)[number], string> = { nursery: "حضانة", kindergarten: "روضة", primary: "ابتدائي", intermediate: "متوسط", secondary: "ثانوي" };
@@ -17,7 +18,7 @@ export type Section = { id: string; grade_level_id: string; branch_id: string | 
 
 function name(data: FormData, max = 60): string {
   const value = data.get("name");
-  if (typeof value !== "string" || value.trim().length < 1 || value.trim().length > max) throw new ValidationError(`اكتب الاسم، من حرف إلى ${max.toLocaleString("ar-SA")} حرفًا.`);
+  if (typeof value !== "string" || value.trim().length < 1 || value.trim().length > max) throw new ValidationError(`اكتب الاسم، من حرف إلى ${arNumber(max)} حرفًا.`);
   return value.trim();
 }
 function range(data: FormData, allowSameDay: boolean): { starts_on: string; ends_on: string } {

@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { durationLabel, featureKeys, featureLabels, priceFor, riyal, type Duration, type Plan } from "../lib/subscriptions";
+import { arNumber } from "../lib/dates";
 
 /** Plans side by side with a duration switch, then the full comparison of sections. */
 export function PricingTable({ plans, durations }: { plans: Plan[]; durations: Duration[] }) {
@@ -9,7 +10,7 @@ export function PricingTable({ plans, durations }: { plans: Plan[]; durations: D
   return <>
     <div className="segments" role="radiogroup" aria-label="مدة الاشتراك" style={{ justifyContent: "center", marginBottom: 16 }}>
       {durations.map(item => <button key={item.months} type="button" role="radio" aria-checked={item.months === months} className="pick" aria-pressed={item.months === months} onClick={() => setMonths(item.months)}>
-        {durationLabel(item.months)}{Number(item.discount) ? ` · خصم ${Number(item.discount).toLocaleString("ar-SA")}٪` : ""}
+        {durationLabel(item.months)}{Number(item.discount) ? ` · خصم ${arNumber(Number(item.discount))}٪` : ""}
       </button>)}
     </div>
     <div className="plan-grid">{plans.map((plan, index) => {

@@ -8,9 +8,10 @@ import { templateText, type SupportTemplate } from "../lib/support-templates";
 import { confirmAction } from "./confirm";
 import { notify } from "./feedback";
 import { viewingSupportThread } from "./support-badge";
+import { formatDateTime } from "../lib/dates";
 
 export type SupportMessage = { id: string; body: string; from_admin: boolean; created_at: string };
-const time = (iso: string) => new Date(iso).toLocaleString("ar-SA", { timeZone: "Asia/Riyadh", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+const time = (iso: string) => formatDateTime(iso);
 const errorText = (code?: string) => code === "54000" ? "رسائل كثيرة خلال وقت قصير. انتظر قليلًا ثم أرسل." : code === "22023" ? "التذكرة مغلقة. افتح تذكرة جديدة إذا عندك سؤال ثاني." : code === "42501" ? "ما عندك صلاحية على هذه التذكرة." : "تعذر الإرسال. حاول مرة ثانية.";
 
 /**

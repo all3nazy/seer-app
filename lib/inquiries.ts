@@ -1,4 +1,5 @@
 import { uuid, ValidationError } from "./operations";
+import { arNumber, formatDate } from "./dates";
 
 export const inquiryCategories = ["general", "task", "leave", "supplies", "student", "finance", "other"] as const;
 export type InquiryCategory = (typeof inquiryCategories)[number];
@@ -16,7 +17,7 @@ export type TaskComment = { id: string; task_id: string; author_id: string | nul
 export function isInquiryStatus(value: unknown): value is InquiryStatus { return typeof value === "string" && inquiryStatuses.some(status => status === value); }
 export function messageBody(data: FormData, key = "body", max = 2000): string {
   const value = data.get(key);
-  if (typeof value !== "string" || value.trim().length < 1 || value.trim().length > max) throw new ValidationError(`اكتب الرسالة، ${max.toLocaleString("ar-SA")} حرف كحد أقصى.`);
+  if (typeof value !== "string" || value.trim().length < 1 || value.trim().length > max) throw new ValidationError(`اكتب الرسالة، ${arNumber(max)} حرف كحد أقصى.`);
   return value.trim();
 }
 export function inquiryValues(data: FormData) {
@@ -31,8 +32,8 @@ export function inquiryValues(data: FormData) {
 export function since(iso: string, now = Date.now()): string {
   const minutes = Math.round((now - Date.parse(iso)) / 60000);
   if (minutes < 1) return "الحين";
-  if (minutes < 60) return `قبل ${minutes.toLocaleString("ar-SA")} دقيقة`;
+  if (minutes < 60) return `قبل ${arNumber(minutes)} دقيقة`;
   const hours = Math.round(minutes / 60);
-  if (hours < 24) return `قبل ${hours.toLocaleString("ar-SA")} ساعة`;
-  return new Date(iso).toLocaleDateString("ar-SA", { timeZone: "Asia/Riyadh", day: "numeric", month: "short" });
+  if (hours < 24) return `قبل ${arNumber(hours)} ساعة`;
+  return formatDate(iso);
 }

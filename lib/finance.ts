@@ -1,5 +1,6 @@
 import { uuid, ValidationError } from "./operations";
 import { isIsoDate, riyadhToday } from "./students";
+import { arNumber } from "./dates";
 
 export const feeKinds = ["tuition", "registration", "transport", "uniform", "books", "meals", "activity", "other"] as const;
 export type FeeKind = (typeof feeKinds)[number];
@@ -24,10 +25,10 @@ export type InvoiceLine = { id: string; description: string; kind: FeeKind; quan
 export type Payment = { id: string; invoice_id: string; receipt_number: number; amount: number; method: PaymentMethod; paid_on: string; reference: string | null; notes: string | null; recorded_at: string; recorded_by: string | null };
 
 export function sar(value: number | string | null | undefined): string {
-  return `${Number(value ?? 0).toLocaleString("ar-SA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س`;
+  return `${arNumber(Number(value ?? 0), { min: 2, max: 2 })} ر.س`;
 }
 export function invoiceLabel(invoice: Pick<Invoice, "number" | "title">): string {
-  return invoice.number ? `فاتورة رقم ${invoice.number.toLocaleString("ar-SA", { useGrouping: false })}` : `مسودة${invoice.title ? `: ${invoice.title}` : ""}`;
+  return invoice.number ? `فاتورة رقم ${arNumber(invoice.number, { grouping: false })}` : `مسودة${invoice.title ? `: ${invoice.title}` : ""}`;
 }
 export function lineNet(line: Pick<InvoiceLine, "quantity" | "unit_price" | "discount">): number {
   return Math.round(Number(line.quantity) * Number(line.unit_price) * 100) / 100 - Number(line.discount);
@@ -44,7 +45,7 @@ function text(data: FormData, key: string, label: string, max: number): string {
 function optionalText(data: FormData, key: string, max: number): string | null {
   const value = data.get(key);
   if (value === null || value === "") return null;
-  if (typeof value !== "string" || value.length > max) throw new ValidationError(`النص لا يتجاوز ${max.toLocaleString("ar-SA")} حرف.`);
+  if (typeof value !== "string" || value.length > max) throw new ValidationError(`النص لا يتجاوز ${arNumber(max)} حرف.`);
   return value.trim() || null;
 }
 export function money(data: FormData, key: string, label: string, allowZero = true): number {

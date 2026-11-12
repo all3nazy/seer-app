@@ -1,3 +1,4 @@
+import { arNumber } from "./dates";
 /** Labels and helpers for the daily report, announcements and the family portal. */
 export const moods = ["happy", "calm", "tired", "upset", "unwell"] as const;
 export type Mood = (typeof moods)[number];
@@ -20,7 +21,7 @@ export function napLabel(minutes: number | null | undefined): string | null {
   if (minutes === null || minutes === undefined) return null;
   if (minutes === 0) return "ما نام";
   const h = Math.floor(minutes / 60), m = minutes % 60;
-  return [h ? `${h.toLocaleString("ar-SA")} ساعة` : null, m ? `${m.toLocaleString("ar-SA")} دقيقة` : null].filter(Boolean).join(" و");
+  return [h ? `${arNumber(h)} ساعة` : null, m ? `${arNumber(m)} دقيقة` : null].filter(Boolean).join(" و");
 }
 /** A short WhatsApp-ready summary of one child's day. */
 export function reportSummary(name: string, report: Partial<DailyReport>): string {
@@ -30,7 +31,7 @@ export function reportSummary(name: string, report: Partial<DailyReport>): strin
   if (eaten.length) lines.push(`الأكل: ${eaten.join("، ")}`);
   const nap = napLabel(report.nap_minutes);
   if (nap) lines.push(`النوم: ${nap}`);
-  if (report.diapers) lines.push(`تغيير الحفاض: ${report.diapers.toLocaleString("ar-SA")}`);
+  if (report.diapers) lines.push(`تغيير الحفاض: ${arNumber(report.diapers)}`);
   if (report.activities) lines.push(`الأنشطة: ${report.activities}`);
   if (report.medication) lines.push(`الدواء: ${report.medication}`);
   if (report.incident) lines.push(`ملاحظة مهمة: ${report.incident}`);

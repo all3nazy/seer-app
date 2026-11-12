@@ -7,6 +7,7 @@ import { celebrate, notify } from "./feedback";
 import { play } from "../lib/sound";
 import { memberName, type Member } from "../lib/team";
 import { confirmAction } from "./confirm";
+import { arNumber } from "../lib/dates";
 
 type Props = { organizationId: string; manager: boolean; initialTasks: Task[]; members?: Member[]; me?: string };
 const emptyCopy: Record<TaskStatus, string> = {
@@ -93,7 +94,7 @@ export function TaskBoard({ organizationId, manager, initialTasks, members = [],
   }
 
   const [stage, setStage] = useState<TaskStatus>("todo");
-  const n = (value: number) => value.toLocaleString("ar-SA");
+  const n = (value: number) => arNumber(value);
   const total = visibleTasks.length;
   const tones: Record<TaskStatus, string> = { todo: "todo", doing: "doing", review: "review", done: "done" };
   return <div className="board-page" aria-busy={pending}>
@@ -112,7 +113,7 @@ export function TaskBoard({ organizationId, manager, initialTasks, members = [],
 
     {me && members.length > 1 ? <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }} role="group" aria-label="عرض المهام">
       <button type="button" className={`chip-soft${!mineOnly ? " ok" : ""}`} aria-pressed={!mineOnly} onClick={() => setMineOnly(false)}>كل المهام</button>
-      <button type="button" className={`chip-soft${mineOnly ? " ok" : ""}`} aria-pressed={mineOnly} onClick={() => setMineOnly(true)}>مهامي ({tasks.filter(task => task.assignee_id === me && task.status !== "done").length.toLocaleString("ar-SA")})</button>
+      <button type="button" className={`chip-soft${mineOnly ? " ok" : ""}`} aria-pressed={mineOnly} onClick={() => setMineOnly(true)}>مهامي ({arNumber(tasks.filter(task => task.assignee_id === me && task.status !== "done").length)})</button>
     </div> : null}
     <nav className="segments stage-tabs" aria-label="المراحل">
       {taskStatuses.map(status => <button key={status} type="button" aria-pressed={stage === status} onClick={() => setStage(status)}>{taskStatusLabels[status]}<span className="count">{n(grouped[status].length)}</span></button>)}

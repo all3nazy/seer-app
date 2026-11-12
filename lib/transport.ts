@@ -1,3 +1,4 @@
+import { riyadhHour } from "./dates";
 export const directions = ["to_school", "to_home"] as const;
 export type Direction = (typeof directions)[number];
 export const directionLabels: Record<Direction, string> = { to_school: "رحلة الذهاب (للمدرسة)", to_home: "رحلة العودة (للبيت)" };
@@ -14,7 +15,7 @@ export function riderState(events: TripEvent[]): "waiting" | "on_bus" | "dropped
 export const riderLabels = { waiting: "بالانتظار", on_bus: "في الباص", dropped: "وصل", absent: "ما ركب" } as const;
 /** Default direction by Riyadh time: mornings go to school, afternoons go home. */
 export function defaultDirection(now = new Date()): Direction {
-  const hour = Number(new Intl.DateTimeFormat("en-US", { hour: "numeric", hourCycle: "h23", timeZone: "Asia/Riyadh" }).format(now));
+  const hour = riyadhHour(now);
   return hour < 11 ? "to_school" : "to_home";
 }
 export function busMessage(child: string, event: TripEvent, direction: Direction, route: string): string {

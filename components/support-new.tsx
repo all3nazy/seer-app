@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "../lib/supabase";
 import { ticketPage } from "../lib/support";
 import { notify } from "./feedback";
+import { arNumber } from "../lib/dates";
 
 const openError = (code?: string) => code === "54000" ? "عندك ٣ تذاكر مفتوحة، أو رسائل كثيرة خلال وقت قصير. أكمل في تذكرة مفتوحة أو انتظر قليلًا." : code === "42501" ? "ما تقدر تفتح تذكرة لهذه المنشأة." : code === "22023" ? "اكتب عنوانًا ووصفًا للمشكلة." : "تعذر فتح التذكرة. حاول مرة ثانية.";
 
@@ -37,7 +38,7 @@ export function SupportNew({ organizations, page, questions = [], initialText = 
     {organizations.length > 1 ? <label>المنشأة<select value={org} onChange={event => setOrg(event.target.value)}>{organizations.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label> : null}
     <label>العنوان<input value={subject} onChange={event => setSubject(event.target.value)} maxLength={120} placeholder="مثال: الحضور ما ينحفظ" /></label>
     <label>وش المشكلة؟<textarea value={body} onChange={event => setBody(event.target.value)} maxLength={2000} required placeholder="اكتب وش صار، ووش كنت تبي تسوي." /></label>
-    <p className="hint" style={{ margin: 0 }}>يوصل مع تذكرتك: اسم منشأتك{ticketPage(page) ? `، والصفحة اللي كنت فيها (${ticketPage(page)})` : ""}{recent.length ? `، وآخر ${recent.length.toLocaleString("ar-SA")} أسئلة سألتها المساعد` : ""}. ما نرفق أي بيانات طلاب غير اللي تكتبه هنا.</p>
+    <p className="hint" style={{ margin: 0 }}>يوصل مع تذكرتك: اسم منشأتك{ticketPage(page) ? `، والصفحة اللي كنت فيها (${ticketPage(page)})` : ""}{recent.length ? `، وآخر ${arNumber(recent.length)} أسئلة سألتها المساعد` : ""}. ما نرفق أي بيانات طلاب غير اللي تكتبه هنا.</p>
     <button type="submit" className="btn btn-primary" disabled={sending || !body.trim()}>{sending ? "جارٍ الإرسال…" : "أرسل لفريق سِير"}</button>
   </form>;
 }

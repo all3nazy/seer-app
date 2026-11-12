@@ -1,3 +1,4 @@
+import { arNumber } from "./dates";
 /**
  * Organization invite links. The token goes after "#" in the address, so the browser never sends it
  * to the web server (it is not in request logs or referrers); the page reads it and sends it to the
@@ -9,7 +10,7 @@ export const isInviteToken = (value: string) => /^[A-HJ-NP-Za-km-z2-9]{32}$/.tes
 
 export const orgTypeLabels: Record<string, string> = { school: "مدرسة", nursery: "حضانة", kindergarten: "روضة" };
 export const inviteStatusLabels: Record<string, string> = { pending: "بانتظار", used: "مستخدمة", expired: "منتهية", revoked: "ملغاة" };
-const months = (n: number) => n === 1 ? "شهر" : n === 2 ? "شهرين" : n <= 10 ? `${n.toLocaleString("ar-SA")} أشهر` : `${n.toLocaleString("ar-SA")} شهرًا`;
+const months = (n: number) => n === 1 ? "شهر" : n === 2 ? "شهرين" : n <= 10 ? `${arNumber(n)} أشهر` : `${arNumber(n)} شهرًا`;
 export const trialLabel = months;
 
 /** The WhatsApp message for the owner, in everyday Saudi Arabic. */
