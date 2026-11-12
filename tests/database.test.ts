@@ -141,6 +141,9 @@ beforeAll(async () => {
   const pilot = readdirSync("supabase/migrations").filter(name => name.endsWith("_pilot_launch.sql"));
   if (pilot.length !== 1) throw new Error("Expected exactly one pilot launch migration");
   await db.exec(readFileSync(`supabase/migrations/${pilot[0]}`, "utf8"));
+  const support = readdirSync("supabase/migrations").filter(name => name.endsWith("_support.sql"));
+  if (support.length !== 1) throw new Error("Expected exactly one support migration");
+  await db.exec(readFileSync(`supabase/migrations/${support[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -1865,5 +1868,69 @@ describe("pilot launch: owner consent and extending by months", () => {
     expect((await rows(`select private.org_access('${orgA}') as a`))[0].a).toBe("active");
     await db.exec("reset role");
     await db.exec(`update public.subscriptions set ends_on=(now() at time zone 'Asia/Riyadh')::date + 365 where organization_id='${orgA}'`);
+  });
+});
+
+describe("in-app support tickets", () => {
+  const platformAdmin = "60000000-0000-0000-0000-0000000000ad";
+  let thread = "";
+  const open = (subject = "مشكلة في الحضور", page = "/dashboard/attendance?org=x&child=y") =>
+    `select public.open_support_thread('${orgA}','${subject}','ما يحفظ الحضور','${page}', array['كيف أسجل الحضور؟','وين الفصول'])::text as id`;
+  beforeAll(async () => {
+    await db.exec("reset role");
+    await db.exec(`insert into auth.users(id,email,email_confirmed_at) values ('${platformAdmin}','admin@seer.test',now()) on conflict do nothing;
+      insert into private.platform_admins(user_id) values ('${platformAdmin}') on conflict do nothing;
+      delete from public.notifications where kind = 'support'`);
+  });
+  it("a member opens a thread tied to their organization; the page keeps only its path; admins are notified", async () => {
+    await as("authenticated", outsider);
+    await expect(db.exec(open())).rejects.toMatchObject({ code: "42501" });
+    await as("authenticated", staff);
+    thread = (await rows(open()))[0].id as string;
+    const [row] = await rows(`select organization_id::text as org, page, assistant_questions as q, status from public.support_threads where id='${thread}'`);
+    expect(row).toEqual({ org: orgA, page: "/dashboard/attendance", q: ["كيف أسجل الحضور؟", "وين الفصول"], status: "open" });
+    await db.exec("reset role");
+    const name = (await rows(`select name from public.organizations where id='${orgA}'`))[0].name as string;
+    expect(await rows(`select title, url from public.notifications where user_id='${platformAdmin}' and kind='support'`)).toEqual([{ title: `تذكرة دعم جديدة: ${name}`, url: `/admin/support/${thread}` }]);
+  });
+  it("a user sees only their own threads; the platform admin sees all; nobody writes directly", async () => {
+    await as("authenticated", owner);
+    expect(await rows("select id from public.support_threads")).toEqual([]);
+    expect(await rows("select id from public.support_messages")).toEqual([]);
+    await expect(db.exec(`select public.reply_support('${thread}','تدخل')`)).rejects.toMatchObject({ code: "42501" });
+    await expect(db.exec(`insert into public.support_threads(organization_id,user_id,subject) values ('${orgA}','${owner}','x y')`)).rejects.toBeDefined();
+    await as("authenticated", staff);
+    expect((await rows("select count(*)::int as n from public.support_messages"))[0].n).toBe(1);
+    await expect(db.exec(`update public.support_threads set status='closed' where id='${thread}'`)).rejects.toBeDefined();
+    await as("authenticated", platformAdmin);
+    expect((await rows(`select count(*)::int as n from public.support_threads where id='${thread}'`))[0].n).toBe(1);
+    const list = await rows("select subject, status, organization, last_sender from public.admin_support_threads()");
+    expect(list[0]).toMatchObject({ subject: "مشكلة في الحضور", status: "open", last_sender: "user" });
+    expect(await rows(`select id::text as id from public.admin_support_threads('${thread}')`)).toEqual([{ id: thread }]);
+    await as("authenticated", staff);
+    await expect(db.exec("select * from public.admin_support_threads()")).rejects.toMatchObject({ code: "42501" });
+  });
+  it("replies notify the other side; closing stops replies", async () => {
+    await as("authenticated", platformAdmin);
+    await db.exec(`select public.reply_support('${thread}','جرّب تحديث الصفحة')`);
+    await db.exec("reset role");
+    expect(await rows(`select title from public.notifications where user_id='${staff}' and kind='support'`)).toEqual([{ title: "رد من فريق سِير" }]);
+    expect((await rows(`select from_admin from public.support_messages where thread_id='${thread}' order by created_at desc limit 1`))[0].from_admin).toBe(true);
+    await as("authenticated", staff);
+    await db.exec(`select public.reply_support('${thread}','اشتغل، شكرًا')`);
+    await db.exec("reset role");
+    expect((await rows(`select count(*)::int as n from public.notifications where user_id='${platformAdmin}' and kind='support'`))[0].n).toBe(2);
+    await as("authenticated", platformAdmin);
+    await db.exec(`select public.close_support_thread('${thread}')`);
+    await as("authenticated", staff);
+    await expect(db.exec(`select public.reply_support('${thread}','سؤال ثاني')`)).rejects.toMatchObject({ code: "22023" });
+  });
+  it("limits open threads per user and rejects empty problems", async () => {
+    await as("authenticated", staff);
+    await expect(db.exec(`select public.open_support_thread('${orgA}','','  ')`)).rejects.toMatchObject({ code: "22023" });
+    for (let i = 0; i < 3; i++) await db.exec(open(`تذكرة ${i}`, "/dashboard"));
+    await expect(db.exec(open("الرابعة", "/dashboard"))).rejects.toMatchObject({ code: "54000" });
+    await db.exec("reset role");
+    await db.exec(`delete from public.support_threads where user_id='${staff}'`);
   });
 });

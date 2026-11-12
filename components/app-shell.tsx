@@ -13,11 +13,11 @@ import { computerOnlySection, groupIsOpen, matches, navGroupLabels, navLinks, vi
 import { patternUrl, type Stage } from "../lib/stage";
 import { featureOf, featureState, type OrgFeatures } from "../lib/subscriptions";
 
-type ShellProps = { children: React.ReactNode; stage: Stage; organizations: { id: string; name: string }[]; supportPhone: string; manager?: boolean; userId?: string;
+type ShellProps = { children: React.ReactNode; stage: Stage; organizations: { id: string; name: string }[]; manager?: boolean; userId?: string;
   sections?: OrgFeatures | null; brand?: { primary: string | null; onPrimary: string | null; accent: string | null } | null;
   notice?: { text: string; owner: boolean; org: string } | null; platformAdmin?: boolean };
 
-export function AppShell({ children, stage, organizations, supportPhone, manager = true, userId, sections = null, brand = null, notice = null, platformAdmin = false }: ShellProps) {
+export function AppShell({ children, stage, organizations, manager = true, userId, sections = null, brand = null, notice = null, platformAdmin = false }: ShellProps) {
   const path = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   useEffect(() => { try { setCollapsed(localStorage.getItem("seer-sidebar") === "rail"); } catch { /* storage unavailable */ } }, []);
@@ -101,7 +101,7 @@ export function AppShell({ children, stage, organizations, supportPhone, manager
       {tabs.map(link => <Link key={link.href} href={link.href} aria-current={current(link)}><Icon name={link.icon} />{link.short}</Link>)}
       <Link href="/dashboard/more" aria-current={inMore ? "page" : undefined}><Icon name="list" />المزيد</Link>
     </nav>
-    {assistantOn ? <BotDock stage={stage} organizations={organizations} supportPhone={supportPhone} disabled={sections ? [...sections.disabled, ...featureKeysOutside(sections)] : []} /> : null}
+    {assistantOn ? <BotDock stage={stage} organizations={organizations} disabled={sections ? [...sections.disabled, ...featureKeysOutside(sections)] : []} /> : null}
     <FeedbackLayer />
   </div>;
 }

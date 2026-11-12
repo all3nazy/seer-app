@@ -44,12 +44,13 @@ describe("Arabic assistant intents",()=>{
 });
 
 describe("support privacy",()=>{
- it.each(["","0501234567","+966501234567","123","966 501234567","966501234567?text=private"])("rejects invalid destination %s",phone=>expect(supportLink(phone)).toBeNull());
- it("uses only a fixed generic message",()=>{
-  const url=new URL(supportLink("966501234567")!);
-  expect(url.origin).toBe("https://wa.me");
-  expect(url.searchParams.get("text")).toBe("مرحبًا دعم سِير، أحتاج مساعدة في استخدام المنصة.");
+ it("opens an in-app ticket instead of WhatsApp, keeping only the page path",()=>{
+  expect(supportLink()).toBe("/dashboard/support/new");
+  expect(supportLink("/dashboard/children/abc?org=x&q=ريم")).toBe("/dashboard/support/new?from=%2Fdashboard%2Fchildren%2Fabc");
+  expect(supportLink("https://bad.test/x")).toBe("/dashboard/support/new");
+  expect(supportLink("/dashboard/../x")).toBe("/dashboard/support/new");
  });
+ it("never links to WhatsApp",()=>{ expect(supportLink("/dashboard")).not.toContain("wa.me"); });
 });
 
 type Calls={table:string;columns?:string;filters:Record<string,unknown>;options?:unknown}[];

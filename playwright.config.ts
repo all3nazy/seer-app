@@ -20,6 +20,7 @@ export default defineConfig({
     env: {
       NEXT_PUBLIC_SUPABASE_URL: "https://supabase.example.test",
       NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-publishable-key",
+      SEER_E2E: "1",
     },
   },
 });

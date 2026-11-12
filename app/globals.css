@@ -919,3 +919,22 @@ a.stat:hover,a.list-row:hover,a.tile:hover,.org-tile:hover,.sidebar .nav-link:ho
 .legal-consent{max-width:520px}
 .consent-links{display:grid;gap:6px;padding-inline-start:20px;margin:12px 0}
 .consent-check{align-items:flex-start;margin:12px 0}
+/* In-app support */
+.support-row{display:flex;justify-content:space-between;align-items:center;gap:10px;text-decoration:none;color:inherit;width:100%}
+.support-thread{display:grid;gap:14px}
+.support-messages{list-style:none;margin:0;padding:0;display:grid;gap:10px;max-height:min(60vh,560px);overflow-y:auto}
+.support-messages li{max-width:85%;padding:10px 14px;border-radius:16px;background:var(--surface-2)}
+.support-messages li.from-user{justify-self:start}
+.support-messages li.from-team{justify-self:end;background:color-mix(in srgb,var(--primary) 12%,var(--surface))}
+.support-messages p{margin:4px 0;white-space:pre-wrap;line-height:1.7}
+.support-messages time,.support-who{font-size:12px;color:var(--text-3)}
+.support-who{font-weight:700}
+.support-reply{display:grid;gap:8px}
+.support-reply textarea{min-height:80px}
+.support-reply-actions{display:flex;gap:8px;flex-wrap:wrap}
+.support-new{display:grid;gap:10px}
+.support-new textarea{min-height:110px}
+.support-new.compact textarea{min-height:70px}
+.support-escalate{margin-top:8px;padding:12px;border-radius:14px;background:var(--surface-2)}
+.support-context{display:grid;gap:4px;font-size:13px;color:var(--text-2);margin:0;padding:10px 14px;border-radius:12px;background:var(--surface-2)}
+.bot-steps{margin:6px 0 4px;padding-inline-start:22px;display:grid;gap:4px;font-size:14px}

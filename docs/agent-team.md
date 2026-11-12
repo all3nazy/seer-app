@@ -29,7 +29,7 @@ These are **virtual review and implementation roles**, not employees or represen
 - No deployment is marked complete without a successful production build and smoke test.
 - Enforce organization isolation server-side and in PostgreSQL RLS; never trust client-provided organization IDs alone.
 - The bot is deterministic by default, with approved intents and explicit user confirmation for sensitive actions.
-- Support escalation is optional and configurable via `SEER_SUPPORT_WHATSAPP` (international digits only); do not send personal child records or secrets to WhatsApp.
+- Support is in-app: the assistant answers first, then «تكلّم مع فريق سِير» opens a ticket (support_threads/support_messages) answered in /admin/support. Tickets carry only what the user types, the page path and their last questions to the assistant; never attach child records.
 - Never claim affiliation with Apple, Asana or Slack. Apply useful product principles without copying proprietary designs.
 - Protect IQDA and other projects; changes are restricted to the SEER repository, project and database.
 - Favor low-cost operations, no unnecessary model calls, and small reviewed releases.

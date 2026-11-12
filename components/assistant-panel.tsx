@@ -1,24 +1,28 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { supportLink } from "../lib/support";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { supportHome } from "../lib/support";
+import { computerOnlySection } from "../lib/navigation";
 import { getSupabaseBrowserClient } from "../lib/supabase";
 import { assistantStatus } from "../lib/assistant-query";
 import { classifyIntent, operationsLink, topicNames, type AssistantIntent, type AssistantTopic } from "../lib/assistant-intents";
 import { play } from "../lib/sound";
 import { parseCommand, type BotCommand } from "../lib/bot-commands";
-import { findGuide, isHowTo, type GuideEntry } from "../lib/bot-knowledge";
+import { findGuide, isHowTo, isProblem, type GuideEntry } from "../lib/bot-knowledge";
 import { botBriefing, botHealth, botRepair, botCompleteTask, botDecideLeave, botMyTasks, botPendingLeave, botPickupPeople, botRecordPickup, botUnread, botCreateTask, botFindSections, botFindStudents, botSetAttendance, botToday, type BotStudent } from "../app/dashboard/assistant/actions";
 import { briefingItems, briefingText, withOrg, dayGreeting, detectMood, empathyLead, notUnderstood, smallTalk, stripCourtesy } from "../lib/bot-persona";
 import { attendanceLabels, type AttendanceStatus } from "../lib/students";
 import { botPersonas, tipOfDay, type Stage } from "../lib/stage";
 import { featureOf } from "../lib/subscriptions";
 import { Icon } from "./icons";
+import { SupportNew } from "./support-new";
 
 type Action = { href: string; label: string; external?: boolean };
 /** A proposal waiting for the person's confirmation; nothing runs before they press it. */
 type Confirm = { summary: string; run: () => Promise<{ error?: string; data?: string }> };
 type Choice = { label: string; sub?: string | null; pick: () => Promise<Reply> | Reply };
-type Reply = { text: string; actions?: Action[]; confirm?: Confirm; choices?: Choice[]; list?: { label: string; sub?: string | null; href?: string; tone?: "alert" | "warn" | "ok" }[] };
+type Reply = { text: string; actions?: Action[]; confirm?: Confirm; choices?: Choice[]; escalate?: boolean; steps?: string[]; list?: { label: string; sub?: string | null; href?: string; tone?: "alert" | "warn" | "ok" }[] };
 type Thread = { id: number; topic?: AssistantTopic; question: string; reply: Reply | null; outcome?: { text: string; ok: boolean } | "running" | "cancelled" };
 type Suggestion = { label: string; intent?: AssistantIntent; text?: string };
 const suggestions: Suggestion[] = [
@@ -35,7 +39,11 @@ const time = (iso: string) => new Date(iso).toLocaleTimeString("ar-SA", { timeZo
 const riyadhHour = () => Number(new Intl.DateTimeFormat("en-US", { hour: "numeric", hourCycle: "h23", timeZone: "Asia/Riyadh" }).format(new Date()));
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-export function AssistantPanel({ organizations, supportPhone, stage = "school", disabled = [] }: { organizations: { id: string; name: string }[]; supportPhone: string; stage?: Stage; disabled?: string[] }) {
+export function AssistantPanel({ organizations, stage = "school", disabled = [] }: { organizations: { id: string; name: string }[]; stage?: Stage; disabled?: string[] }) {
+  const path = usePathname();
+  // The thread whose «تكلّم مع فريق سِير» form is open, and tickets opened from this conversation.
+  const [escalating, setEscalating] = useState<number | null>(null);
+  const [opened, setOpened] = useState<Record<number, string>>({});
   const persona = botPersonas[stage];
   const [org, setOrg] = useState(organizations[0]?.id ?? "");
   const [busy, setBusy] = useState(false);
@@ -46,7 +54,6 @@ export function AssistantPanel({ organizations, supportPhone, stage = "school", 
   const nextId = useRef(0);
   const lastQuestion = useRef("");
   const log = useRef<HTMLDivElement>(null);
-  const supportUrl = supportLink(supportPhone);
   const replyTo = (id: number, reply: Reply) => { setThreads(items => items.map(item => item.id === id ? { ...item, reply } : item)); play("message"); };
   useEffect(() => { log.current?.scrollTo({ top: log.current.scrollHeight, behavior: "smooth" }); }, [threads]);
 
@@ -194,13 +201,12 @@ export function AssistantPanel({ organizations, supportPhone, stage = "school", 
     finally { locked.current = false; setBusy(false); }
   }
 
-  const supportReply = (lead: string): Reply => supportUrl
-    ? { text: `${lead} تقدر تكلم الدعم عبر واتساب؛ الرسالة ما فيها أسماء منشآت ولا طلاب ولا أي سجلات.`, actions: [{ href: supportUrl, label: "واتساب الدعم", external: true }] }
-    : { text: `${lead} تواصل مع مسؤول المنصة، وقناة الدعم عبر واتساب قيد الإعداد.` };
+  // Support is inside the platform: a ticket with the Seer team, answered here with a notification.
+  const supportReply = (lead: string): Reply => ({ text: `${lead} اكتب لفريق سِير ويرد عليك هنا داخل المنصة، ويوصلك إشعار مع كل رد.`, escalate: true, actions: [{ href: supportHome, label: "تذاكري" }] });
   function guideReply(entry: GuideEntry): Reply {
     const href = org ? `${entry.href}?org=${encodeURIComponent(org)}` : entry.href;
-    const notes = [entry.computerOnly ? "يفتح على الكمبيوتر أو الآيباد." : null, entry.managers ? "متاح للمالك والمدير." : null].filter(Boolean).join(" ");
-    return { text: `${entry.answer}${notes ? ` ${notes}` : ""}`, actions: [{ href, label: `فتح ${entry.title}` }] };
+    const notes = [computerOnlySection(entry.href) ? "يفتح على الكمبيوتر أو الآيباد." : null, entry.managers ? "متاح للمالك والمدير." : null].filter(Boolean).join(" ");
+    return { text: `${entry.answer}${notes ? ` ${notes}` : ""}`, steps: entry.steps, actions: [{ href, label: `فتح ${entry.title}` }] };
   }
   async function answer(intent: AssistantIntent): Promise<Reply> {
     if (intent.kind === "help") return { text: help };
@@ -229,6 +235,8 @@ export function AssistantPanel({ organizations, supportPhone, stage = "school", 
     if (command) return { resolve: () => runCommand(command) };
     // Sections turned off or outside the plan are not offered by the assistant.
     const entry = findGuide(text, item => { const feature = featureOf(item.href); return feature !== null && disabled.includes(feature); });
+    // A reported problem: the steps for its section if there is one, and always the way to the team.
+    if (isProblem(text)) return { resolve: () => entry && entry.id !== "support" ? { ...guideReply(entry), text: `آسف على اللخبطة. ${entry.answer} جرّب الخطوات تحت، وإذا ما انحلت كلّم فريق سِير.`, escalate: true } : supportReply("آسف على اللخبطة.") };
     if (entry && isHowTo(text)) return { resolve: () => guideReply(entry) };
     const intent = classifyIntent(text, activeTopic);
     if (intent.kind === "unknown" && entry) return { resolve: () => guideReply(entry) };
@@ -277,6 +285,7 @@ export function AssistantPanel({ organizations, supportPhone, stage = "school", 
         <p className="question">{thread.question}</p>
         <div className="answer">
           {thread.reply ? <><p>{thread.reply.text}</p>
+            {thread.reply.steps?.length ? <ol className="bot-steps">{thread.reply.steps.map((step, index) => <li key={index}>{step}</li>)}</ol> : null}
             {thread.reply.list?.length ? <ul className="bot-list">{thread.reply.list.map((item, index) => <li key={index} className={item.tone ? `brief-${item.tone}` : undefined}>{item.href ? <a href={item.href}>{item.label}</a> : item.label}{item.sub ? <span>{item.sub}</span> : null}</li>)}</ul> : null}
             {thread.reply.choices?.length ? <div className="bot-choices">{thread.reply.choices.map(choice => <button key={choice.label + (choice.sub ?? "")} type="button" disabled={busy} onClick={() => void choose(thread.id, choice)}><strong>{choice.label}</strong>{choice.sub ? <span>{choice.sub}</span> : null}</button>)}</div> : null}
             {thread.reply.confirm ? <div className={`bot-confirm${thread.outcome && thread.outcome !== "running" && thread.outcome !== "cancelled" ? (thread.outcome.ok ? " ok" : " bad") : ""}`}>
@@ -286,6 +295,12 @@ export function AssistantPanel({ organizations, supportPhone, stage = "school", 
               </> : thread.outcome === "running" ? <span className="typing" aria-label="جارٍ التنفيذ"><i /><i /><i /></span>
                 : thread.outcome === "cancelled" ? <span className="hint">ألغيت، ما تغيّر شيء.</span>
                 : <span role="status">{thread.outcome.ok ? "✓ " : ""}{thread.outcome.text}</span>}
+            </div> : null}
+            {thread.reply.escalate ? <div className="support-escalate">
+              {opened[thread.id] ? <p role="status" style={{ margin: 0 }}>✓ وصلت تذكرتك لفريق سِير. <Link href={`/dashboard/support/${opened[thread.id]}`}>افتح التذكرة</Link></p>
+                : escalating === thread.id ? <SupportNew compact organizations={organizations} page={path} questions={threads.map(item => item.question)} initialText={thread.question}
+                    onOpened={id => { setOpened(current => ({ ...current, [thread.id]: id })); setEscalating(null); }} />
+                : <button type="button" className="btn btn-primary btn-sm" onClick={() => setEscalating(thread.id)}>تكلّم مع فريق سِير</button>}
             </div> : null}
             {thread.reply.actions?.length ? <div className="actions">{thread.reply.actions.map(action => <a key={action.href + action.label} href={action.href} {...(action.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}>{action.label}</a>)}</div> : null}
           </> : <span className="typing" aria-label="جارٍ التفكير"><i /><i /><i /></span>}
@@ -299,6 +314,6 @@ export function AssistantPanel({ organizations, supportPhone, stage = "school", 
       <input aria-label="اسأل مساعد سِير" placeholder={`اكتب لـ${persona.name}: «سجّل ريم متأخرة»`} maxLength={500} value={question} onChange={event => setQuestion(event.target.value)} disabled={busy} />
       <button type="submit" disabled={busy || !question.trim()} aria-label="إرسال"><Icon name="chat" /></button>
     </form>
-    <p style={{ fontSize: 13, color: "var(--text-3)", margin: 0 }}>المحادثة تبقى في هذه الصفحة فقط وتنمسح عند إعادة التحميل. {supportUrl ? <a href={supportUrl} target="_blank" rel="noopener noreferrer">تحتاج دعم؟</a> : null}</p>
+    <p style={{ fontSize: 13, color: "var(--text-3)", margin: 0 }}>المحادثة تبقى في هذه الصفحة فقط وتنمسح عند إعادة التحميل. <Link href={supportHome}>تذاكري مع فريق سِير</Link></p>
   </section>;
 }

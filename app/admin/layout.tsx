@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { requestSession } from "../../lib/supabase/server";
 import { Logo } from "../../components/icons";
 import { FeedbackLayer } from "../../components/feedback";
+import { NotificationBell } from "../../components/notifications";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: { default: "لوحة المسؤول", template: "%s | لوحة المسؤول" }, robots: { index: false, follow: false } };
@@ -17,9 +18,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <header className="admin-bar">
       <Logo href="/admin" label="سِير — لوحة المسؤول" />
       <nav aria-label="لوحة المسؤول" className="admin-nav">
-        <Link href="/admin">نظرة عامة</Link><Link href="/admin/payments">التحويلات</Link><Link href="/admin/subscribers">المشتركين</Link>
+        <Link href="/admin">نظرة عامة</Link><Link href="/admin/support">الدعم</Link><Link href="/admin/payments">التحويلات</Link><Link href="/admin/subscribers">المشتركين</Link>
         <Link href="/admin/plans">الباقات والأسعار</Link><Link href="/admin/settings">إعدادات الدفع</Link><Link href="/dashboard">اللوحة</Link>
       </nav>
+      <NotificationBell userId={user.id} />
     </header>
     <main className="main" id="main-content">{children}</main>
     <FeedbackLayer />

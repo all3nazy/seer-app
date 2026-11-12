@@ -1,9 +1,10 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requestMyOrganizations, requestSession } from "../../../lib/supabase/server";
 import { SettingsTabs } from "../../../components/settings-tabs";
 import { pilotHiddenFeatures, pilotHides, pilotMode } from "../../../lib/pilot";
 import { featureKeys } from "../../../lib/subscriptions";
-import { supportLink } from "../../../lib/support";
+import { supportHome, supportLink } from "../../../lib/support";
 import { Icon } from "../../../components/icons";
 import { SoundSwitchRow, ThemeSwitchRow } from "../../../components/preferences";
 import SignOutButton from "../../../components/sign-out-button";
@@ -28,7 +29,8 @@ export default async function SettingsPage() {
   const myName = (memberships ?? []).map(m => (m as { display_name?: string | null }).display_name).find(Boolean) ?? "";
   const { data: phones } = await supabase.from("member_phones").select("phone").eq("user_id", user.id).limit(1);
   const myPhone = phones?.[0]?.phone ?? "";
-  const support = supportLink(process.env.SEER_SUPPORT_WHATSAPP ?? "");
+  const { data: ticketRows } = await supabase.from("support_threads").select("id,subject,status,last_sender").eq("user_id", user.id).order("status", { ascending: false }).order("last_message_at", { ascending: false }).limit(5);
+  const tickets = (ticketRows ?? []) as { id: string; subject: string; status: string; last_sender: string }[];
   const email = user.email ?? "";
   const icon = parseIconChoice((await cookies()).get(iconCookie)?.value).choice;
   const myOrganizations = (await requestMyOrganizations()).data;
@@ -86,9 +88,13 @@ export default async function SettingsPage() {
       </> },
       { id: "help", label: "المساعدة", content: <>
       <section aria-labelledby="help"><h2 id="help" className="section-label">المساعدة</h2>
+        <p className="hint" style={{ marginTop: 0 }}>اسأل المساعد أولًا، يشرح لك أي قسم خطوة بخطوة. وإذا ما لقيت جوابك، كلّم فريق سِير من هنا ويرد عليك داخل المنصة.</p>
+        {tickets.length ? <div className="group" style={{ marginBottom: 12 }}>{tickets.map(ticket => <Link key={ticket.id} className="group-row" href={`/dashboard/support/${ticket.id}`}>
+          <span className="tile-icon tone-plum"><Icon name="chat" /></span><span className="grow">{ticket.subject}</span>
+          <span className={`chip-soft ${ticket.status === "closed" ? "" : ticket.last_sender === "admin" ? "ok" : "coral"}`}>{ticket.status === "closed" ? "مغلقة" : ticket.last_sender === "admin" ? "وصلك رد" : "بانتظار الفريق"}</span></Link>)}</div> : null}
         <div className="group">
-          {support ? <a className="group-row" href={support} target="_blank" rel="noopener noreferrer"><span className="tile-icon tone-sun"><Icon name="help" /></span><span className="grow">الدعم عبر واتساب</span><Icon name="arrowNext" /></a>
-            : <div className="group-row"><span className="tile-icon tone-sun"><Icon name="help" /></span><span className="grow">الدعم عبر واتساب</span><span className="hint">قيد الإعداد</span></div>}
+          <Link className="group-row" href={supportLink("/dashboard/settings")}><span className="tile-icon tone-sun"><Icon name="help" /></span><span className="grow">تكلّم مع فريق سِير</span><Icon name="arrowNext" /></Link>
+          <Link className="group-row" href={supportHome}><span className="tile-icon tone-plum"><Icon name="chat" /></span><span className="grow">كل تذاكري</span><Icon name="arrowNext" /></Link>
           <a className="group-row" href="/auth/activate"><span className="tile-icon tone-leaf"><Icon name="check" /></span><span className="grow">تفعيل حساب أو إعادة إرسال الرابط</span><Icon name="arrowNext" /></a>
         </div>
       </section>
