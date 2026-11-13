@@ -12,12 +12,12 @@ const openError = (code?: string) => code === "54000" ? "عندك ٣ تذاكر 
  * A new ticket for the Seer team: the organization, the page the person was on and their last
  * questions to the assistant go with it. Nothing else is attached; only what they type here.
  */
-export function SupportNew({ organizations, page, questions = [], initialText = "", compact = false, onOpened }: {
-  organizations: { id: string; name: string }[]; page?: string | null; questions?: string[]; initialText?: string; compact?: boolean; onOpened?: (id: string) => void;
+export function SupportNew({ organizations, page, questions = [], initialText = "", initialSubject, compact = false, onOpened }: {
+  organizations: { id: string; name: string }[]; page?: string | null; questions?: string[]; initialText?: string; initialSubject?: string; compact?: boolean; onOpened?: (id: string) => void;
 }) {
   const router = useRouter();
   const [org, setOrg] = useState(organizations[0]?.id ?? "");
-  const [subject, setSubject] = useState(initialText.slice(0, 80));
+  const [subject, setSubject] = useState((initialSubject ?? initialText).slice(0, 80));
   const [body, setBody] = useState(initialText);
   const [sending, setSending] = useState(false);
   const recent = questions.filter(Boolean).slice(-5);
