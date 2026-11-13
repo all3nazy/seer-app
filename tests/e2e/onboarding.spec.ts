@@ -38,6 +38,16 @@ async function fakeDatabase(page: Page, options: { done?: number; welcome?: bool
   };
 }
 
+/** A tall element under a pinned card: the highlight starts at its top and covers its width. */
+async function expectRingOnTop(page: Page, selector: string) {
+  const ring = page.locator(".onb-ring");
+  await expect(ring).toBeVisible();
+  await expect.poll(async () => {
+    const [a, b] = [await ring.boundingBox(), await page.locator(selector).first().boundingBox()];
+    return Boolean(a && b && a.x <= b.x && a.x + a.width >= b.x + b.width && Math.abs(a.y + 6 - b.y) <= 2 && a.height > 40);
+  }).toBe(true);
+}
+
 /** The highlight surrounds the element. */
 async function expectRingAround(page: Page, selector: string) {
   const ring = page.locator(".onb-ring");
@@ -61,7 +71,7 @@ for (const device of [{ name: "computer", width: 1366, height: 850 }, { name: "p
       await expect(welcome.locator(".onb-steps li").first()).toContainText("اسمك وجوالك");
       await expect(welcome.locator(".onb-steps li").last()).toContainText("روابط البوابة للأهالي");
       await welcome.getByRole("button", { name: "ابدأ" }).click();
-      await expect(page).toHaveURL(/\/e2e\/onboarding\/profile$/);
+      await expect(page).toHaveURL(/\/e2e\/onboarding\/settings#account$/);
       expect(db.state.calls).toContain("onboarding_start");
       await expectRingAround(page, "#me-section");
       const bubble = page.locator(".onb-bubble");
@@ -109,10 +119,10 @@ for (const device of [{ name: "computer", width: 1366, height: 850 }, { name: "p
       await fakeDatabase(page, { done: 1 });
       await page.goto("/e2e/onboarding/home?done=1");
       await page.getByRole("button", { name: "كمّل" }).click();
-      await expect(page).toHaveURL(/\/device$/);
+      await expect(page).toHaveURL(/\/settings#device$/);
       await expectRingAround(page, "#notify button");
       await page.locator(".onb-bubble").getByRole("button", { name: "ثبّته وفعّلته ✓" }).click();
-      await expect(page).toHaveURL(/\/sections$/);
+      await expect(page).toHaveURL(/\/settings#organization$/);
       await page.locator(".onb-bubble").getByRole("button", { name: "التالي" }).click();
       await expect(page).toHaveURL(/\/classes$/);
       await expect(page.getByRole("region", { name: "تقدّم التجهيز" })).toContainText("٢ من ١٠");
@@ -178,12 +188,12 @@ for (const device of [{ name: "computer", width: 1366, height: 850 }, { name: "p
       const reply = await ask(page, "ابدأ الشرح");
       await expect(reply).toContainText("خلّصتوا التجهيز كله");
       await reply.getByRole("button", { name: "شغّل الشرح" }).click();
-      await expect(page).toHaveURL(/\/profile$/);
+      await expect(page).toHaveURL(/\/settings#account$/);
       const bubble = page.locator(".onb-bubble");
       await expect(bubble).toContainText("إعادة الشرح · ١ من ١٠");
       await expectRingAround(page, "#me-section");
       await bubble.getByRole("button", { name: "التالي" }).click();
-      await expect(page).toHaveURL(/\/device$/);
+      await expect(page).toHaveURL(/\/settings#device$/);
       await expect(bubble).toContainText("إعادة الشرح · ٢ من ١٠");
       await bubble.getByRole("button", { name: "إنهاء الشرح" }).click();
       await expect(bubble).toHaveCount(0);
@@ -238,7 +248,7 @@ for (const device of [{ name: "computer", width: 1366, height: 850 }, { name: "w
           await fakeDatabase(page, { done: index, track });
           await page.goto(`/e2e/onboarding/home?done=${index}&track=${track}`);
           await page.getByRole("button", { name: "كمّل" }).click();
-          await expect(page).toHaveURL(new RegExp(`/${key}$`));
+          await expect(page).toHaveURL(new RegExp(`/${({ profile: "settings#account", device: "settings#device", sections: "settings#organization" } as Record<string, string>)[key] ?? key}$`));
           const ring = page.locator(".onb-ring"), bubble = page.locator(".onb-bubble"), element = page.locator(targetFor[key]).first();
           await expect(ring).toBeVisible();
           await expect(bubble.locator("h3")).toBeVisible();
@@ -265,7 +275,7 @@ test("the bubble follows the element while scrolling and when the window changes
   await fakeDatabase(page, { done: 2 });
   await page.goto("/e2e/onboarding/home?done=2");
   await page.getByRole("button", { name: "كمّل" }).click();
-  await expect(page).toHaveURL(/\/sections$/);
+  await expect(page).toHaveURL(/\/settings#organization$/);
   const ring = page.locator(".onb-ring"), bubble = page.locator(".onb-bubble");
   await expect(bubble).toHaveAttribute("data-side", /right|left/);
   for (const action of [() => page.mouse.wheel(0, 200), () => page.setViewportSize({ width: 820, height: 700 }), () => page.setViewportSize({ width: 390, height: 844 })]) {
@@ -276,4 +286,55 @@ test("the bubble follows the element while scrolling and when the window changes
     }).toBe(true);
   }
   await expect(bubble).toHaveAttribute("data-side", "dock");
+});
+
+test.describe("the guide opens the right settings tab on the same page", () => {
+  const settingsSteps: [string, number, string, string][] = [
+    ["profile", 0, "حسابي", "#me-section"], ["device", 1, "الجهاز والإشعارات", "#notify button"], ["sections", 2, "المنشأة", "#sections"],
+  ];
+  for (const device of [{ name: "computer", width: 1366, height: 850 }, { name: "phone", width: 390, height: 844 }]) {
+    for (const [step, done, tab, selector] of settingsSteps) {
+      test(`${device.name}: «شغّل الشرح» from #help opens «${tab}» and highlights the ${step} step`, async ({ page }) => {
+        await page.setViewportSize({ width: device.width, height: device.height });
+        await fakeDatabase(page, { done });
+        await page.goto(`/e2e/onboarding/settings?done=${done}#help`);
+        await expect(page.getByRole("tab", { name: "المساعدة" })).toHaveAttribute("aria-selected", "true");
+        await page.getByRole("tabpanel", { name: "المساعدة" }).getByRole("button", { name: "شغّل الشرح" }).click();
+        await expect(page).toHaveURL(new RegExp(`/settings#${({ profile: "account", device: "device", sections: "organization" } as Record<string, string>)[step]}$`));
+        await expect(page.getByRole("tab", { name: tab })).toHaveAttribute("aria-selected", "true");
+        await expect(page.locator(selector).first()).toBeVisible();
+        if (device.name === "phone" && step === "sections") await expectRingOnTop(page, selector);
+        else await expectRingAround(page, selector);
+        await expect(page.locator(".onb-bubble")).not.toContainText("ما ظهر الزر المطلوب");
+      });
+    }
+  }
+
+  test("moving to another tab inside the settings follows the guide: «ثبّته وفعّلته ✓» opens «المنشأة»", async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 850 });
+    await fakeDatabase(page, { done: 1 });
+    await page.goto("/e2e/onboarding/settings?done=1#device");
+    await page.getByRole("button", { name: "كمّل" }).click();
+    await expectRingAround(page, "#notify button");
+    await page.locator(".onb-bubble").getByRole("button", { name: "ثبّته وفعّلته ✓" }).click();
+    await expect(page.getByRole("tab", { name: "المنشأة" })).toHaveAttribute("aria-selected", "true");
+    await expectRingAround(page, "#sections");
+  });
+
+  test("when the element does not show within two seconds, the bubble says so and «افتح الصفحة» brings it back", async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 850 });
+    await fakeDatabase(page, { done: 0 });
+    await page.goto("/e2e/onboarding/settings?done=0#account");
+    await page.getByRole("button", { name: "كمّل" }).click();
+    await expectRingAround(page, "#me-section");
+    // The person moves to another tab by hand: the element is hidden.
+    await page.getByRole("tab", { name: "المساعدة" }).click();
+    const bubble = page.locator(".onb-bubble");
+    await expect(page.locator(".onb-ring")).toHaveCount(0);
+    await expect(bubble).toContainText("ما ظهر الزر المطلوب في الصفحة", { timeout: 4000 });
+    await bubble.getByRole("button", { name: "افتح الصفحة" }).click();
+    await expect(page.getByRole("tab", { name: "حسابي" })).toHaveAttribute("aria-selected", "true");
+    await expectRingAround(page, "#me-section");
+    await expect(bubble).not.toContainText("ما ظهر الزر المطلوب");
+  });
 });

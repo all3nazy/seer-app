@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { settingsTabFor, type SettingsTab } from "../lib/settings-tabs";
+import { HASH_EVENT } from "../lib/onboarding";
 
 /**
  * Settings in tabs that follow the address hash (#account, #organization, #device, #help), so a
@@ -18,8 +19,12 @@ export function SettingsTabs({ tabs }: { tabs: { id: SettingsTab; label: string;
       if (hash && hash !== tab) requestAnimationFrame(() => document.getElementById(hash)?.scrollIntoView({ block: "start" }));
     };
     sync();
+    // "hashchange" for links and the address bar; HASH_EVENT and "popstate" for moves made with the
+    // History API (the app's router, the guided setup), which do not fire "hashchange".
     window.addEventListener("hashchange", sync);
-    return () => window.removeEventListener("hashchange", sync);
+    window.addEventListener("popstate", sync);
+    window.addEventListener(HASH_EVENT, sync);
+    return () => { window.removeEventListener("hashchange", sync); window.removeEventListener("popstate", sync); window.removeEventListener(HASH_EVENT, sync); };
   }, [ids.join()]); // eslint-disable-line react-hooks/exhaustive-deps
   const pick = (id: SettingsTab) => { setActive(id); history.replaceState(null, "", `#${id}`); };
   return <div className="settings-tabs">

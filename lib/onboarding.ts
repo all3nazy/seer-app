@@ -226,3 +226,23 @@ function clip(rect: Rect, top: number, bottom: number): Rect | null {
   const from = Math.max(rect.top, top), to = Math.min(rect.top + rect.height, bottom);
   return to - from >= 16 ? { top: from, left: rect.left, width: rect.width, height: to - from } : null;
 }
+
+// Same page, another #tab --------------------------------------------------------------------------
+/**
+ * Moving inside the app to the same page with another hash (e.g. /dashboard/settings#help →
+ * #account) uses the History API, which does not fire "hashchange". Components that follow the
+ * hash also listen for this event, sent after such a move.
+ */
+export const HASH_EVENT = "seer:hash";
+export function announceHash(): void {
+  if (typeof window === "undefined") return;
+  // The address changes when the router has committed the move: announce a few times until then.
+  for (const delay of [0, 60, 200, 500]) window.setTimeout(() => window.dispatchEvent(new Event(HASH_EVENT)), delay);
+}
+
+/** Browser tests: the page a step opens on under `prefix` (steps in the settings share one page and keep their #tab). */
+export function testStepPage(prefix: string, step: StepKey): { page: string; href: string } {
+  const [base, hash] = stepGuides[step].path.split("#");
+  const page = base === "/dashboard/settings" ? `${prefix}/settings` : `${prefix}/${step}`;
+  return { page, href: hash ? `${page}#${hash}` : page };
+}
