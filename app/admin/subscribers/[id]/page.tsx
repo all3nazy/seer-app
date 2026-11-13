@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requestSession } from "../../../../lib/supabase/server";
 import { SubscriberActions } from "../../../../components/admin-forms";
 import { accessLabels, durationLabel, paymentStatusLabels, riyal, statusLabels, type Access } from "../../../../lib/subscriptions";
+import { setupPercent, stepTitle, type SetupRow } from "../../../../lib/onboarding";
 import { BackLink } from "../../../../components/back-link";
 
 export const metadata = { title: "مشترك" };
@@ -15,7 +16,8 @@ export default async function AdminSubscriber({ params }: { params: Promise<{ id
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/.test(id)) notFound();
   const { client } = await requestSession();
-  const [detail, plans] = await Promise.all([client.rpc("admin_subscriber", { org: id }), client.from("plans").select("id,name").order("sort_order")]);
+  const [detail, plans, setupResult] = await Promise.all([client.rpc("admin_subscriber", { org: id }), client.from("plans").select("id,name").order("sort_order"), client.rpc("admin_onboarding")]);
+  const setup = ((setupResult.data ?? []) as SetupRow[]).find(row => row.organization_id === id) ?? null;
   const d = detail.data as Detail | null;
   if (!d) notFound();
   const s = d.subscription;
@@ -27,6 +29,12 @@ export default async function AdminSubscriber({ params }: { params: Promise<{ id
       <div className="stat"><span className="figure">{d.plan?.name ?? "—"}</span><span className="label">{s ? `${s.starts_on} ← ${s.ends_on}` : "بدون اشتراك"}</span></div>
       <div className="stat"><span className="figure">{Number(d.students).toLocaleString("ar-SA")} / {Number(d.staff).toLocaleString("ar-SA")}</span><span className="label">طلاب / فريق</span></div>
     </div>
+    {setup ? <section className="card" style={{ marginTop: 16 }} aria-labelledby="setup-title"><h2 id="setup-title">التأسيس</h2>
+      <p style={{ marginTop: 0 }}>{setup.completed_at ? "✓ خلّصوا التجهيز كله." : `أنجزوا ${setup.done.toLocaleString("ar-SA")} من ${setup.total.toLocaleString("ar-SA")} خطوات (${setupPercent(setup).toLocaleString("ar-SA")}٪).`}
+        {setup.snooze_count ? ` أجّلوه ${setup.snooze_count.toLocaleString("ar-SA")} مرات.` : ""} {setup.stuck ? <span className="chip-soft rose">متعثرة</span> : null}</p>
+      {setup.missing.length ? <><h3 style={{ fontSize: 15, margin: "8px 0" }}>الخطوات الناقصة</h3>
+        <ul className="records">{setup.missing.map(step => <li key={step}>{stepTitle(step)}</li>)}</ul></> : null}
+    </section> : null}
     <section className="card" style={{ marginTop: 16 }}><h2>التواصل</h2>
       <ul className="records">{d.owners.map((owner, index) => <li key={index}><span>{owner.name ?? "المالك"}</span><span dir="ltr" className="hint">{[owner.phone, owner.email].filter(Boolean).join(" · ")}</span></li>)}</ul>
     </section>
