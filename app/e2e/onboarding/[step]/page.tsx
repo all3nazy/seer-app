@@ -16,7 +16,16 @@ const markable = new Set<StepKey>(["device", "sections", "my", "support"]);
 export default async function OnboardingTestPage({ params, searchParams }: { params: Promise<{ step: string }>; searchParams: Promise<{ track?: string; done?: string; welcome?: string }> }) {
   if (process.env.SEER_E2E !== "1") notFound();
   const [{ step }, query] = await Promise.all([params, searchParams]);
-  if (!isStepKey(step) && step !== "home") notFound();
+  if (!isStepKey(step) && step !== "home" && step !== "tour") notFound();
+  // «tour»: a stand-in for the students page, for the page tour.
+  if (step === "tour") return <div data-tour-as="/dashboard/children">
+    <OnboardingGuide organizationId="00000000-0000-0000-0000-0000000000e2" stage="kindergarten" initial={null} pagePrefix="/e2e/onboarding" />
+    <h1>الطلاب</h1>
+    <form className="toolbar"><label>بحث<input name="q" /></label><button type="submit" className="btn">عرض</button></form>
+    <div className="list"><a className="list-row" href="#a">طالب تجريبي</a></div>
+    <section className="card"><details><summary>إضافة طالب جديد</summary></details></section>
+    <p><a className="btn" href="#excel">استيراد من Excel</a></p>
+  </div>;
   const track = query.track === "staff" ? "staff" : "org";
   const done = Number(query.done ?? 0);
   const steps = (track === "org" ? orgSteps : staffSteps).map((key, index) => ({ step: key, done: index < done, markable: track === "staff" ? key !== "profile" : markable.has(key) }));

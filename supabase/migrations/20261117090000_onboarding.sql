@@ -206,6 +206,13 @@ begin
  return 1;
 end $$;
 
+-- Reply templates for questions about the guide.
+insert into private.support_templates(title, body, path, keywords, sort_order) values
+ ('تشغيل الشرح', 'تقدر تشغّل الشرح من المساعد داخل المنصة 👌' || chr(10) || '• افتح المساعد واكتب «ابدأ الشرح» أو «وش الخطوة الجاية»، واضغط «شغّل الشرح».' || chr(10) || '• أو اضغط «كمّل» في شريط التجهيز أعلى الصفحة.' || chr(10) || '• أو من «الإعدادات» ← «المساعدة» ← «شغّل الشرح».' || chr(10) || 'يوديك لكل خطوة ويأشّر لك على الزر، وإذا خلصتوا يعيده من البداية بدون ما يتغيّر شي.',
+  '/dashboard/settings#help', array['شرح','الشرح','جوله','كيف ابدا','من وين ابدا','التجهيز','تجهيز','الخطوه الجايه','علمني'], 150),
+ ('شرح صفحة معيّنة', 'لأي صفحة رئيسية في القائمة: افتحها، وافتح المساعد واكتب «اشرح لي هالصفحة»، واضغط «شغّل شرح الصفحة».' || chr(10) || 'يأشّر لك على الأزرار الأساسية فيها واحد واحد مع شرح قصير.',
+  '/dashboard/assistant', array['اشرح الصفحه','هالصفحه','وش هالصفحه','ما فهمت الصفحه','وش فايده الصفحه'], 160);
+
 revoke all on function private.onboarding_track(uuid,uuid), private.onboarding_markable(text,text), private.onboarding_steps(uuid,uuid),
  private.onboarding_status(uuid), private.onboarding_start(uuid), private.onboarding_mark(uuid,text), private.onboarding_snooze(uuid), private.admin_onboarding()
  from public, anon, authenticated;

@@ -18,12 +18,14 @@ import { featureOf } from "../lib/subscriptions";
 import { Icon } from "./icons";
 import { SupportNew } from "./support-new";
 import { arNumber, formatTime, riyadhHour } from "../lib/dates";
+import { guideRequest, pageTour, tourPathFor, setupSuggestion, stepGuides, type OnboardingStatus } from "../lib/onboarding";
+import { startGuide } from "./guide-button";
 
 type Action = { href: string; label: string; external?: boolean };
 /** A proposal waiting for the person's confirmation; nothing runs before they press it. */
 type Confirm = { summary: string; run: () => Promise<{ error?: string; data?: string }> };
 type Choice = { label: string; sub?: string | null; pick: () => Promise<Reply> | Reply };
-type Reply = { text: string; actions?: Action[]; confirm?: Confirm; choices?: Choice[]; escalate?: boolean; steps?: string[]; list?: { label: string; sub?: string | null; href?: string; tone?: "alert" | "warn" | "ok" }[] };
+type Reply = { text: string; actions?: Action[]; buttons?: { label: string; run: () => void }[]; confirm?: Confirm; choices?: Choice[]; escalate?: boolean; steps?: string[]; list?: { label: string; sub?: string | null; href?: string; tone?: "alert" | "warn" | "ok" }[] };
 type Thread = { id: number; topic?: AssistantTopic; question: string; reply: Reply | null; outcome?: { text: string; ok: boolean } | "running" | "cancelled" };
 type Suggestion = { label: string; intent?: AssistantIntent; text?: string };
 const suggestions: Suggestion[] = [
@@ -54,6 +56,14 @@ export function AssistantPanel({ organizations, stage = "school", disabled = [] 
   const nextId = useRef(0);
   const lastQuestion = useRef("");
   const log = useRef<HTMLDivElement>(null);
+  // The member's setup in this organization, for the first suggestion and «وش الخطوة الجاية».
+  const [setup, setSetup] = useState<OnboardingStatus | null>(null);
+  useEffect(() => {
+    let live = true;
+    if (!org) { setSetup(null); return; }
+    void getSupabaseBrowserClient().rpc("onboarding_status", { org }).then(({ data, error }: { data: unknown; error: unknown }) => { if (live) setSetup(error ? null : data as OnboardingStatus); });
+    return () => { live = false; };
+  }, [org]);
   const replyTo = (id: number, reply: Reply) => { setThreads(items => items.map(item => item.id === id ? { ...item, reply } : item)); play("message"); };
   useEffect(() => { log.current?.scrollTo({ top: log.current.scrollHeight, behavior: "smooth" }); }, [threads]);
 
@@ -224,6 +234,29 @@ export function AssistantPanel({ organizations, stage = "school", disabled = [] 
       : [{ href: operationsLink(org, intent.topic), label: `فتح ${topicNames[intent.topic]}` }];
     return { text, actions };
   }
+  /** «ابدأ الشرح», «كيف أبدأ», «وش الخطوة الجاية»: where the setup is, with «شغّل الشرح». */
+  async function setupReply(): Promise<Reply> {
+    const run = { label: "شغّل الشرح", run: () => startGuide("setup") };
+    if (!org) return { text: "حسابك غير مرتبط بمنشأة بعد." };
+    const { data, error } = await getSupabaseBrowserClient().rpc("onboarding_status", { org });
+    const status = error ? null : data as OnboardingStatus | null;
+    if (!status || !status.steps?.length) return { text: "أقدر أشرح لك الصفحة اللي أنت فيها: الأزرار الأساسية وش تسوي.", buttons: [{ label: "اشرح لي هالصفحة", run: () => startGuide("page") }] };
+    setSetup(status);
+    const next = status.steps.find(item => !item.done);
+    if (status.complete || !next) return { text: "خلّصتوا التجهيز كله ✓. إذا تبي، أعيد لك الشرح من البداية، وما يتغيّر شي من اللي سوّيته.", buttons: [run] };
+    const left = status.total - status.done;
+    return {
+      text: `${status.track === "org" ? "أنجزتوا" : "أنجزت"} ${arNumber(status.done)} من ${arNumber(status.total)}، وباقي ${arNumber(left)}. الخطوة الجاية: «${stepGuides[next.step].title}». أوديك لها وأأشّر لك على الزر؟`,
+      steps: status.steps.filter(item => !item.done).map(item => stepGuides[item.step].title),
+      buttons: [run],
+    };
+  }
+  /** «اشرح لي هالصفحة»: a short tour of the page open now (main menu pages). */
+  function pageReply(): Reply {
+    const tour = pageTour(tourPathFor(path));
+    if (!tour) return { text: "شرح الصفحة متاح للصفحات الرئيسية في القائمة (مثل الحضور والطلاب والفريق). افتح وحدة منها واطلبه مرة ثانية، أو شغّل شرح التجهيز.", buttons: [{ label: "شغّل الشرح", run: () => startGuide("setup") }] };
+    return { text: `أشرح لك «${tour.title}» خطوة خطوة، وأأشّر لك على الأزرار الأساسية فيها.`, buttons: [{ label: "شغّل شرح الصفحة", run: () => startGuide("page") }] };
+  }
   /** Commands first, then "how do I…" questions about the platform, then the older topic questions. */
   function route(raw: string): { resolve: () => Promise<Reply> | Reply; topic?: AssistantTopic } {
     lastQuestion.current = raw;
@@ -231,6 +264,9 @@ export function AssistantPanel({ organizations, stage = "school", disabled = [] 
     if (social) return { resolve: () => ({ text: social }) };
     // «السلام عليكم، مين غايب؟» → the greeting is answered in the tone, the request still runs.
     const text = stripCourtesy(raw) || raw;
+    const wanted = guideRequest(text);
+    if (wanted === "page") return { resolve: () => pageReply() };
+    if (wanted === "setup") return { resolve: () => setupReply() };
     const command = parseCommand(text);
     if (command) return { resolve: () => runCommand(command) };
     // Sections turned off or outside the plan are not offered by the assistant.
@@ -302,12 +338,14 @@ export function AssistantPanel({ organizations, stage = "school", disabled = [] 
                     onOpened={id => { setOpened(current => ({ ...current, [thread.id]: id })); setEscalating(null); }} />
                 : <button type="button" className="btn btn-primary btn-sm" onClick={() => setEscalating(thread.id)}>تكلّم مع فريق سِير</button>}
             </div> : null}
+            {thread.reply.buttons?.length ? <div className="bot-run">{thread.reply.buttons.map(button => <button key={button.label} type="button" className="btn btn-primary btn-sm" onClick={button.run}>{button.label}</button>)}</div> : null}
             {thread.reply.actions?.length ? <div className="actions">{thread.reply.actions.map(action => <a key={action.href + action.label} href={action.href} {...(action.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}>{action.label}</a>)}</div> : null}
           </> : <span className="typing" aria-label="جارٍ التفكير"><i /><i /><i /></span>}
         </div>
       </article>)}
     </div>
     <div className="suggestions" aria-label="اقتراحات">
+      {setup && setupSuggestion(setup, stage) ? <button type="button" className="suggestion setup" disabled={busy} onClick={() => void run(setupSuggestion(setup, stage)!, { resolve: () => setupReply() })}>{setupSuggestion(setup, stage)}</button> : null}
       {suggestions.map(item => <button key={item.label} type="button" className="suggestion" disabled={busy} onClick={() => void run(item.label, item.intent ? { resolve: () => answer(item.intent!), topic: "topic" in item.intent ? item.intent.topic : undefined } : route(item.text ?? item.label))}>{item.label}</button>)}
     </div>
     <form onSubmit={ask} className="assistant-form">

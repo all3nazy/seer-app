@@ -51,7 +51,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     manager={organizations.some(org => org.role === "owner" || org.role === "admin")} userId={user?.id}
     sections={sections} brand={brand}
     notice={notice ? { text: notice, owner: current?.role === "owner", org: current!.organization_id } : null} platformAdmin={admin} support={support}>
-    {onboarding && current ? <OnboardingGuide organizationId={current.organization_id} stage={stageOf(current.type)} initial={onboarding} /> : null}
+    {current && current.access !== "locked" ? <OnboardingGuide organizationId={current.organization_id} stage={stageOf(current.type)} initial={onboarding} /> : null}
     {gate === "on" || !feature ? children : <section className="card" style={{ maxWidth: 560, display: "grid", gap: 12 }}>
       <h1 style={{ fontSize: 20, margin: 0 }}>🔒 {featureLabels[feature]}</h1>
       {pilot && pilotHides(feature) ? <p style={{ margin: 0 }}>{pilotTexts.payments}</p>

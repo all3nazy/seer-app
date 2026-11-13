@@ -1,4 +1,7 @@
 import type { Stage } from "./stage";
+import { normalizeArabic } from "./assistant-intents";
+import { guide as knowledge } from "./bot-knowledge";
+import { navLinks } from "./navigation";
 
 /**
  * Guided setup. The database decides which steps a member has and which are done
@@ -99,3 +102,88 @@ export function setupPercent(row: Pick<SetupRow, "done" | "total">): number {
   return row.total ? Math.round((row.done / row.total) * 100) : 0;
 }
 export function stepTitle(step: string): string { return isStepKey(step) ? stepGuides[step].title : step; }
+
+// Starting the guide from elsewhere (the assistant, the settings) --------------------------------------
+/** «setup»: the setup from its first missing step, or a replay once complete; «page»: a tour of the page open now. */
+export type GuideRequest = { mode: "setup" } | { mode: "page" };
+export const GUIDE_EVENT = "seer:guide";
+export function requestGuide(request: GuideRequest): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent<GuideRequest>(GUIDE_EVENT, { detail: request }));
+}
+
+const tidy = (value: string) => normalizeArabic(value).replace(/[ئ]/g, "ي").replace(/[؟?!.,،؛:«»"()]/g, " ").replace(/\s+/g, " ").trim()
+  .replace(/^(?:لو سمحت|من فضلك|ممكن|ابي|ابغي|ودي|بغيت|تكفي|تكفى|يا \S+)\s+/g, "").replace(/\s+(?:لو سمحت|من فضلك|تكفي|تكفى|الله يعافيك|بليز)$/g, "").trim();
+const pageWords = /^(?:اشرح(?: لي| ل)?|اشرحلي|تشرح(?: لي)?|شرح|علمني|عرفني(?: على)?|جوله(?: في)?|خذني جوله(?: في)?|سو(?:ي)? لي جوله(?: في)?|وش|ايش|وش فايده|ايش فايده)\s*(?:هالصفحه|هذي الصفحه|هذه الصفحه|الصفحه هذي|الصفحه الحاليه|الصفحه|ذي الصفحه|هالشاشه|هذي الشاشه|الشاشه)(?: هذي)?$/;
+const setupWords = /^(?:اشرح(?: لي)?|اشرحلي|اشرح لي المنصه|اشرح المنصه|ابدا الشرح|ابدي الشرح|شغل(?: لي)? الشرح|شغل الجوله|الشرح|الجوله|جوله|خذني جوله|سو(?:ي)? لي جوله|كيف ابدا|كيف ابدي|كيف نبدا|من وين ابدا|من وين نبدا|وش اسوي اول|ايش اسوي اول|علمني|عملني|علمني المنصه|علمني على المنصه|وش الخطوه الجايه|ايش الخطوه الجايه|وش الخطوه التاليه|ايش الخطوه التاليه|الخطوه الجايه|الخطوه التاليه|وش باقي|وش باقي علي|كمل التجهيز|كمل تجهيز \S+|التجهيز|تجهيز \S+|وين وصلت(?: في التجهيز)?|ساعدني ابدا|(?:كيف|وين) (?:اشغل|اشوف|القى|الاقي) الشرح)$/;
+
+/** The assistant's guide requests: «اشرح لي هالصفحة» → page; «ابدأ الشرح», «كيف أبدأ», «وش الخطوة الجاية» → setup. */
+export function guideRequest(text: string): GuideRequest["mode"] | null {
+  const q = tidy(text);
+  if (!q) return null;
+  if (pageWords.test(q)) return "page";
+  if (setupWords.test(q)) return "setup";
+  return null;
+}
+
+/** The first suggestion in the assistant while the setup is not complete. */
+export function setupSuggestion(status: Pick<OnboardingStatus, "track" | "done" | "total" | "complete">, stage: Stage): string | null {
+  if (status.complete || !status.total) return null;
+  const counts = `(${toArabicDigits(status.done)} من ${toArabicDigits(status.total)})`;
+  return status.track === "org" ? `كمّل ${barLabel("org", stage)} ${counts}` : `كمّل جولتك ${counts}`;
+}
+const toArabicDigits = (value: number) => String(value).replace(/[0-9]/g, digit => String.fromCharCode(0x0660 + Number(digit)));
+
+// Page tours ---------------------------------------------------------------------------------------
+export type TourStop = { targets: Target[]; title: string; text: string };
+export type PageTour = { title: string; stops: TourStop[] };
+
+/** The first sentences of a text, up to about `max` characters. */
+function short(text: string, max = 200): string {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max);
+  const end = Math.max(cut.lastIndexOf("."), cut.lastIndexOf("،"));
+  return `${cut.slice(0, end > 60 ? end : max).trim()}…`;
+}
+
+/** Stops for the main pages; the others get the general tour (title, main button, filters, list). */
+const tourStops: Record<string, TourStop[]> = {
+  "/dashboard/attendance": [
+    { targets: [{ selector: "main form" }], title: "اختر الفصل واليوم", text: "اختر الفرع والفصل والتاريخ، وتطلع لك قائمة طلابه." },
+    { targets: [{ selector: "button", text: "تحديد الباقين حاضرين" }], title: "تحديد الباقين حاضرين", text: "سجّل المتأخر والغائب أول، وبعدها هالزر يحط الباقين حاضرين بضغطة." },
+  ],
+  "/dashboard/children": [
+    { targets: [{ selector: "main form" }], title: "البحث والتصفية", text: "ابحث بالاسم أو صفّ حسب الفرع والشعبة والحالة." },
+    { targets: [{ selector: "main .list .list-row" }], title: "ملف الطالب", text: "اضغط على أي طالب يفتح ملفه: بياناته وأولياء أمره والمصرّح لهم ورابط البوابة." },
+    { targets: [{ selector: "summary", text: "إضافة طالب جديد" }], title: "إضافة طالب", text: "من هنا تضيف طالب جديد بياناته كاملة." },
+    { targets: [{ selector: "a", text: "استيراد من Excel" }], title: "استيراد من Excel", text: "إذا عندك قائمة جاهزة، ارفعها أو الصقها وراجع الصفوف قبل الحفظ." },
+  ],
+  "/dashboard/team": [
+    { targets: [{ selector: "button", text: "إنشاء رابط" }], title: "رابط انضمام", text: "أنشئ رابط وأرسله للموظف على الواتساب، ويدخل بدون إيميل." },
+    { targets: [{ selector: "main .list" }, { selector: "main .records" }], title: "أعضاء الفريق", text: "هنا كل الأعضاء: تقدر تغيّر الدور أو تعيّن كلمة مرور جديدة أو تزيل العضو." },
+  ],
+  "/dashboard/settings": [
+    { targets: [{ selector: "[role='tablist']" }], title: "التبويبات", text: "«حسابي» لاسمك وجوالك وكلمة المرور، و«المنشأة» للأقسام والهوية، و«الجهاز والإشعارات»، و«المساعدة»." },
+    { targets: [{ selector: "#me-section" }], title: "اسمك في المنشأة", text: "الاسم اللي يشوفه فريقك وعلى المهام المسندة لك." },
+  ],
+};
+
+/** A short tour of a main menu page (the pages listed in the sidebar), or null for other pages. */
+export function pageTour(path: string): PageTour | null {
+  const link = navLinks.find(item => item.href === path);
+  if (!link) return null;
+  const entry = knowledge.find(item => item.id !== "portal" && item.href === path);
+  const intro: TourStop = { targets: [{ selector: "main h1" }], title: link.label, text: short(entry?.answer ?? `هذي صفحة «${link.label}».`) };
+  const stops = tourStops[path] ?? [
+    { targets: [{ selector: "main .page-head .btn" }, { selector: "main .page-head a" }, { selector: "main summary" }, { selector: "main .btn-primary" }], title: "الزر الأساسي", text: entry?.steps?.[1] ?? "من هنا تبدأ الشغل الأساسي في الصفحة." },
+    { targets: [{ selector: "main form" }], title: "البحث والاختيار", text: "اختر أو اكتب هنا، وتتغيّر النتائج تحت." },
+    { targets: [{ selector: "main .list" }, { selector: "main table" }, { selector: "main .records" }], title: "القائمة", text: "هنا تلقى السجلات، واضغط أي واحد يفتح تفاصيله." },
+  ];
+  return { title: link.label, stops: [intro, ...stops] };
+}
+
+/** The page a tour is for. Browser-test pages stand in for a menu page with data-tour-as. */
+export function tourPathFor(path: string): string {
+  if (typeof document === "undefined" || !path.startsWith("/e2e/")) return path;
+  return document.querySelector("[data-tour-as]")?.getAttribute("data-tour-as") ?? path;
+}

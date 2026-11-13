@@ -2515,6 +2515,17 @@ describe("guided setup (onboarding)", () => {
     expect((await rows("select count(*)::int as n from public.onboarding_progress"))[0].n).toBeGreaterThanOrEqual(3);
   });
 
+  it("support has reply templates about the guide, suggested for tickets that ask about it", async () => {
+    expect(await rows("select title, path from private.support_templates where title in ('تشغيل الشرح','شرح صفحة معيّنة') order by sort_order")).toEqual([
+      { title: "تشغيل الشرح", path: "/dashboard/settings#help" }, { title: "شرح صفحة معيّنة", path: "/dashboard/assistant" }]);
+    expect((await rows("select body from private.support_templates where title='تشغيل الشرح'"))[0].body).toContain("«شغّل الشرح»");
+    await as("authenticated", teacher);
+    const thread = (await rows(`select public.open_support_thread('${orgC}','ما عرفت من وين أبدأ','وين ألقى الشرح؟ أبي جولة على المنصة',null)::text as id`))[0].id as string;
+    await as("authenticated", platformAdmin);
+    expect((await rows(`select title from public.admin_support_templates('${thread}') where suggested`))).toEqual([{ title: "تشغيل الشرح" }]);
+    await db.exec("reset role");
+  });
+
   it("the admin console sees each organization's setup (owner's track) and who is stuck; the daily summary lists them", async () => {
     await as("authenticated", platformAdmin);
     const all = await rows("select organization_id::text as org, done, total, missing, stuck from public.admin_onboarding()") as { org: string; done: number; total: number; missing: string[]; stuck: boolean }[];

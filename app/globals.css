@@ -1085,3 +1085,5 @@ a.stat:hover,a.list-row:hover,a.tile:hover,.org-tile:hover,.sidebar .nav-link:ho
 @media (max-width:699px){
   .onb-bubble,.onb-bubble.floating{top:auto!important;left:12px!important;right:12px;width:auto!important;transform:none;bottom:calc(84px + env(safe-area-inset-bottom))}
 }
+.bot-run{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.suggestion.setup{background:color-mix(in srgb,var(--primary) 14%,var(--surface));border-color:color-mix(in srgb,var(--primary) 35%,var(--border));font-weight:600}

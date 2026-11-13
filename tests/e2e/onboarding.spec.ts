@@ -137,3 +137,84 @@ test("everything done: no welcome, no bar", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "صفحة home" })).toBeVisible();
   await expect(page.locator(".onb-bar, .onb-welcome, .onb-bubble")).toHaveCount(0);
 });
+
+/** Opens the assistant (the phone top bar and the launcher both send this event) and asks it something. */
+async function ask(page: Page, text: string) {
+  const drawer = page.locator("#bot-drawer");
+  // The page may still be starting: send the event until the drawer opens.
+  await expect.poll(async () => {
+    await page.evaluate(() => window.dispatchEvent(new Event("seer:open-bot")));
+    return (await drawer.getAttribute("class")) ?? "";
+  }).toMatch(/is-open/);
+  await drawer.getByRole("textbox", { name: "اسأل مساعد سِير" }).fill(text);
+  await drawer.getByRole("button", { name: "إرسال" }).click();
+  return drawer.locator(".exchange").last();
+}
+
+for (const device of [{ name: "computer", width: 1366, height: 850 }, { name: "phone", width: 390, height: 844 }]) {
+  test.describe(`the guide from the assistant on a ${device.name}`, () => {
+    test.beforeEach(async ({ page }) => { await page.setViewportSize({ width: device.width, height: device.height }); });
+
+    test("the first suggestion is the setup's progress; «وش الخطوة الجاية» answers with «شغّل الشرح», which opens the next step", async ({ page }) => {
+      await fakeDatabase(page, { done: 4 });
+      await page.goto("/e2e/onboarding/home?done=4");
+      await expect.poll(async () => { await page.evaluate(() => window.dispatchEvent(new Event("seer:open-bot"))); return (await page.locator("#bot-drawer").getAttribute("class")) ?? ""; }).toMatch(/is-open/);
+      const first = page.locator("#bot-drawer .suggestions .suggestion").first();
+      await expect(first).toHaveText("كمّل تجهيز روضتك (٤ من ١٠)");
+      const reply = await ask(page, "وش الخطوة الجاية؟");
+      await expect(reply).toContainText("أنجزتوا ٤ من ١٠، وباقي ٦. الخطوة الجاية: «الطلاب»");
+      await reply.getByRole("button", { name: "شغّل الشرح" }).click();
+      await expect(page.locator("#bot-drawer")).not.toHaveClass(/is-open/);
+      await expect(page).toHaveURL(/\/e2e\/onboarding\/students$/);
+      await expectRingAround(page, "summary");
+      await expect(page.locator(".onb-bubble h3")).toHaveText("الطلاب");
+    });
+
+    test("complete: «ابدأ الشرح» replays every step from the start without changing anything", async ({ page }) => {
+      const db = await fakeDatabase(page, { done: 10 });
+      await page.goto("/e2e/onboarding/home?done=10");
+      const reply = await ask(page, "ابدأ الشرح");
+      await expect(reply).toContainText("خلّصتوا التجهيز كله");
+      await reply.getByRole("button", { name: "شغّل الشرح" }).click();
+      await expect(page).toHaveURL(/\/profile$/);
+      const bubble = page.locator(".onb-bubble");
+      await expect(bubble).toContainText("إعادة الشرح · ١ من ١٠");
+      await expectRingAround(page, "#me-section");
+      await bubble.getByRole("button", { name: "التالي" }).click();
+      await expect(page).toHaveURL(/\/device$/);
+      await expect(bubble).toContainText("إعادة الشرح · ٢ من ١٠");
+      await bubble.getByRole("button", { name: "إنهاء الشرح" }).click();
+      await expect(bubble).toHaveCount(0);
+      // Nothing was started, marked or snoozed, and no progress bar came back.
+      expect(db.state.calls.filter(name => name !== "onboarding_status")).toEqual([]);
+      await expect(page.locator(".onb-bar")).toHaveCount(0);
+    });
+
+    test("«اشرح لي هالصفحة» tours the main buttons of the page open now", async ({ page }) => {
+      await fakeDatabase(page, { done: 10 });
+      await page.goto("/e2e/onboarding/tour");
+      const reply = await ask(page, "اشرح لي هالصفحة");
+      await expect(reply).toContainText("أشرح لك «الطلاب» خطوة خطوة");
+      await reply.getByRole("button", { name: "شغّل شرح الصفحة" }).click();
+      const bubble = page.locator(".onb-bubble");
+      await expect(bubble).toContainText("شرح «الطلاب» · ١ من ٥");
+      await expectRingAround(page, "main h1");
+      const expected: [string, string][] = [["البحث والتصفية", "main form"], ["ملف الطالب", "main .list-row"], ["إضافة طالب", "summary"], ["استيراد من Excel", "a.btn"]];
+      for (const [title, selector] of expected) {
+        await bubble.getByRole("button", { name: "التالي" }).click();
+        await expect(bubble.locator("h3")).toHaveText(title);
+        await expectRingAround(page, selector);
+      }
+      await bubble.getByRole("button", { name: "خلصت" }).click();
+      await expect(bubble).toHaveCount(0);
+      await expect(page.locator(".onb-ring")).toHaveCount(0);
+    });
+  });
+}
+
+test("«اشرح لي هالصفحة» outside the main menu pages says where it works", async ({ page }) => {
+  await fakeDatabase(page, { done: 10 });
+  await page.goto("/e2e/onboarding/home?done=10");
+  const reply = await ask(page, "اشرح لي هالصفحة");
+  await expect(reply).toContainText("شرح الصفحة متاح للصفحات الرئيسية في القائمة");
+});

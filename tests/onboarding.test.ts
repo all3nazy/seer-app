@@ -47,3 +47,38 @@ describe("guided setup steps", () => {
     expect(stepTitle("portal")).toBe("روابط البوابة للأهالي");
   });
 });
+
+import { guideRequest, pageTour, setupSuggestion } from "../lib/onboarding";
+
+describe("guide requests to the assistant", () => {
+  it.each([
+    ["اشرح لي", "setup"], ["ابدأ الشرح", "setup"], ["كيف أبدأ؟", "setup"], ["كيف ابدا", "setup"], ["علمني", "setup"], ["جولة", "setup"],
+    ["خذني جولة", "setup"], ["وش الخطوة الجاية؟", "setup"], ["ايش الخطوة التالية", "setup"], ["شغّل الشرح", "setup"], ["كمّل تجهيز مدرستك", "setup"],
+    ["من وين أبدأ؟", "setup"], ["لو سمحت ابدأ الشرح", "setup"], ["كيف أشغّل الشرح؟", "setup"], ["وين وصلت في التجهيز", "setup"],
+    ["اشرح لي هالصفحة", "page"], ["اشرح هذي الصفحة", "page"], ["وش هالصفحة؟", "page"], ["جولة في هالصفحة", "page"], ["ممكن تشرح لي هالصفحة", "page"],
+    ["علمني هالصفحة", "page"], ["اشرحلي الصفحة الحالية", "page"],
+  ])("«%s» → %s", (text, mode) => {
+    expect(guideRequest(text)).toBe(mode);
+  });
+  it.each(["كيف أضيف موظف؟", "علمني كيف أسجل الحضور", "اشرح لي الحضور", "ابدأ يومي", "ملخص اليوم", "مين غايب اليوم؟", "سجّل ريم متأخرة", "الشرح الصحي للطالب سارة", ""])("«%s» is not a guide request", text => {
+    expect(guideRequest(text)).toBeNull();
+  });
+  it("the first suggestion shows the setup's progress until it is complete", () => {
+    expect(setupSuggestion({ track: "org", done: 4, total: 10, complete: false }, "school")).toBe("كمّل تجهيز مدرستك (٤ من ١٠)");
+    expect(setupSuggestion({ track: "org", done: 4, total: 10, complete: false }, "kindergarten")).toBe("كمّل تجهيز روضتك (٤ من ١٠)");
+    expect(setupSuggestion({ track: "staff", done: 2, total: 6, complete: false }, "school")).toBe("كمّل جولتك (٢ من ٦)");
+    expect(setupSuggestion({ track: "org", done: 10, total: 10, complete: true }, "school")).toBeNull();
+  });
+  it("every main menu page has a short tour; other pages do not", () => {
+    for (const link of navLinks) {
+      const tour = pageTour(link.href);
+      expect(tour?.title).toBe(link.label);
+      expect(tour!.stops.length).toBeGreaterThanOrEqual(2);
+      expect(tour!.stops[0].targets).toEqual([{ selector: "main h1" }]);
+      for (const stop of tour!.stops) expect(stop.text.length).toBeLessThanOrEqual(205);
+    }
+    expect(pageTour("/dashboard/children")!.stops.map(stop => stop.title)).toEqual(["الطلاب", "البحث والتصفية", "ملف الطالب", "إضافة طالب", "استيراد من Excel"]);
+    expect(pageTour("/dashboard/children/123")).toBeNull();
+    expect(pageTour("/admin")).toBeNull();
+  });
+});
