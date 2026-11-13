@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "../lib/supabase";
 import { arNumber } from "../lib/dates";
 import { computerOnlySection } from "../lib/navigation";
-import { GUIDE_EVENT, barLabel, guideFor, onStepPage, pageTour, placeBubble, PHONE_WIDTH, stepGuides, type BubblePlacement, tourPathFor, stepHelpLink, welcomeTitle, type GuideRequest, type OnboardingStatus, type PageTour, type StepKey, type StepState, type Target } from "../lib/onboarding";
+import { GUIDE_EVENT, barLabel, guideFor, onStepPage, pageTour, placeBubble, announceHash, testStepPage, PHONE_WIDTH, stepGuides, type BubblePlacement, tourPathFor, stepHelpLink, welcomeTitle, type GuideRequest, type OnboardingStatus, type PageTour, type StepKey, type StepState, type Target } from "../lib/onboarding";
 import type { Stage } from "../lib/stage";
 import { notify } from "./feedback";
 
@@ -54,6 +54,8 @@ export function OnboardingGuide({ organizationId, stage, initial, pagePrefix }: 
   const [layout, setLayout] = useState<BubblePlacement | null>(null);
   const bubbleRef = useRef<HTMLElement>(null);
   const [missing, setMissing] = useState(false);
+  // Each move to a step's page starts its two-second wait for the element again.
+  const [attempt, setAttempt] = useState(0);
   // Replaying a completed setup (index into its steps), or touring the page open now.
   const [replay, setReplayState] = useState<number | null>(null);
   const setReplay = useCallback((index: number | null) => { write(REPLAY_KEY, index === null ? null : `${organizationId}:${index}`); setReplayState(index); }, [organizationId]);
@@ -102,7 +104,7 @@ export function OnboardingGuide({ organizationId, stage, initial, pagePrefix }: 
   const welcome = Boolean(status?.show_welcome) && !dismissed && !tour && replay === null;
   const open = steps.filter(step => !step.done);
   const current: StepState | null = open.find(step => !skipped.includes(step.step)) ?? open[0] ?? null;
-  const isHere = useCallback((step: StepKey) => pagePrefix ? path === `${pagePrefix}/${step}` : onStepPage(step, path), [pagePrefix, path]);
+  const isHere = useCallback((step: StepKey) => pagePrefix ? path === testStepPage(pagePrefix, step).page : onStepPage(step, path), [pagePrefix, path]);
   const replayStep = replay !== null ? steps[replay]?.step ?? null : null;
   // What the bubble points at now: a page tour first, then a replay, then the setup step.
   const mode: "tour" | "replay" | "setup" | null = tour ? "tour" : replayStep ? "replay" : guiding && current ? "setup" : null;
@@ -112,9 +114,16 @@ export function OnboardingGuide({ organizationId, stage, initial, pagePrefix }: 
   const targetKey = mode === "tour" ? `tour:${tour!.index}` : step ? `${mode}:${step}` : null;
 
   const go = useCallback((key: StepKey) => {
-    const target = pagePrefix ? `${pagePrefix}/${key}` : stepGuides[key].path;
-    if (!isHere(key) || target.includes("#")) router.push(target);
+    const target = pagePrefix ? testStepPage(pagePrefix, key).href : stepGuides[key].path;
+    if (isHere(key) && !target.includes("#")) return;
+    setAttempt(value => value + 1);
+    // The guide scrolls to the element itself; the router's own scroll would move it away again.
+    router.push(target, { scroll: false });
+    // Same page with another #tab: no "hashchange" fires, so the tabs are told.
+    if (target.includes("#")) announceHash();
   }, [isHere, pagePrefix, router]);
+  // «افتح الصفحة»: the step's page again (its tab), when its button did not show.
+  const reopen = (key: StepKey) => { setMissing(false); go(key); };
   const startGuiding = () => { write(GUIDE_KEY, organizationId); setGuiding(true); };
   const stopGuiding = () => { write(GUIDE_KEY, null); setGuiding(false); };
 
@@ -174,12 +183,20 @@ export function OnboardingGuide({ organizationId, stage, initial, pagePrefix }: 
     let element: HTMLElement | null = null;
     let tries = 0, scrolled = false;
     const shown = Date.now();
+    // Waits for the element to show (e.g. its tab to open) for up to two seconds.
+    const WAIT = 2000;
+    let lostAt: number | null = null;
     const place = () => {
-      element = element?.isConnected ? element : findTarget(targets);
+      // A hidden element (e.g. in a tab that is not open) counts as not there.
+      const showing = (node: HTMLElement | null) => Boolean(node?.isConnected && node.getBoundingClientRect().width > 0);
+      element = showing(element) ? element : findTarget(targets);
+      if (element) lostAt = null;
+      else lostAt ??= Date.now();
       if (!element) {
         tries++;
-        if (tries > 8 && mode === "tour") { setTour(current => current ? nextStop(current) : null); return; }
-        if (tries > 12) setMissing(true);
+        // Two seconds after it went (or after the step opened), say so and offer «افتح الصفحة».
+        if (Date.now() - Math.max(shown, lostAt ?? shown) > WAIT && mode === "tour") { setTour(current => current ? nextStop(current) : null); return; }
+        if (Date.now() - Math.max(shown, lostAt ?? shown) > WAIT) setMissing(true);
         setLayout(null);
         return;
       }
@@ -201,8 +218,13 @@ export function OnboardingGuide({ organizationId, stage, initial, pagePrefix }: 
       // The pinned card's top edge: measured when it is pinned, estimated before.
       const dockTop = card?.classList.contains("docked") ? card.getBoundingClientRect().top : viewport.height - height - (phone ? 96 : 24);
       const next = placeBubble(padded, { height }, viewport, dockTop);
-      // Right after the step opens, an element hidden under the pinned card is brought up.
-      if (next.side === "dock" && !next.ring && Date.now() - shown < 1500) window.scrollBy({ top: rect.top - 76, behavior: "instant" as ScrollBehavior });
+      // Right after the step opens (the router may scroll after the move), an element that is off
+      // screen or hidden under the pinned card is brought back into view.
+      const cut = rect.height < viewport.height - 100 && (rect.top < 0 || rect.bottom > (next.side === "dock" ? dockTop : viewport.height));
+      if ((!next.ring || cut) && Date.now() - shown < 1500) {
+        if (next.side === "dock" || phone) window.scrollBy({ top: rect.top - 76, behavior: "instant" as ScrollBehavior });
+        else element.scrollIntoView({ block: "center", behavior: "instant" as ScrollBehavior });
+      }
       setLayout(current => current && JSON.stringify(current) === JSON.stringify(next) ? current : next);
     };
     place();
@@ -211,7 +233,7 @@ export function OnboardingGuide({ organizationId, stage, initial, pagePrefix }: 
     window.addEventListener("resize", place);
     return () => { window.clearInterval(timer); window.removeEventListener("scroll", place, true); window.removeEventListener("resize", place); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [targetKey, here, welcome, path]);
+  }, [targetKey, here, welcome, path, attempt]);
 
   async function begin() {
     if (!current) return;
@@ -274,8 +296,10 @@ export function OnboardingGuide({ organizationId, stage, initial, pagePrefix }: 
       <span className="hint">إعادة الشرح · {arNumber((replay ?? 0) + 1)} من {arNumber(steps.length)}</span>
       <h3 id="onb-bubble-title">{guide.title}</h3>
       {here ? <p>{guide.text}</p> : <p>هالخطوة في صفحة ثانية.</p>}
+      {here && missing ? <p className="hint" role="status">ما ظهر الزر المطلوب في الصفحة. افتح الصفحة من جديد وأأشّر لك عليه.</p> : null}
       <div className="onb-actions">
         {!here ? <button type="button" className="btn btn-sm btn-primary" onClick={() => go(step)}>روح لها</button> : null}
+        {here && missing ? <button type="button" className="btn btn-sm btn-primary" onClick={() => reopen(step)}>افتح الصفحة</button> : null}
         <button type="button" className="btn btn-sm btn-primary" onClick={nextReplay}>{(replay ?? 0) + 1 >= steps.length ? "خلصت" : "التالي"}</button>
         <button type="button" className="btn btn-sm" onClick={() => setReplay(null)}>إنهاء الشرح</button>
       </div>
@@ -288,9 +312,10 @@ export function OnboardingGuide({ organizationId, stage, initial, pagePrefix }: 
       <span className="hint">الخطوة {arNumber(index)} من {arNumber(total)}</span>
       <h3 id="onb-bubble-title">{guide.title}</h3>
       {here ? <p>{guide.text}</p> : <p>الخطوة الجاية في صفحة ثانية.</p>}
-      {here && missing ? <p className="hint">{computerOnly ? "هالخطوة تنفتح على الكمبيوتر أو الآيباد. كمّلها من هناك متى ما تيسّر." : "ما لقيت الزر في الصفحة. انزل تحت شوي، أو اطلب مساعدة."}</p> : null}
+      {here && missing ? <p className="hint" role="status">{computerOnly ? "ما ظهر الزر المطلوب. هالخطوة تنفتح على الكمبيوتر أو الآيباد، كمّلها من هناك متى ما تيسّر." : "ما ظهر الزر المطلوب في الصفحة. افتح الصفحة من جديد وأأشّر لك عليه، أو اطلب مساعدة."}</p> : null}
       <div className="onb-actions">
         {!here ? <button type="button" className="btn btn-sm btn-primary" onClick={() => go(current.step)}>روح لها</button> : null}
+        {here && missing ? <button type="button" className="btn btn-sm btn-primary" onClick={() => reopen(current.step)}>افتح الصفحة</button> : null}
         {here && current.markable && guide.mark ? <button type="button" className="btn btn-sm btn-primary" disabled={busy} onClick={() => void mark()}>{guide.mark}</button> : null}
         {open.length > 1 ? <button type="button" className="btn btn-sm" onClick={next}>التالي</button> : null}
         <button type="button" className="btn btn-sm" onClick={stopGuiding}>إخفاء الشرح</button>

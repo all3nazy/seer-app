@@ -1,4 +1,6 @@
 import { notFound } from "next/navigation";
+import { SettingsTabs } from "../../../../components/settings-tabs";
+import { GuideButton } from "../../../../components/guide-button";
 import { OnboardingGuide } from "../../../../components/onboarding-guide";
 import { isStepKey, type OnboardingStatus, type StepKey } from "../../../../lib/onboarding";
 
@@ -16,7 +18,7 @@ const markable = new Set<StepKey>(["device", "sections", "my", "support"]);
 export default async function OnboardingTestPage({ params, searchParams }: { params: Promise<{ step: string }>; searchParams: Promise<{ track?: string; done?: string; welcome?: string }> }) {
   if (process.env.SEER_E2E !== "1") notFound();
   const [{ step }, query] = await Promise.all([params, searchParams]);
-  if (!isStepKey(step) && step !== "home" && step !== "tour") notFound();
+  if (!isStepKey(step) && step !== "home" && step !== "tour" && step !== "settings") notFound();
   // «tour»: a stand-in for the students page, for the page tour.
   if (step === "tour") return <div data-tour-as="/dashboard/children">
     <OnboardingGuide organizationId="00000000-0000-0000-0000-0000000000e2" stage="kindergarten" initial={null} pagePrefix="/e2e/onboarding" />
@@ -34,10 +36,13 @@ export default async function OnboardingTestPage({ params, searchParams }: { par
     <OnboardingGuide organizationId="00000000-0000-0000-0000-0000000000e2" stage="kindergarten" initial={initial} pagePrefix="/e2e/onboarding" />
     <h1>صفحة {step}</h1>
     <p style={{ height: 500 }}>محتوى الصفحة.</p>
-    {step === "profile" ? <section id="me-section" className="card" style={{ maxWidth: 640 }}><label>اسمك<input /></label><label>جوالك<input /></label></section> : null}
-    {step === "device" ? <section id="notify" className="card" style={{ maxWidth: 640 }}><button type="button" className="btn btn-primary">تفعيل الإشعارات على هذا الجهاز</button></section> : null}
-    {/* Like the real «أقسام وهوية»: a long list in the settings column. */}
-    {step === "sections" ? <section id="sections" className="card" style={{ maxWidth: 640, display: "grid", gap: 8 }}>{Array.from({ length: 14 }, (_, index) => <label key={index}><input type="checkbox" defaultChecked /> قسم رقم {index + 1}</label>)}</section> : null}
+    {/* The settings steps share one page with the real tabs, as /dashboard/settings does. */}
+    {step === "settings" ? <SettingsTabs tabs={[
+      { id: "account", label: "حسابي", content: <section id="me-section" className="card" style={{ maxWidth: 640 }}><label>اسمك<input /></label><label>جوالك<input /></label></section> },
+      { id: "organization", label: "المنشأة", content: <section id="sections" className="card" style={{ maxWidth: 640, display: "grid", gap: 8 }}>{Array.from({ length: 14 }, (_, index) => <label key={index}><input type="checkbox" defaultChecked /> قسم رقم {index + 1}</label>)}</section> },
+      { id: "device", label: "الجهاز والإشعارات", content: <section id="notify" className="card" style={{ maxWidth: 640 }}><button type="button" className="btn btn-primary">تفعيل الإشعارات على هذا الجهاز</button></section> },
+      { id: "help", label: "المساعدة", content: <section className="card" style={{ maxWidth: 640 }}><GuideButton /></section> },
+    ]} /> : null}
     {step === "classes" ? <section className="card"><details><summary>إضافة صف</summary></details></section> : null}
     {step === "students" ? <section className="card"><details><summary>إضافة طالب جديد</summary></details></section> : null}
     {step === "guardians" ? <section className="card" data-tour="guardians"><h2>أولياء الأمور</h2><p>ولي أمر ١</p></section> : null}

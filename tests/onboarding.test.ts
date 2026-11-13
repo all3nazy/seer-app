@@ -107,3 +107,19 @@ describe("where the bubble goes", () => {
     expect(placeBubble({ top: 600, left: 10, width: 370, height: 80 }, { height: 200 }, phone, 560).ring).toBeNull();
   });
 });
+
+import { HASH_EVENT, testStepPage } from "../lib/onboarding";
+describe("same page, another tab", () => {
+  it("the settings steps share one page and keep their tab", () => {
+    expect(testStepPage("/e2e/onboarding", "profile")).toEqual({ page: "/e2e/onboarding/settings", href: "/e2e/onboarding/settings#account" });
+    expect(testStepPage("/e2e/onboarding", "sections")).toEqual({ page: "/e2e/onboarding/settings", href: "/e2e/onboarding/settings#organization" });
+    expect(testStepPage("/e2e/onboarding", "team")).toEqual({ page: "/e2e/onboarding/team", href: "/e2e/onboarding/team" });
+  });
+  it("the settings tabs follow moves that do not fire hashchange", async () => {
+    const { readFileSync } = await import("node:fs");
+    const tabs = readFileSync("components/settings-tabs.tsx", "utf8");
+    expect(HASH_EVENT).toBe("seer:hash");
+    expect(tabs).toContain("addEventListener(HASH_EVENT, sync)");
+    expect(tabs).toContain('addEventListener("popstate", sync)');
+  });
+});
