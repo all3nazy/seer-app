@@ -19,8 +19,11 @@ export function BotDock({ stage, organizations, disabled = [] }: { stage: Stage;
   // The phone top bar opens the assistant with an event, so no floating button covers the page.
   useEffect(() => {
     const openBot = () => setOpen(true);
+    // Starting the guide from the assistant closes it so the page and its highlight show.
+    const closeBot = () => setOpen(false);
     window.addEventListener("seer:open-bot", openBot);
-    return () => window.removeEventListener("seer:open-bot", openBot);
+    window.addEventListener("seer:close-bot", closeBot);
+    return () => { window.removeEventListener("seer:open-bot", openBot); window.removeEventListener("seer:close-bot", closeBot); };
   }, []);
   useEffect(() => {
     if (!open) return;

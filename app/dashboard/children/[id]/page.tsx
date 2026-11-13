@@ -81,7 +81,7 @@ export default async function StudentFile({ params, searchParams }: { params: Pr
       {manager ? <details className="desktop-only" style={{ marginTop: 16 }}><summary>تعديل البيانات</summary><div style={{ marginTop: 12 }}><StudentProfileForm organizationId={org} branches={branches} sections={sections} child={profile} /></div></details> : null}
     </section>
 
-    <section className="card" aria-labelledby="guardians-title">
+    <section className="card" aria-labelledby="guardians-title" data-tour="guardians">
       <h2 id="guardians-title">أولياء الأمور</h2>
       {links.length ? <ul className="records">{links.map(link => {
         const guardian = guardians.find(item => item.id === link.guardian_id);

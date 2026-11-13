@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { GuideButton } from "../../../components/guide-button";
 import { redirect } from "next/navigation";
 import { requestMyOrganizations, requestSession } from "../../../lib/supabase/server";
 import { SettingsTabs } from "../../../components/settings-tabs";
@@ -89,6 +90,11 @@ export default async function SettingsPage() {
       { id: "help", label: "المساعدة", content: <>
       <section aria-labelledby="help"><h2 id="help" className="section-label">المساعدة</h2>
         <p className="hint" style={{ marginTop: 0 }}>اسأل المساعد أولًا، يشرح لك أي قسم خطوة بخطوة. وإذا ما لقيت جوابك، كلّم فريق سِير من هنا ويرد عليك داخل المنصة.</p>
+        <div className="card guide-start" style={{ display: "grid", gap: 8, marginBottom: 12 }}>
+          <strong>الشرح الموجّه</strong>
+          <span className="hint">يوديك لكل خطوة من تجهيز المنشأة ويأشّر لك على الزر المطلوب. وإذا خلصتوا يعيد لك الشرح من البداية بدون ما يتغيّر شي.</span>
+          <span style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><GuideButton /><GuideButton mode="page" label="اشرح لي هالصفحة" className="btn" /></span>
+        </div>
         {tickets.length ? <div className="group" style={{ marginBottom: 12 }}>{tickets.map(ticket => <Link key={ticket.id} className="group-row" href={`/dashboard/support/${ticket.id}`}>
           <span className="tile-icon tone-plum"><Icon name="chat" /></span><span className="grow">{ticket.subject}</span>
           <span className={`chip-soft ${ticket.status === "closed" ? "" : ticket.last_sender === "admin" ? "ok" : "coral"}`}>{ticket.status === "closed" ? "مغلقة" : ticket.last_sender === "admin" ? "وصلك رد" : "بانتظار الفريق"}</span></Link>)}</div> : null}

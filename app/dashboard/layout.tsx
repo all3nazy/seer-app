@@ -9,6 +9,8 @@ import { onColor } from "../../lib/documents";
 import { LEGAL_VERSION } from "../../lib/legal";
 import { LegalConsent } from "../../components/legal-consent";
 import { effectiveSections, pilotHides, pilotMode, pilotTexts } from "../../lib/pilot";
+import { OnboardingGuide } from "../../components/onboarding-guide";
+import type { OnboardingStatus } from "../../lib/onboarding";
 
 /**
  * The shell for every dashboard page: organizations, their subscription state, sections and brand
@@ -16,7 +18,7 @@ import { effectiveSections, pilotHides, pilotMode, pilotTexts } from "../../lib/
  * data anyway); the last days and the grace period show a banner.
  */
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { user } = await requestSession();
+  const { user, client } = await requestSession();
   const [{ data }, admin, support, head] = await Promise.all([
     requestMyOrganizations(),
     requestPlatformAdmin(),
@@ -35,6 +37,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (current?.role === "owner" && current.legal_version !== LEGAL_VERSION) {
     return <LegalConsent organizationId={current.organization_id} organizationName={current.name} updated={Boolean(current.legal_version)} />;
   }
+  // Guided setup for this member in this organization (none while the organization is locked).
+  const onboarding = current && current.access !== "locked"
+    ? ((await client.rpc("onboarding_status", { org: current.organization_id })).data as OnboardingStatus | null) : null;
   // During the pilot there is nothing to renew, so no banner.
   const notice = pilot ? null : renewalNotice(current);
   const sections = current ? effectiveSections({ features: current.features ?? [], disabled: current.disabled_features ?? [] }, pilot) : null;
@@ -46,6 +51,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     manager={organizations.some(org => org.role === "owner" || org.role === "admin")} userId={user?.id}
     sections={sections} brand={brand}
     notice={notice ? { text: notice, owner: current?.role === "owner", org: current!.organization_id } : null} platformAdmin={admin} support={support}>
+    {current && current.access !== "locked" ? <OnboardingGuide organizationId={current.organization_id} stage={stageOf(current.type)} initial={onboarding} /> : null}
     {gate === "on" || !feature ? children : <section className="card" style={{ maxWidth: 560, display: "grid", gap: 12 }}>
       <h1 style={{ fontSize: 20, margin: 0 }}>🔒 {featureLabels[feature]}</h1>
       {pilot && pilotHides(feature) ? <p style={{ margin: 0 }}>{pilotTexts.payments}</p>

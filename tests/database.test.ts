@@ -156,6 +156,9 @@ beforeAll(async () => {
   const templates = readdirSync("supabase/migrations").filter(name => name.endsWith("_reply_templates.sql"));
   if (templates.length !== 1) throw new Error("Expected exactly one reply templates migration");
   await db.exec(readFileSync(`supabase/migrations/${templates[0]}`, "utf8"));
+  const guided = readdirSync("supabase/migrations").filter(name => name.endsWith("_onboarding.sql") && !name.endsWith("_org_onboarding.sql"));
+  if (guided.length !== 1) throw new Error("Expected exactly one guided onboarding migration");
+  await db.exec(readFileSync(`supabase/migrations/${guided[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -2400,5 +2403,145 @@ describe("support reply templates", () => {
       for (const row of found) if (!row.allowed) missing.push(row.signature);
     }
     expect(missing).toEqual([]);
+  });
+});
+
+describe("guided setup (onboarding)", () => {
+  const orgC = "c2000000-0000-0000-0000-0000000000c1";
+  const boss = "c1000000-0000-0000-0000-0000000000c1", helper = "c1000000-0000-0000-0000-0000000000c2", teacher = "c1000000-0000-0000-0000-0000000000c3";
+  const platformAdmin = "60000000-0000-0000-0000-0000000000ad";
+  type Status = { track: string; steps: { step: string; done: boolean; markable: boolean }[]; done: number; total: number; complete: boolean; started: boolean; snooze_count: number; snoozed_until: string | null; show_welcome: boolean };
+  const call = async (user: string, sql: string) => { await as("authenticated", user); const r = (await rows(sql))[0]; await db.exec("reset role"); return Object.values(r)[0] as Status; };
+  const status = (user: string) => call(user, `select public.onboarding_status('${orgC}') as s`);
+  const doneOf = (s: Status) => s.steps.filter(x => x.done).map(x => x.step);
+  beforeAll(async () => {
+    await db.exec("reset role");
+    await db.exec(`insert into auth.users(id,email,email_confirmed_at) values ('${boss}','boss@c.test',now()),('${helper}','helper@c.test',now()),('${teacher}','teacher@c.test',now()),('${platformAdmin}','admin@seer.test',now()) on conflict do nothing;
+      insert into private.platform_admins(user_id) values ('${platformAdmin}') on conflict do nothing;
+      delete from private.telegram_links; insert into private.telegram_links(user_id, chat_id) values ('${platformAdmin}', 779001);
+      insert into public.organizations(id,name,type) values ('${orgC}','روضة التأسيس','kindergarten');
+      insert into public.memberships(organization_id,user_id,role) values ('${orgC}','${boss}','owner'),('${orgC}','${teacher}','staff');`);
+  });
+
+  it("owners get the organization steps in order; the welcome screen shows until «ابدأ» or a snooze", async () => {
+    const first = await status(boss);
+    expect(first.track).toBe("org");
+    expect(first.steps.map(s => s.step)).toEqual(["profile", "device", "sections", "classes", "students", "guardians", "team", "attendance", "daily", "portal"]);
+    expect(first).toMatchObject({ done: 1, total: 10, complete: false, started: false, show_welcome: true }); // team: the teacher is already a member
+    expect(doneOf(first)).toEqual(["team"]);
+    const started = await call(boss, `select public.onboarding_start('${orgC}') as s`);
+    expect(started).toMatchObject({ started: true, show_welcome: false, complete: false });
+  });
+
+  it("steps are done automatically from the real data", async () => {
+    await db.exec(`update public.memberships set display_name='أبو فهد' where organization_id='${orgC}' and user_id='${boss}';
+      insert into public.member_phones(organization_id,user_id,phone) values ('${orgC}','${boss}','0551234567');
+      insert into public.grade_levels(id,organization_id,name,stage,sort_order) values ('c7000000-0000-0000-0000-0000000000c1','${orgC}','KG1','kindergarten',1);
+      insert into public.sections(organization_id,grade_level_id,name) values ('${orgC}','c7000000-0000-0000-0000-0000000000c1','أ');
+      insert into public.children(id,organization_id,full_name) values ('c3000000-0000-0000-0000-0000000000c1','${orgC}','طفل');
+      insert into public.guardians(id,organization_id,full_name,phone) values ('c4000000-0000-0000-0000-0000000000c1','${orgC}','ولي','0550000001');
+      insert into public.child_guardians(organization_id,child_id,guardian_id,relationship) values ('${orgC}','c3000000-0000-0000-0000-0000000000c1','c4000000-0000-0000-0000-0000000000c1','father');
+      insert into public.attendance(organization_id,child_id,attendance_date,status,recorded_by) values ('${orgC}','c3000000-0000-0000-0000-0000000000c1',current_date,'present','${boss}');`);
+    expect(doneOf(await status(boss))).toEqual(["profile", "classes", "students", "guardians", "team", "attendance"]);
+    await db.exec(`insert into public.daily_reports(organization_id,child_id,report_date,mood,updated_by) values ('${orgC}','c3000000-0000-0000-0000-0000000000c1',current_date,'happy','${boss}');
+      insert into private.guardian_portals(guardian_id,organization_id) values ('c4000000-0000-0000-0000-0000000000c1','${orgC}');
+      insert into public.push_subscriptions(user_id,endpoint,p256dh,auth) values ('${boss}','https://push.example.test/c1','${"k".repeat(40)}','${"a".repeat(16)}');`);
+    const s = await status(boss);
+    expect(s.done).toBe(9);
+    expect(s.steps.filter(x => !x.done)).toEqual([{ step: "sections", done: false, markable: true }]);
+  });
+
+  it("only unmeasurable steps can be marked; marking the last one completes the setup", async () => {
+    await as("authenticated", boss);
+    await expect(db.exec(`select public.onboarding_mark('${orgC}','students')`)).rejects.toMatchObject({ code: "22023" });
+    await expect(db.exec(`select public.onboarding_mark('${orgC}','anything')`)).rejects.toMatchObject({ code: "22023" });
+    const done = await call(boss, `select public.onboarding_mark('${orgC}','sections') as s`);
+    expect(done).toMatchObject({ done: 10, total: 10, complete: true, show_welcome: false });
+    expect((await rows(`select completed_at is not null as c from public.onboarding_progress where organization_id='${orgC}' and user_id='${boss}'`))[0].c).toBe(true);
+    // A completed setup stays completed (and snoozing does nothing).
+    expect((await call(boss, `select public.onboarding_snooze('${orgC}') as s`)).snooze_count).toBe(0);
+  });
+
+  it("a section that is turned off drops its step", async () => {
+    await db.exec(`insert into public.organization_settings(organization_id, disabled_features) values ('${orgC}', array['daily']) on conflict (organization_id) do update set disabled_features = array['daily']`);
+    expect((await status(boss)).steps.map(s => s.step)).not.toContain("daily");
+    await db.exec(`update public.organization_settings set disabled_features = '{}' where organization_id='${orgC}'`);
+  });
+
+  it("staff get the short tour; their attendance and daily steps follow what they recorded, or are marked", async () => {
+    const s = await status(teacher);
+    expect(s.track).toBe("staff");
+    expect(s.steps.map(x => x.step)).toEqual(["profile", "device", "attendance", "daily", "my", "support"]);
+    expect(s.done).toBe(0); // the owner's attendance does not count for the teacher
+    await db.exec(`update public.attendance set recorded_by='${teacher}' where organization_id='${orgC}'`);
+    expect(doneOf(await status(teacher))).toEqual(["attendance"]);
+    for (const step of ["my", "support", "daily", "device"]) await call(teacher, `select public.onboarding_mark('${orgC}','${step}') as s`);
+    await as("authenticated", teacher);
+    await expect(db.exec(`select public.onboarding_mark('${orgC}','profile')`)).rejects.toMatchObject({ code: "22023" });
+    await db.exec("reset role");
+    expect((await status(teacher)).done).toBe(5);
+  });
+
+  it("«ذكّرني بعدين» hides the welcome for 12 hours; the third snooze alerts the platform admins once (Telegram too)", async () => {
+    await db.exec(`insert into public.memberships(organization_id,user_id,role) values ('${orgC}','${helper}','admin')`);
+    await db.exec("delete from private.telegram_outbox");
+    let s = await call(helper, `select public.onboarding_snooze('${orgC}') as s`);
+    expect(s).toMatchObject({ track: "org", snooze_count: 1, show_welcome: false, complete: false });
+    expect(Date.parse(s.snoozed_until!) - Date.now()).toBeGreaterThan(11.9 * 3600_000);
+    await db.exec(`update public.onboarding_progress set snoozed_until = now() - interval '1 minute' where user_id='${helper}'`);
+    expect((await status(helper)).show_welcome).toBe(true);
+    await call(helper, `select public.onboarding_snooze('${orgC}') as s`);
+    expect((await rows(`select count(*)::int as n from public.notifications where kind='onboarding'`))[0].n).toBe(0);
+    await call(helper, `select public.onboarding_snooze('${orgC}') as s`);
+    await call(helper, `select public.onboarding_snooze('${orgC}') as s`);
+    const alerts = await rows(`select user_id::text as who, title, body, url from public.notifications where kind='onboarding'`);
+    expect(alerts).toEqual([{ who: platformAdmin, title: "منشأة متعثرة في التأسيس: روضة التأسيس", body: "أجّلت التجهيز 3 مرات، وأنجزت 7 من 10 خطوات.", url: `/admin/subscribers/${orgC}` }]);
+    expect((await rows("select body from private.telegram_outbox")).map(r => r.body)).toEqual([expect.stringContaining("منشأة متعثرة في التأسيس")]);
+  });
+
+  it("progress is private: members read only their own row and change it only through the functions", async () => {
+    await as("authenticated", teacher);
+    expect((await rows("select user_id::text as u from public.onboarding_progress")).map(r => r.u)).toEqual([teacher]);
+    await expect(db.exec(`update public.onboarding_progress set completed_at = now() where user_id='${teacher}'`)).rejects.toBeDefined();
+    await expect(db.exec(`insert into public.onboarding_progress(organization_id,user_id,track) values ('${orgA}','${teacher}','staff')`)).rejects.toBeDefined();
+    await as("authenticated", outsider);
+    expect(await rows("select * from public.onboarding_progress")).toEqual([]);
+    await expect(db.exec(`select public.onboarding_status('${orgC}')`)).rejects.toMatchObject({ code: "42501" });
+    await expect(db.exec(`select public.onboarding_snooze('${orgC}')`)).rejects.toMatchObject({ code: "42501" });
+    await expect(db.exec("select * from public.admin_onboarding()")).rejects.toMatchObject({ code: "42501" });
+    await as("anon");
+    await expect(db.exec(`select public.onboarding_status('${orgC}')`)).rejects.toBeDefined();
+    await as("authenticated", platformAdmin);
+    expect((await rows("select count(*)::int as n from public.onboarding_progress"))[0].n).toBeGreaterThanOrEqual(3);
+  });
+
+  it("support has reply templates about the guide, suggested for tickets that ask about it", async () => {
+    expect(await rows("select title, path from private.support_templates where title in ('تشغيل الشرح','شرح صفحة معيّنة') order by sort_order")).toEqual([
+      { title: "تشغيل الشرح", path: "/dashboard/settings#help" }, { title: "شرح صفحة معيّنة", path: "/dashboard/assistant" }]);
+    expect((await rows("select body from private.support_templates where title='تشغيل الشرح'"))[0].body).toContain("«شغّل الشرح»");
+    await as("authenticated", teacher);
+    const thread = (await rows(`select public.open_support_thread('${orgC}','ما عرفت من وين أبدأ','وين ألقى الشرح؟ أبي جولة على المنصة',null)::text as id`))[0].id as string;
+    await as("authenticated", platformAdmin);
+    expect((await rows(`select title from public.admin_support_templates('${thread}') where suggested`))).toEqual([{ title: "تشغيل الشرح" }]);
+    await db.exec("reset role");
+  });
+
+  it("the admin console sees each organization's setup (owner's track) and who is stuck; the daily summary lists them", async () => {
+    await as("authenticated", platformAdmin);
+    const all = await rows("select organization_id::text as org, done, total, missing, stuck from public.admin_onboarding()") as { org: string; done: number; total: number; missing: string[]; stuck: boolean }[];
+    expect(all.find(r => r.org === orgC)).toEqual({ org: orgC, done: 10, total: 10, missing: [], stuck: false });
+    const a = all.find(r => r.org === orgA)!;
+    expect(a.missing.length).toBeGreaterThan(0);
+    await db.exec("reset role");
+    // Joined 10 days ago (the identity trigger is bypassed for the test).
+    await db.exec(`set session_replication_role = replica; update public.memberships set joined_at = now() - interval '10 days' where organization_id='${orgA}' and role='owner'; set session_replication_role = default;`);
+    await as("authenticated", platformAdmin);
+    expect((await rows(`select stuck from public.admin_onboarding() where organization_id='${orgA}'`))[0].stuck).toBe(true);
+    await db.exec("reset role");
+    await db.exec("delete from private.telegram_outbox");
+    await db.exec("select private.telegram_daily()");
+    const stuck = (await rows("select body from private.telegram_outbox")).map(r => r.body as string).find(b => b.includes("متعثرة في التأسيس"));
+    expect(stuck).toContain((await rows(`select name from public.organizations where id='${orgA}'`))[0].name as string);
+    expect(stuck).not.toContain("روضة التأسيس");
   });
 });
