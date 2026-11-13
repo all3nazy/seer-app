@@ -34,11 +34,18 @@ export default async function OnboardingTestPage({ params, searchParams }: { par
     <OnboardingGuide organizationId="00000000-0000-0000-0000-0000000000e2" stage="kindergarten" initial={initial} pagePrefix="/e2e/onboarding" />
     <h1>صفحة {step}</h1>
     <p style={{ height: 500 }}>محتوى الصفحة.</p>
-    {step === "profile" ? <section id="me-section" className="card"><label>اسمك<input /></label></section> : null}
-    {step === "device" ? <section id="notify" className="card"><button type="button" className="btn btn-primary">تفعيل الإشعارات على هذا الجهاز</button></section> : null}
-    {step === "sections" ? <section id="sections" className="card">الأقسام</section> : null}
+    {step === "profile" ? <section id="me-section" className="card" style={{ maxWidth: 640 }}><label>اسمك<input /></label><label>جوالك<input /></label></section> : null}
+    {step === "device" ? <section id="notify" className="card" style={{ maxWidth: 640 }}><button type="button" className="btn btn-primary">تفعيل الإشعارات على هذا الجهاز</button></section> : null}
+    {/* Like the real «أقسام وهوية»: a long list in the settings column. */}
+    {step === "sections" ? <section id="sections" className="card" style={{ maxWidth: 640, display: "grid", gap: 8 }}>{Array.from({ length: 14 }, (_, index) => <label key={index}><input type="checkbox" defaultChecked /> قسم رقم {index + 1}</label>)}</section> : null}
     {step === "classes" ? <section className="card"><details><summary>إضافة صف</summary></details></section> : null}
     {step === "students" ? <section className="card"><details><summary>إضافة طالب جديد</summary></details></section> : null}
+    {step === "guardians" ? <section className="card" data-tour="guardians"><h2>أولياء الأمور</h2><p>ولي أمر ١</p></section> : null}
+    {step === "team" ? <section className="card"><button type="button" className="btn-primary">إنشاء رابط انضمام</button></section> : null}
+    {step === "attendance" ? <form className="card"><button type="button" className="btn btn-sm">تحديد الباقين حاضرين</button></form> : null}
+    {/* Taller than the screen: the bubble is pinned to the bottom. */}
+    {step === "daily" ? <form className="card" style={{ minHeight: 1300 }}><label>الطفل<select><option>طفل</option></select></label></form> : null}
+    {step === "portal" ? <section className="card"><button type="button" className="btn btn-sm">رابط البوابة</button></section> : null}
     <p style={{ height: 400 }} />
   </>;
 }

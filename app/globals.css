@@ -1080,10 +1080,10 @@ a.stat:hover,a.list-row:hover,a.tile:hover,.org-tile:hover,.sidebar .nav-link:ho
 .onb-bubble{position:fixed;z-index:49;display:grid;gap:6px;padding:14px 16px;border-radius:16px;background:var(--surface);border:1px solid var(--border);box-shadow:var(--shadow-lg);max-width:calc(100vw - 24px)}
 .onb-bubble h3{margin:0;font-size:16px}
 .onb-bubble p{margin:0;line-height:1.7}
-.onb-bubble.floating{bottom:24px;left:50%;transform:translateX(-50%);width:min(380px,calc(100vw - 24px))}
+.onb-bubble.floating,.onb-bubble.docked{bottom:24px;left:50%;transform:translateX(-50%);width:min(420px,calc(100vw - 24px));max-height:45vh;overflow:auto}
 .onb-help{font-size:13px}
 @media (max-width:699px){
-  .onb-bubble,.onb-bubble.floating{top:auto!important;left:12px!important;right:12px;width:auto!important;transform:none;bottom:calc(84px + env(safe-area-inset-bottom))}
+  .onb-bubble,.onb-bubble.floating,.onb-bubble.docked{top:auto!important;left:12px!important;right:12px;width:auto!important;transform:none;bottom:calc(84px + env(safe-area-inset-bottom));max-height:40vh;overflow:auto}
 }
 .bot-run{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 .suggestion.setup{background:color-mix(in srgb,var(--primary) 14%,var(--surface));border-color:color-mix(in srgb,var(--primary) 35%,var(--border));font-weight:600}

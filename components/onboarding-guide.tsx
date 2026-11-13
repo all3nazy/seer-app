@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "../lib/supabase";
 import { arNumber } from "../lib/dates";
 import { computerOnlySection } from "../lib/navigation";
-import { GUIDE_EVENT, barLabel, guideFor, onStepPage, pageTour, stepGuides, tourPathFor, stepHelpLink, welcomeTitle, type GuideRequest, type OnboardingStatus, type PageTour, type StepKey, type StepState, type Target } from "../lib/onboarding";
+import { GUIDE_EVENT, barLabel, guideFor, onStepPage, pageTour, placeBubble, PHONE_WIDTH, stepGuides, type BubblePlacement, tourPathFor, stepHelpLink, welcomeTitle, type GuideRequest, type OnboardingStatus, type PageTour, type StepKey, type StepState, type Target } from "../lib/onboarding";
 import type { Stage } from "../lib/stage";
 import { notify } from "./feedback";
 
@@ -27,7 +27,6 @@ export function findTarget(targets: Target[], root: ParentNode = document): HTML
   return null;
 }
 
-type Box = { top: number; left: number; width: number; height: number };
 /** A page tour in progress: its stops, the one shown, and the page it belongs to. */
 type Tour = PageTour & { index: number; path: string };
 
@@ -51,16 +50,22 @@ export function OnboardingGuide({ organizationId, stage, initial, pagePrefix }: 
   // Closed here (after «ابدأ» or «ذكّرني بعدين») before the database answers.
   const [dismissed, setDismissed] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [box, setBox] = useState<Box | null>(null);
+  // The highlight ring and where the bubble sits (beside, below, above, or pinned to the bottom).
+  const [layout, setLayout] = useState<BubblePlacement | null>(null);
+  const bubbleRef = useRef<HTMLElement>(null);
   const [missing, setMissing] = useState(false);
   // Replaying a completed setup (index into its steps), or touring the page open now.
   const [replay, setReplayState] = useState<number | null>(null);
   const setReplay = useCallback((index: number | null) => { write(REPLAY_KEY, index === null ? null : `${organizationId}:${index}`); setReplayState(index); }, [organizationId]);
   const [tour, setTour] = useState<Tour | null>(null);
   const previous = useRef<StepKey | null>(null);
+  // The first answer from the database only brings the status up to date; it announces nothing.
+  const synced = useRef(false);
+  const skipNext = useRef(false);
   const rpc = useCallback(async (name: string, args: Record<string, unknown> = {}): Promise<OnboardingStatus | null> => {
     const { data, error } = await getSupabaseBrowserClient().rpc(name, { org: organizationId, ...args });
     if (error || !data) return null;
+    if (!synced.current) { synced.current = true; skipNext.current = true; }
     setStatus(data as OnboardingStatus);
     return data as OnboardingStatus;
   }, [organizationId]);
@@ -149,39 +154,59 @@ export function OnboardingGuide({ organizationId, stage, initial, pagePrefix }: 
 
   // A step just finished: say so and move to the next one.
   useEffect(() => {
+    const now = current?.step ?? null;
+    if (skipNext.current) { skipNext.current = false; previous.current = now; return; }
     const was = previous.current;
-    previous.current = current?.step ?? null;
-    if (!was || was === current?.step) return;
+    previous.current = now;
+    if (!was || was === now) return;
     const finished = steps.find(item => item.step === was)?.done;
     if (!finished) return;
     notify(current ? `✓ خلصت «${stepGuides[was].title}». الخطوة الجاية: ${stepGuides[current.step].title}` : "🎉 خلصتوا التجهيز كله. الله يوفقكم!", "info", "done");
     if (guiding && current && replay === null && !tour) go(current.step);
     if (!current) stopGuiding();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current?.step]);
+  }, [status]);
 
-  // Highlight: follow the target while the page scrolls or changes. A page-tour stop whose button is
-  // not on this page is skipped.
+  // Highlight: follow the target while the page scrolls or changes, and keep the bubble off it.
+  // A page-tour stop whose button is not on this page is skipped.
   useEffect(() => {
-    if (!targets || !here || welcome) { setBox(null); setMissing(false); return; }
+    if (!targets || !here || welcome) { setLayout(null); setMissing(false); return; }
     let element: HTMLElement | null = null;
     let tries = 0, scrolled = false;
+    const shown = Date.now();
     const place = () => {
       element = element?.isConnected ? element : findTarget(targets);
       if (!element) {
         tries++;
         if (tries > 8 && mode === "tour") { setTour(current => current ? nextStop(current) : null); return; }
         if (tries > 12) setMissing(true);
-        setBox(null);
+        setLayout(null);
         return;
       }
       setMissing(false);
-      if (!scrolled) { element.scrollIntoView({ block: "center", behavior: "instant" as ScrollBehavior }); scrolled = true; }
+      const viewport = { width: window.innerWidth, height: window.innerHeight };
+      const card = bubbleRef.current;
+      const height = card?.offsetHeight || 200;
+      const phone = viewport.width < PHONE_WIDTH;
+      if (!scrolled) {
+        scrolled = true;
+        const rect = element.getBoundingClientRect();
+        // On a phone (and for elements taller than the room left) the element starts near the top,
+        // above the pinned card; otherwise it is centred.
+        if (phone || rect.height > viewport.height - height - 80) window.scrollBy({ top: rect.top - 76, behavior: "instant" as ScrollBehavior });
+        else element.scrollIntoView({ block: "center", behavior: "instant" as ScrollBehavior });
+      }
       const rect = element.getBoundingClientRect();
-      setBox({ top: rect.top - 6, left: rect.left - 6, width: rect.width + 12, height: rect.height + 12 });
+      const padded = { top: rect.top - 6, left: rect.left - 6, width: rect.width + 12, height: rect.height + 12 };
+      // The pinned card's top edge: measured when it is pinned, estimated before.
+      const dockTop = card?.classList.contains("docked") ? card.getBoundingClientRect().top : viewport.height - height - (phone ? 96 : 24);
+      const next = placeBubble(padded, { height }, viewport, dockTop);
+      // Right after the step opens, an element hidden under the pinned card is brought up.
+      if (next.side === "dock" && !next.ring && Date.now() - shown < 1500) window.scrollBy({ top: rect.top - 76, behavior: "instant" as ScrollBehavior });
+      setLayout(current => current && JSON.stringify(current) === JSON.stringify(next) ? current : next);
     };
     place();
-    const timer = window.setInterval(place, 250);
+    const timer = window.setInterval(place, 200);
     window.addEventListener("scroll", place, true);
     window.addEventListener("resize", place);
     return () => { window.clearInterval(timer); window.removeEventListener("scroll", place, true); window.removeEventListener("resize", place); };
@@ -296,21 +321,14 @@ export function OnboardingGuide({ organizationId, stage, initial, pagePrefix }: 
     </div> : null}
 
     {bubble && !welcome ? <>
-      {box ? <div className="onb-ring" aria-hidden="true" style={{ top: box.top, left: box.left, width: box.width, height: box.height }} /> : null}
-      <section className={`onb-bubble${box ? "" : " floating"}`} role="dialog" aria-labelledby="onb-bubble-title" aria-live="polite" data-mode={mode ?? undefined}
-        style={box ? bubblePlace(box) : undefined}>{bubble}</section>
+      {layout?.ring ? <div className="onb-ring" aria-hidden="true" style={{ top: layout.ring.top, left: layout.ring.left, width: layout.ring.width, height: layout.ring.height }} /> : null}
+      <section ref={bubbleRef} className={`onb-bubble${!layout ? " floating" : layout.side === "dock" ? " docked" : ""}`} role="dialog" aria-labelledby="onb-bubble-title" aria-live="polite"
+        data-mode={mode ?? undefined} data-side={layout?.side}
+        style={layout && layout.side !== "dock" ? { top: layout.top, left: layout.left, width: layout.width } : undefined}>{bubble}</section>
     </> : null}
   </>;
 }
 
 function nextStop(tour: Tour): Tour | null {
   return tour.index + 1 < tour.stops.length ? { ...tour, index: tour.index + 1 } : null;
-}
-
-/** Under the target when there is room, otherwise above it; on phones the bubble sits at the bottom (CSS). */
-function bubblePlace(box: Box): React.CSSProperties {
-  if (typeof window === "undefined" || window.innerWidth < 700) return {};
-  const width = 340, below = box.top + box.height + 12;
-  const left = Math.min(Math.max(12, box.left + box.width / 2 - width / 2), window.innerWidth - width - 12);
-  return below + 220 < window.innerHeight ? { top: below, left, width } : { top: Math.max(12, box.top - 232), left, width };
 }

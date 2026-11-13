@@ -70,7 +70,7 @@ for (const device of [{ name: "computer", width: 1366, height: 850 }, { name: "p
       await expect(bubble.getByRole("link", { name: "مساعدة في هالخطوة" })).toHaveAttribute("href", "/dashboard/support/new?from=%2Fdashboard%2Fsettings&step=profile");
       // The bubble does not cover the highlighted element, and both are on screen.
       const [ring, card] = [await page.locator(".onb-ring").boundingBox(), await bubble.boundingBox()];
-      expect(ring!.y + ring!.height <= card!.y || card!.y + card!.height <= ring!.y).toBe(true);
+      expect(ring!.x + ring!.width <= card!.x || card!.x + card!.width <= ring!.x || ring!.y + ring!.height <= card!.y || card!.y + card!.height <= ring!.y).toBe(true);
       expect(card!.x).toBeGreaterThanOrEqual(0);
       expect(card!.x + card!.width).toBeLessThanOrEqual(device.width);
     });
@@ -96,6 +96,8 @@ for (const device of [{ name: "computer", width: 1366, height: 850 }, { name: "p
       await page.goto("/e2e/onboarding/home?done=4");
       await page.getByRole("button", { name: "كمّل" }).click();
       await expect(page).toHaveURL(/\/students$/);
+      // The guide on this page has its status from the database.
+      await expect(page.getByRole("region", { name: "تقدّم التجهيز" })).toContainText("٤ من ١٠");
       await db.finish("students");
       await expect(page).toHaveURL(/\/guardians$/);
       await expect(page.getByText("✓ خلصت «الطلاب». الخطوة الجاية: أولياء الأمور والمصرّح لهم")).toBeVisible();
@@ -217,4 +219,61 @@ test("«اشرح لي هالصفحة» outside the main menu pages says where it
   await page.goto("/e2e/onboarding/home?done=10");
   const reply = await ask(page, "اشرح لي هالصفحة");
   await expect(reply).toContainText("شرح الصفحة متاح للصفحات الرئيسية في القائمة");
+});
+
+const intersects = (a: { x: number; y: number; width: number; height: number }, b: { x: number; y: number; width: number; height: number }) =>
+  a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+const targetFor: Record<string, string> = {
+  profile: "#me-section", device: "#notify button", sections: "#sections", classes: "summary", students: "summary", guardians: "[data-tour='guardians']",
+  team: "button:has-text('إنشاء رابط')", attendance: "button:has-text('تحديد الباقين حاضرين')", daily: "main form", portal: "button:has-text('رابط البوابة')", my: "main h1", support: "main h1",
+};
+
+for (const device of [{ name: "computer", width: 1366, height: 850 }, { name: "wide screen", width: 1920, height: 1080 }, { name: "phone", width: 390, height: 844 }]) {
+  test.describe(`the bubble never covers the highlighted element on a ${device.name}`, () => {
+    for (const track of ["org", "staff"] as const) {
+      const keys = track === "org" ? orgKeys : ["profile", "device", "attendance", "daily", "my", "support"];
+      test(`every ${track === "org" ? "setup" : "staff tour"} step`, async ({ page }) => {
+        await page.setViewportSize({ width: device.width, height: device.height });
+        for (const [index, key] of keys.entries()) {
+          await fakeDatabase(page, { done: index, track });
+          await page.goto(`/e2e/onboarding/home?done=${index}&track=${track}`);
+          await page.getByRole("button", { name: "كمّل" }).click();
+          await expect(page).toHaveURL(new RegExp(`/${key}$`));
+          const ring = page.locator(".onb-ring"), bubble = page.locator(".onb-bubble"), element = page.locator(targetFor[key]).first();
+          await expect(ring).toBeVisible();
+          await expect(bubble.locator("h3")).toBeVisible();
+          // Settled: the ring has stopped moving.
+          let previous = "";
+          await expect.poll(async () => { const now = JSON.stringify([await ring.boundingBox(), await bubble.boundingBox()]); const same = now === previous; previous = now; return same; }, { intervals: [350] }).toBe(true);
+          const [r, b, e] = [await ring.boundingBox(), await bubble.boundingBox(), await element.boundingBox()];
+          const where = `${key} (${await bubble.getAttribute("data-side")})`;
+          expect(intersects(r!, b!), `ring and bubble overlap at ${where}`).toBe(false);
+          // The element itself is not covered, unless it is taller than the room above a pinned card.
+          if (e!.height < device.height - b!.height - 120) expect(intersects(e!, b!), `element and bubble overlap at ${where}`).toBe(false);
+          // Both are on screen.
+          expect(b!.x >= 0 && b!.x + b!.width <= device.width && b!.y >= 0 && b!.y + b!.height <= device.height, `bubble off screen at ${where}`).toBe(true);
+          if (device.name === "phone") expect(await bubble.getAttribute("data-side")).toBe("dock");
+          await page.unrouteAll({ behavior: "ignoreErrors" });
+        }
+      });
+    }
+  });
+}
+
+test("the bubble follows the element while scrolling and when the window changes size", async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 850 });
+  await fakeDatabase(page, { done: 2 });
+  await page.goto("/e2e/onboarding/home?done=2");
+  await page.getByRole("button", { name: "كمّل" }).click();
+  await expect(page).toHaveURL(/\/sections$/);
+  const ring = page.locator(".onb-ring"), bubble = page.locator(".onb-bubble");
+  await expect(bubble).toHaveAttribute("data-side", /right|left/);
+  for (const action of [() => page.mouse.wheel(0, 200), () => page.setViewportSize({ width: 820, height: 700 }), () => page.setViewportSize({ width: 390, height: 844 })]) {
+    await action();
+    await expect.poll(async () => {
+      const [r, b] = [await ring.boundingBox(), await bubble.boundingBox()];
+      return Boolean(r && b && !intersects(r, b));
+    }).toBe(true);
+  }
+  await expect(bubble).toHaveAttribute("data-side", "dock");
 });
