@@ -187,3 +187,42 @@ export function tourPathFor(path: string): string {
   if (typeof document === "undefined" || !path.startsWith("/e2e/")) return path;
   return document.querySelector("[data-tour-as]")?.getAttribute("data-tour-as") ?? path;
 }
+
+// Where the bubble goes ------------------------------------------------------------------------------
+export type Rect = { top: number; left: number; width: number; height: number };
+export type BubblePlacement = { side: "right" | "left" | "below" | "above" | "dock"; top?: number; left?: number; width?: number; ring: Rect | null };
+const MARGIN = 12, GAP = 14, SIDE_WIDTH = 340;
+export const PHONE_WIDTH = 700;
+
+/**
+ * Places the explanation bubble so it never covers the highlighted element (`target`, already
+ * padded): beside it on the side with more room, otherwise below or above it, otherwise (an element
+ * taller than the screen, or any phone) as a card pinned to the bottom (`dockTop` is the card's top
+ * edge). The returned ring is the highlight, cut to what is visible above a pinned card.
+ */
+export function placeBubble(target: Rect, bubble: { height: number }, viewport: { width: number; height: number }, dockTop: number): BubblePlacement {
+  const right = viewport.width - (target.left + target.width) - GAP - MARGIN;
+  const left = target.left - GAP - MARGIN;
+  const width = Math.min(SIDE_WIDTH, viewport.width - 2 * MARGIN);
+  const clampTop = (value: number) => Math.min(Math.max(MARGIN, value), viewport.height - bubble.height - MARGIN);
+  const visible = clip(target, 0, viewport.height);
+  if (viewport.width >= PHONE_WIDTH && bubble.height + 2 * MARGIN <= viewport.height) {
+    if (Math.max(left, right) >= width) {
+      const side = right >= left ? "right" : "left";
+      return { side, width, left: side === "right" ? target.left + target.width + GAP : target.left - GAP - width, top: clampTop(target.top + target.height / 2 - bubble.height / 2), ring: visible };
+    }
+    const centred = Math.min(Math.max(MARGIN, target.left + target.width / 2 - width / 2), viewport.width - width - MARGIN);
+    const below = viewport.height - (target.top + target.height) - GAP - MARGIN;
+    const above = target.top - GAP - MARGIN;
+    if (below >= bubble.height && below >= above) return { side: "below", width, left: centred, top: target.top + target.height + GAP, ring: visible };
+    if (above >= bubble.height) return { side: "above", width, left: centred, top: target.top - GAP - bubble.height, ring: visible };
+    if (below >= bubble.height) return { side: "below", width, left: centred, top: target.top + target.height + GAP, ring: visible };
+  }
+  return { side: "dock", ring: clip(target, 0, dockTop - GAP) };
+}
+
+/** The part of a rectangle between two heights, or null when too little of it is left. */
+function clip(rect: Rect, top: number, bottom: number): Rect | null {
+  const from = Math.max(rect.top, top), to = Math.min(rect.top + rect.height, bottom);
+  return to - from >= 16 ? { top: from, left: rect.left, width: rect.width, height: to - from } : null;
+}

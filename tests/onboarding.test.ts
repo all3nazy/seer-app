@@ -82,3 +82,28 @@ describe("guide requests to the assistant", () => {
     expect(pageTour("/admin")).toBeNull();
   });
 });
+
+import { placeBubble } from "../lib/onboarding";
+describe("where the bubble goes", () => {
+  const screen = { width: 1366, height: 850 };
+  const overlaps = (a: { top: number; left: number; width: number; height: number }, b: { top: number; left: number; width: number; height: number }) =>
+    a.left < b.left + b.width && b.left < a.left + a.width && a.top < b.top + b.height && b.top < a.top + a.height;
+  it("beside the element on the side with more room, never over it", () => {
+    const target = { top: 100, left: 700, width: 640, height: 600 };
+    const placed = placeBubble(target, { height: 220 }, screen, 600);
+    expect(placed.side).toBe("left");
+    expect(overlaps(target, { top: placed.top!, left: placed.left!, width: placed.width!, height: 220 })).toBe(false);
+    expect(placeBubble({ ...target, left: 20 }, { height: 220 }, screen, 600).side).toBe("right");
+  });
+  it("below or above a full-width element, and pinned when it is taller than the screen", () => {
+    expect(placeBubble({ top: 100, left: 10, width: 1340, height: 200 }, { height: 220 }, screen, 600).side).toBe("below");
+    expect(placeBubble({ top: 560, left: 10, width: 1340, height: 200 }, { height: 220 }, screen, 600).side).toBe("above");
+    const tall = placeBubble({ top: 70, left: 10, width: 1340, height: 1300 }, { height: 220 }, screen, 600);
+    expect(tall).toEqual({ side: "dock", ring: { top: 70, left: 10, width: 1340, height: 600 - 14 - 70 } });
+  });
+  it("always pinned on a phone, with the ring cut above the card (or none if hidden under it)", () => {
+    const phone = { width: 390, height: 844 };
+    expect(placeBubble({ top: 70, left: 10, width: 370, height: 80 }, { height: 200 }, phone, 560)).toEqual({ side: "dock", ring: { top: 70, left: 10, width: 370, height: 80 } });
+    expect(placeBubble({ top: 600, left: 10, width: 370, height: 80 }, { height: 200 }, phone, 560).ring).toBeNull();
+  });
+});
