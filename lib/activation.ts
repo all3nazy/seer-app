@@ -45,13 +45,14 @@ export function parseActivationLink(input: string, projectUrl: string | undefine
 }
 
 type ActivationAuth = {
-  signInWithOtp: (params: { email: string; options: { shouldCreateUser: true; emailRedirectTo: string } }) => PromiseLike<{ error: unknown }>;
+  signInWithOtp: (params: { email: string; options: { shouldCreateUser: true; emailRedirectTo: string; captchaToken?: string } }) => PromiseLike<{ error: unknown }>;
   verifyOtp: (params: ActivationCredentials) => PromiseLike<{ error: unknown }>;
   getUser: () => PromiseLike<{ data: { user: { email_confirmed_at?: string } | null }; error: unknown }>;
 };
 type ActivationClient = { auth: ActivationAuth };
 
-export async function requestActivationEmail(createClient: () => ActivationClient, email: string, siteOrigin: string): Promise<void> {
+/** `captchaToken`: the Turnstile token, required by Supabase for /otp once CAPTCHA protection is on. */
+export async function requestActivationEmail(createClient: () => ActivationClient, email: string, siteOrigin: string, captchaToken?: string | null): Promise<void> {
   const normalized = email.trim();
   let redirect: URL;
   try {
@@ -61,7 +62,7 @@ export async function requestActivationEmail(createClient: () => ActivationClien
   } catch { throw new ActivationError("configuration"); }
   if (normalized.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) throw new ActivationError("email-request");
   try {
-    const { error } = await createClient().auth.signInWithOtp({ email: normalized, options: { shouldCreateUser: true, emailRedirectTo: redirect.href } });
+    const { error } = await createClient().auth.signInWithOtp({ email: normalized, options: { shouldCreateUser: true, emailRedirectTo: redirect.href, ...(captchaToken ? { captchaToken } : {}) } });
     if (error) throw new ActivationError("email-request");
   } catch { throw new ActivationError("email-request"); }
 }

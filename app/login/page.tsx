@@ -1,8 +1,9 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { getSupabaseBrowserClient } from "../../lib/supabase";
 import { Logo } from "../../components/icons";
-import { loginEmail } from "../../lib/login";
+import { captchaMissing, useTurnstile } from "../../components/turnstile";
+import { signInMessages } from "../../lib/login-messages";
+import { signIn as serverSignIn } from "./actions";
 import { LegalFooter } from "../../components/legal-page";
 import { supportEmail, supportMailto } from "../../lib/support";
 
@@ -16,20 +17,26 @@ export default function Login() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const errorRef = useRef<HTMLParagraphElement>(null);
+  const captcha = useTurnstile("login");
 
+  // Sign-in runs on the server (app/login/actions.ts): it checks the lock, signs in with Supabase
+  // and records the attempt. The session cookies come back with the answer.
   async function signIn(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
     setBusy(true);
     setError("");
+    const fail = (message: string) => { setError(message); setBusy(false); requestAnimationFrame(() => errorRef.current?.focus()); };
     try {
-      const { error: authError } = await getSupabaseBrowserClient().auth.signInWithPassword({ email: loginEmail(email), password });
-      if (authError) throw authError;
+      const token = await captcha.getToken();
+      if (captcha.enabled && !token) { fail(captchaMissing); return; }
+      const result = await serverSignIn(email, password, token);
+      captcha.reset();
+      if (!result.ok) { fail(result.error); return; }
       window.location.assign("/dashboard");
     } catch {
-      setError("تعذر تسجيل الدخول. تحقق من اسم المستخدم أو البريد وكلمة المرور.");
-      setBusy(false);
-      requestAnimationFrame(() => errorRef.current?.focus());
+      captcha.reset();
+      fail(signInMessages.invalid);
     }
   }
 
@@ -47,6 +54,8 @@ export default function Login() {
           <input id="password" name="password" type={showPassword ? "text" : "password"} dir="ltr" required autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} readOnly={busy}/>
           <button type="button" className="password-toggle" aria-controls="password" aria-pressed={showPassword} onClick={() => setShowPassword(value => !value)}>{showPassword ? "إخفاء" : "إظهار"}</button>
         </div>
+        {captcha.widget}
+        {captcha.message && !error ? <p className="hint" role="status" style={{ margin: 0 }}>{captcha.message}</p> : null}
         {error && <p ref={errorRef} tabIndex={-1} role="alert" className="form-error">{error}</p>}
         <button type="submit" disabled={busy} className="primary-button">{busy ? "جارٍ التحقق…" : "دخول"}</button>
         <span role="status" className="sr-only">{busy ? "جارٍ تسجيل الدخول. يرجى الانتظار." : ""}</span>

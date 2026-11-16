@@ -1087,3 +1087,6 @@ a.stat:hover,a.list-row:hover,a.tile:hover,.org-tile:hover,.sidebar .nav-link:ho
 }
 .bot-run{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 .suggestion.setup{background:color-mix(in srgb,var(--primary) 14%,var(--surface));border-color:color-mix(in srgb,var(--primary) 35%,var(--border));font-weight:600}
+/* Cloudflare Turnstile: invisible for most people; takes room only when it asks for a click. */
+.turnstile-box:empty{display:none}
+.turnstile-box{min-height:0;display:flex;justify-content:center}

@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { getSupabaseBrowserClient } from "../lib/supabase";
+import { captchaMissing, useTurnstile } from "./turnstile";
 
 const errors: Record<string, string> = {
   "23505": "سبق استخدام التجربة المجانية بهذا البريد أو الجوال. سجّل دخولك، أو تواصل معنا للاشتراك مباشرة.",
@@ -13,6 +14,7 @@ export function SignupForm() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
+  const captcha = useTurnstile("signup");
   const set = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm(current => ({ ...current, [key]: event.target.value }));
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -22,7 +24,11 @@ export function SignupForm() {
     const client = getSupabaseBrowserClient();
     const { error: startError } = await client.rpc("start_signup", { email: form.email.trim(), phone: form.phone, full_name: form.full_name, org_name: form.org_name, org_type: form.org_type });
     if (startError) { setError(errors[startError.code ?? ""] ?? "تعذر التسجيل الآن. حاول مرة ثانية."); setBusy(false); return; }
-    const { data, error: signUpError } = await client.auth.signUp({ email: form.email.trim().toLowerCase(), password: form.password, options: { emailRedirectTo: `${location.origin}/auth/callback?next=/dashboard`, data: { full_name: form.full_name } } });
+    // Supabase /signup needs the Turnstile token once CAPTCHA protection is on.
+    const captchaToken = await captcha.getToken();
+    if (captcha.enabled && !captchaToken) { setError(captchaMissing); setBusy(false); return; }
+    const { data, error: signUpError } = await client.auth.signUp({ email: form.email.trim().toLowerCase(), password: form.password, options: { emailRedirectTo: `${location.origin}/auth/callback?next=/dashboard`, data: { full_name: form.full_name }, ...(captchaToken ? { captchaToken } : {}) } });
+    captcha.reset();
     if (signUpError) { setError(/registered|exists/i.test(signUpError.message) ? "هذا البريد مسجّل. سجّل دخولك بنفس البريد وتنشأ منشأتك تلقائيًا." : "تعذر إنشاء الحساب. تحقق من البريد وحاول مرة ثانية."); setBusy(false); return; }
     if (data.session) {
       // Email confirmation is off on this project: the account is ready, so finish right away.
@@ -49,6 +55,8 @@ export function SignupForm() {
     <input id="su-org" value={form.org_name} onChange={set("org_name")} required maxLength={120} />
     <label htmlFor="su-type">نوع المنشأة</label>
     <select id="su-type" value={form.org_type} onChange={set("org_type")}><option value="school">مدرسة</option><option value="nursery">حضانة</option><option value="kindergarten">روضة</option></select>
+    {captcha.widget}
+    {captcha.message && !error ? <p className="hint" role="status" style={{ margin: 0 }}>{captcha.message}</p> : null}
     {error ? <p role="alert" className="form-error">{error}</p> : null}
     <button type="submit" className="primary-button" disabled={busy}>{busy ? "جارٍ التسجيل…" : "ابدأ التجربة المجانية"}</button>
     <p className="hint" style={{ margin: 0 }}>تجربة وحدة لكل بريد ولكل جوال. بالتسجيل توافق على شروط الاستخدام.</p>

@@ -4,6 +4,8 @@ import { getSupabaseBrowserClient } from "../lib/supabase";
 import { loginEmail } from "../lib/login";
 import { inviteReasons, isInviteToken, orgTypeLabels, trialLabel } from "../lib/org-invites";
 import { LEGAL_VERSION } from "../lib/legal";
+import { signIn } from "../app/login/actions";
+import { useTurnstile } from "./turnstile";
 
 type View = { valid: true; organization: string; type: string; trial_months: number; plan: string } | { valid: false; reason: string };
 const accountErrors: Record<string, string> = {
@@ -22,6 +24,7 @@ export function InviteAccept() {
   const [form, setForm] = useState({ name: "", login: "", password: "", agree: false });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const captcha = useTurnstile("invite");
   useEffect(() => {
     const value = decodeURIComponent(location.hash.slice(1)).trim();
     if (!isInviteToken(value)) { setView({ valid: false, reason: "invalid" }); return; }
@@ -44,8 +47,10 @@ export function InviteAccept() {
     const result = data as { ok: boolean; reason?: string; login?: string; organization_id?: string };
     if (!result.ok) { setView({ valid: false, reason: result.reason ?? "invalid" }); setBusy(false); return; }
     if (!signedIn) {
-      const { error: signInError } = await client.auth.signInWithPassword({ email: result.login ?? loginEmail(form.login), password: form.password });
-      if (signInError) { window.location.assign("/login?activated=1"); return; }
+      // The new owner signs in on the server (lock check, captcha, attempt recorded).
+      const signedInNow = await signIn(result.login ?? loginEmail(form.login), form.password, await captcha.getToken()).catch(() => null);
+      captcha.reset();
+      if (!signedInNow?.ok) { window.location.assign("/login?activated=1"); return; }
     }
     window.location.assign(`/dashboard?org=${encodeURIComponent(result.organization_id ?? "")}`);
   }
@@ -70,6 +75,7 @@ export function InviteAccept() {
       </>}
       <label className="quote-check consent-check"><input type="checkbox" checked={form.agree} onChange={event => setForm({ ...form, agree: event.target.checked })} required />
         <span>قرأت <a href="/terms" target="_blank" rel="noopener noreferrer">شروط الاستخدام</a> و<a href="/privacy" target="_blank" rel="noopener noreferrer">سياسة الخصوصية</a> وأوافق عليها نيابةً عن المنشأة.</span></label>
+      {signedIn ? null : captcha.widget}
       {error ? <p role="alert" className="form-error">{error}</p> : null}
       <button type="submit" className="primary-button" disabled={busy || !form.agree}>{busy ? "جارٍ التفعيل…" : signedIn ? "فعّل المنشأة على حسابي" : "فعّل المنشأة وادخل"}</button>
     </form>

@@ -3,12 +3,17 @@ import { cookies } from "next/headers";
 import { cache } from "react";
 import type { MyOrg } from "../subscriptions";
 
-export async function createSupabaseServerClient() {
+/**
+ * `forwardedFor`: the client's IP, sent to Supabase Auth as Sb-Forwarded-For so its per-IP limits
+ * count the person, not the server (Supabase honours it only once enabled for the project).
+ */
+export async function createSupabaseServerClient(options?: { forwardedFor?: string }) {
   const cookieStore = await cookies();
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !key) throw new Error("Supabase is not configured");
   return createServerClient(url, key, {
+    ...(options?.forwardedFor ? { global: { headers: { "sb-forwarded-for": options.forwardedFor } } } : {}),
     cookies: {
       getAll() { return cookieStore.getAll(); },
       setAll(items: { name: string; value: string; options?: Parameters<typeof cookieStore.set>[2] }[]) {
