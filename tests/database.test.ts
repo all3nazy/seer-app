@@ -2409,13 +2409,15 @@ describe("support reply templates", () => {
   });
 
   it("every function the service-role routes call is executable by service_role (public and private)", async () => {
-    const files = ["app/api/telegram/webhook/route.ts", "app/api/telegram/dispatch/route.ts", "app/api/messages/dispatch/route.ts", "app/api/payments/webhook/[provider]/route.ts", "app/login/actions.ts", "components/login-security.tsx"];
+    const files = ["app/api/telegram/webhook/route.ts", "app/api/telegram/dispatch/route.ts", "app/api/messages/dispatch/route.ts", "app/api/payments/webhook/[provider]/route.ts", "app/login/actions.ts", "components/login-security.tsx",
+      "app/api/backups/run/route.ts", "lib/backup.ts"];
     for (const file of readdirSync("app/api", { recursive: true }).map(String).filter(name => name.endsWith(".ts")).map(name => `app/api/${name}`)) {
       if (/serviceClient\(|SUPABASE_SERVICE_ROLE_KEY/.test(readFileSync(file, "utf8"))) expect(files).toContain(file);
     }
     const names = new Set<string>();
     for (const file of files) for (const match of readFileSync(file, "utf8").matchAll(/\.rpc\("([a-z_]+)"/g)) names.add(match[1]);
-    expect([...names]).toEqual(expect.arrayContaining(["telegram_handle", "telegram_claim_kick", "telegram_claim", "telegram_report", "telegram_track", "login_check", "login_record", "login_security_summary"]));
+    expect([...names]).toEqual(expect.arrayContaining(["telegram_handle", "telegram_claim_kick", "telegram_claim", "telegram_report", "telegram_track", "login_check", "login_record", "login_security_summary",
+      "backup_begin", "backup_tables", "backup_table_page", "backup_finish", "backup_org_page"]));
     await db.exec("reset role");
     const missing: string[] = [];
     for (const name of names) {
