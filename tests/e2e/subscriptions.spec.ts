@@ -26,9 +26,13 @@ test("sign-up checks the password before sending anything", async ({ page }) => 
   await expect(page.locator(".form-error")).toContainText("كلمة المرور ٨ أحرف");
 });
 
-test("anonymous visitors are sent to sign-in from billing and the platform console", async ({ page }) => {
-  for (const path of ["/dashboard/billing", "/admin", "/admin/payments", "/admin/subscribers", "/admin/plans", "/admin/settings"]) {
-    await page.goto(path);
-    await expect(page).toHaveURL(/^http:\/\/(127\.0\.0\.1|localhost):3100\/login$/);
+test("anonymous visitors: billing goes to the platform sign-in; the console is not on the platform at all", async ({ page }) => {
+  await page.goto("/dashboard/billing");
+  await expect(page).toHaveURL(/^http:\/\/(127\.0\.0\.1|localhost):3100\/login$/);
+  for (const path of ["/admin", "/admin/payments", "/admin/subscribers", "/admin/plans", "/admin/settings"]) {
+    expect((await page.goto(path))?.status(), path).toBe(404);
+    // On «سِير أدمن» the same pages send to its own sign-in, never to the platform's.
+    await page.goto(`http://127.0.0.1:3101${path}`);
+    await expect(page).toHaveURL(/^http:\/\/(127\.0\.0\.1|localhost):3101\/admin\/login$/);
   }
 });

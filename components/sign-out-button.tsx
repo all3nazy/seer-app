@@ -5,7 +5,8 @@ import { getSupabaseBrowserClient } from "../lib/supabase";
 import { Icon } from "./icons";
 import { notify } from "./feedback";
 
-export default function SignOutButton({ compact = false }: { compact?: boolean }) {
+/** `to`: where to go after signing out (each side has its own sign-in page). */
+export default function SignOutButton({ compact = false, to = "/login" }: { compact?: boolean; to?: "/login" | "/admin/login" }) {
   const [busy, setBusy] = useState(false);
   const router = useRouter();
   async function signOut() {
@@ -13,7 +14,7 @@ export default function SignOutButton({ compact = false }: { compact?: boolean }
     try {
       const { error } = await getSupabaseBrowserClient().auth.signOut();
       if (error) throw error;
-      router.replace("/login");
+      router.replace(to);
       router.refresh();
     } catch {
       setBusy(false);

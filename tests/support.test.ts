@@ -59,8 +59,8 @@ describe("every detail page has «رجوع» to the right place", () => {
     ["app/dashboard/support/page.tsx", 'href="/dashboard"'],
     ["app/dashboard/support/new/page.tsx", 'href="/dashboard/support"'],
     ["app/dashboard/support/[id]/page.tsx", 'href="/dashboard/support"'],
-    ["app/admin/support/[id]/page.tsx", 'href="/admin/support"'],
-    ["app/admin/subscribers/[id]/page.tsx", 'href="/admin/subscribers"'],
+    ["app/admin/(console)/support/[id]/page.tsx", 'href="/admin/support"'],
+    ["app/admin/(console)/subscribers/[id]/page.tsx", 'href="/admin/subscribers"'],
     ["app/dashboard/academics/sections/[id]/page.tsx", "href={`/dashboard/academics?"],
     ["app/dashboard/admissions/[id]/page.tsx", "href={`/dashboard/admissions?"],
     ["app/dashboard/billing/receipt/[id]/page.tsx", "href={`/dashboard/billing?"],
@@ -78,8 +78,8 @@ describe("every detail page has «رجوع» to the right place", () => {
   it("the support list goes back to the previous page when there is one", () => {
     expect(readFileSync("app/dashboard/support/page.tsx", "utf8")).toMatch(/<BackLink href="\/dashboard" history \/>/);
   });
-  it("the admin console has a clear «رجوع للمنصة»", () => {
-    expect(readFileSync("app/admin/layout.tsx", "utf8")).toMatch(/href="\/dashboard">[\s\S]*رجوع للمنصة/);
+  it("«سِير أدمن» has a clear «فتح المنصة» to the subscriber platform's own address", () => {
+    expect(readFileSync("components/admin-shell.tsx", "utf8")).toMatch(/href=\{`\$\{appUrl\}\/`\}[^>]*>فتح المنصة/);
   });
   it("«الدعم» is the first row of the phone «المزيد» page", () => {
     const source = readFileSync("app/dashboard/more/page.tsx", "utf8");

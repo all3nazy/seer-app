@@ -1,6 +1,7 @@
 import { sameSecret } from "./payment-gateways";
 import { inviteLink, inviteMessage } from "./org-invites";
 import { whatsappLink } from "./share";
+import { adminBase, isAdminPath, originOf } from "./surface";
 
 /**
  * Telegram Bot API for the platform admins. The bot token comes from TELEGRAM_BOT_TOKEN and is only
@@ -26,19 +27,28 @@ export function webhookAllowed(header: string | null, secret: string | undefined
 
 /** The official address for links in messages (relative paths become absolute). */
 export function siteBase(env: Record<string, string | undefined> = process.env, fallback = "https://seersa.vercel.app"): string {
+  // The subscriber platform: SEER_APP_URL (set on both projects), else the official host.
+  const app = originOf(env.SEER_APP_URL);
+  if (app) return app;
   const host = (env.SEER_CANONICAL_HOST ?? "").trim().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
   return host ? `https://${host}` : fallback;
 }
 
 /** Inline buttons, two per row (a «wide» button takes its own row); relative links point to the official address. */
 type Key = { text: string; callback_data: string } | { text: string; url: string };
+/** Relative links in buttons: /admin… opens «سِير أدمن» (SEER_ADMIN_URL), everything else the platform (`base`). */
+export function buttonUrl(url: string, base: string, env: Record<string, string | undefined> = process.env): string {
+  if (!url.startsWith("/") || url.startsWith("//")) return url;
+  return `${isAdminPath(url) ? adminBase(env) ?? base : base}${url}`;
+}
+
 export function replyMarkup(buttons: Button[] | undefined, base: string): { inline_keyboard: Key[][] } | undefined {
   const rows: Key[][] = [];
   let open: Key[] | null = null;
   for (const button of buttons ?? []) {
     let key: Key | null = null;
     if (button.data && new TextEncoder().encode(button.data).length <= 64) key = { text: button.text, callback_data: button.data };
-    else if (button.url) key = { text: button.text, url: button.url.startsWith("/") ? `${base}${button.url}` : button.url };
+    else if (button.url) key = { text: button.text, url: buttonUrl(button.url, base) };
     if (!key) continue;
     if (button.wide) { rows.push([key]); open = null; continue; }
     if (open && open.length < 2) open.push(key);

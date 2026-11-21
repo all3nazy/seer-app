@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { requestSession } from "../../../lib/supabase/server";
-import { AdminSupportLive } from "../../../components/admin-support-live";
+import { requestSession } from "../../../../lib/supabase/server";
+import { AdminSupportLive } from "../../../../components/admin-support-live";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "الدعم" };

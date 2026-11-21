@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { requestSession } from "../../../lib/supabase/server";
-import { PaymentDecision } from "../../../components/admin-forms";
-import { durationLabel, riyal } from "../../../lib/subscriptions";
+import { requestSession } from "../../../../lib/supabase/server";
+import { PaymentDecision } from "../../../../components/admin-forms";
+import { durationLabel, riyal } from "../../../../lib/subscriptions";
 
 export const metadata = { title: "التحويلات المعلّقة" };
 type Pending = { id: string; organization_id: string; organization: string; plan: string; months: number; amount: number; expected: number | null; reference: string; receipt_path: string; created_at: string };

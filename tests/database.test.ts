@@ -15,9 +15,14 @@ const guardianB = "40000000-0000-0000-0000-000000000002";
 const branchB = "50000000-0000-0000-0000-000000000002";
 const reconcile = readFileSync("supabase/migrations/20261106122846_reconcile_tenant_boundaries.sql", "utf8");
 const operations = readFileSync("supabase/migrations/20261106123009_school_operations.sql", "utf8");
-async function as(role: "authenticated" | "anon" | "service_role", user = "") {
+/**
+ * Acts as a role and user. `aal` is the session's assurance level: "aal2" after two-step verification
+ * (the default here, so existing admin tests keep their meaning), "aal1" after a password only.
+ */
+async function as(role: "authenticated" | "anon" | "service_role", user = "", aal: "aal1" | "aal2" = "aal2") {
   await db.exec("reset role");
   await db.query("select set_config('request.jwt.claim.sub',$1,false)", [user]);
+  await db.query("select set_config('request.jwt.claims',$1,false)", [user ? JSON.stringify({ sub: user, role, aal }) : ""]);
   await db.exec(`set role ${role}`);
 }
 async function rows(sql: string) { return (await db.query<Record<string,unknown>>(sql)).rows; }
@@ -49,8 +54,10 @@ beforeAll(async () => {
     create function extensions.gen_salt(kind text) returns text language sql as $$ select '$2a$06$' || md5(random()::text) $$;
     create function extensions.crypt(password text, salt text) returns text language sql as $$ select 'hash:' || md5(password) $$;
     create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+    -- As Supabase defines it.
+    create function auth.jwt() returns jsonb language sql stable as $$ select coalesce(nullif(current_setting('request.jwt.claim', true), ''), nullif(current_setting('request.jwt.claims', true), ''))::jsonb $$;
     grant usage on schema public,auth to anon,authenticated,service_role;
-    grant execute on function auth.uid() to anon,authenticated,service_role;
+    grant execute on function auth.uid(), auth.jwt() to anon,authenticated,service_role;
   `);
   // pgcrypto is unavailable in embedded Postgres; gen_random_uuid is built in.
   await db.exec(readFileSync("supabase/migrations/0001_core.sql", "utf8").replace("create extension if not exists pgcrypto;", ""));
@@ -162,6 +169,9 @@ beforeAll(async () => {
   const loginGuard = readdirSync("supabase/migrations").filter(name => name.endsWith("_login_guard.sql"));
   if (loginGuard.length !== 1) throw new Error("Expected exactly one login guard migration");
   await db.exec(readFileSync(`supabase/migrations/${loginGuard[0]}`, "utf8"));
+  const adminAal2 = readdirSync("supabase/migrations").filter(name => name.endsWith("_admin_aal2.sql"));
+  if (adminAal2.length !== 1) throw new Error("Expected exactly one admin aal2 migration");
+  await db.exec(readFileSync(`supabase/migrations/${adminAal2[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -172,7 +182,7 @@ beforeAll(async () => {
     insert into public.invoices(organization_id,amount_sar,status) values ('${orgA}',100,'issued'),('${orgB}',200,'issued');
   `);
 }, 30000);
-beforeEach(async () => { await db.exec("reset role"); await db.query("select set_config('request.jwt.claim.sub','',false)"); });
+beforeEach(async () => { await db.exec("reset role"); await db.query("select set_config('request.jwt.claim.sub','',false), set_config('request.jwt.claims','',false)"); });
 afterAll(async () => { await db.close(); });
 
 describe("Postgres tenant isolation and operational authorization", () => {
@@ -2671,5 +2681,74 @@ describe("login guard (brute-force protection)", () => {
     await db.exec("select private.subscription_daily()");
     expect((await rows("select login from private.login_attempts")).map(row => row.login)).toEqual(["new@x.test"]);
     expect(await rows("select * from private.login_locks")).toEqual([]);
+  });
+});
+
+describe("platform admin needs two-step verification (aal2)", () => {
+  const platformAdmin = "60000000-0000-0000-0000-0000000000ad";
+  beforeAll(async () => {
+    await db.exec("reset role");
+    await db.exec(`insert into auth.users(id,email,email_confirmed_at) values ('${platformAdmin}','admin@seer.test',now()) on conflict do nothing;
+      insert into private.platform_admins(user_id) values ('${platformAdmin}') on conflict do nothing;`);
+  });
+
+  it("a password-only session (aal1) is not a platform admin: admin functions refuse it", async () => {
+    await as("authenticated", platformAdmin, "aal1");
+    expect((await rows("select public.am_platform_admin() as a"))[0].a).toBe(false);
+    for (const sql of ["select public.admin_overview()", "select * from public.admin_subscribers()", "select * from public.admin_org_invites()", "select * from public.admin_join_requests()",
+      "select * from public.admin_support_templates()", "select * from public.admin_onboarding()", "select public.telegram_link_code()"]) {
+      await expect(db.exec(sql), sql).rejects.toMatchObject({ code: "42501" });
+    }
+    // Nor do the cross-organization read policies apply.
+    expect(await rows(`select id from public.organizations where id='${orgB}'`)).toEqual([]);
+    expect(await rows(`select organization_id from public.subscriptions where organization_id='${orgB}'`)).toEqual([]);
+  });
+
+  it("before verification the account can only learn that it is an admin account (to be shown the verification step)", async () => {
+    await as("authenticated", platformAdmin, "aal1");
+    expect((await rows("select public.am_platform_admin_account() as a"))[0].a).toBe(true);
+    await as("authenticated", owner, "aal1");
+    expect((await rows("select public.am_platform_admin_account() as a"))[0].a).toBe(false);
+    await as("anon");
+    await expect(db.exec("select public.am_platform_admin_account()")).rejects.toBeDefined();
+  });
+
+  it("the same admin after two-step verification (aal2) is a platform admin", async () => {
+    await as("authenticated", platformAdmin, "aal2");
+    expect((await rows("select public.am_platform_admin() as a"))[0].a).toBe(true);
+    await db.exec("select public.admin_overview()");
+    expect((await rows(`select id from public.organizations where id='${orgB}'`)).length).toBe(1);
+  });
+
+  it("no session at all (scheduled jobs) is never an admin, and the jobs and admin notifications still work", async () => {
+    await db.exec("reset role");
+    await db.query("select set_config('request.jwt.claim.sub','',false), set_config('request.jwt.claims','',false)");
+    expect((await rows("select private.is_platform_admin() as a"))[0].a).toBe(false);
+    await expect(db.exec("select private.require_platform_admin()")).rejects.toMatchObject({ code: "42501" });
+    for (const job of ["select private.subscription_daily()", "select private.telegram_daily()", "select private.telegram_health_scan()"]) await db.exec(job);
+    await db.exec("delete from public.notifications where kind = 'support' and user_id = '" + platformAdmin + "'");
+    await db.exec(`select private.notify_platform_admins('${orgA}', 'support', 'اختبار', null, '/admin/support')`);
+    expect((await rows(`select count(*)::int as n from public.notifications where user_id='${platformAdmin}' and kind='support'`))[0].n).toBe(1);
+  });
+
+  it("the service role keeps its server-only functions; a forged aal claim without being an admin gives nothing", async () => {
+    await db.exec("set role service_role");
+    await db.exec("select public.login_security_summary()");
+    await as("authenticated", owner, "aal2");
+    expect((await rows("select public.am_platform_admin() as a"))[0].a).toBe(false);
+    await expect(db.exec("select public.admin_overview()")).rejects.toMatchObject({ code: "42501" });
+  });
+
+  it("the Telegram bot acts as the linked admin with aal2", async () => {
+    await db.exec("reset role");
+    expect(readFileSync("supabase/migrations/20261121090000_admin_aal2.sql", "utf8")).toContain("'aal', 'aal2'");
+    await db.exec(`delete from private.telegram_links; insert into private.telegram_links(user_id, chat_id) values ('${platformAdmin}', 781001)`);
+    await db.exec("set role service_role");
+    // «قوالب الرد» goes through require_platform_admin().
+    const update = { update_id: 2, callback_query: { id: "cb", data: "tl:00000000-0000-0000-0000-000000000abc:0", message: { message_id: 1, chat: { id: 781001, type: "private" } } } };
+    const result = (await db.query<{ r: { answer: { text: string } } }>("select public.telegram_handle($1::jsonb) as r", [JSON.stringify(update)])).rows[0].r;
+    await db.exec("reset role");
+    expect(result.answer.text).toBe("قوالب الرد");
+    expect(result.answer.text).not.toContain("صلاحية");
   });
 });

@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requestSession } from "../../../../lib/supabase/server";
-import { SupportThread, type SupportMessage } from "../../../../components/support-thread";
-import { BackLink } from "../../../../components/back-link";
-import { siteBase } from "../../../../lib/telegram";
-import type { SupportTemplate } from "../../../../lib/support-templates";
+import { requestSession } from "../../../../../lib/supabase/server";
+import { SupportThread, type SupportMessage } from "../../../../../components/support-thread";
+import { BackLink } from "../../../../../components/back-link";
+import { siteBase } from "../../../../../lib/telegram";
+import type { SupportTemplate } from "../../../../../lib/support-templates";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "تذكرة دعم" };
@@ -38,6 +38,6 @@ export default async function AdminTicketPage({ params }: { params: Promise<{ id
       {thread.assistant_questions.length ? <span><strong>آخر أسئلته للمساعد:</strong> {thread.assistant_questions.map(q => `«${q}»`).join("، ")}</span> : null}
       <span><strong>فُتحت:</strong> {new Date(thread.created_at).toLocaleString("ar-SA", { timeZone: "Asia/Riyadh" })}</span>
     </section>
-    <section className="card" style={{ marginTop: 16 }}><SupportThread threadId={thread.id} initialMessages={(messagesResult.data ?? []) as SupportMessage[]} initialStatus={thread.status} side="admin" templates={templates} site={siteBase(process.env, "")} /></section>
+    <section className="card" style={{ marginTop: 16 }}><SupportThread threadId={thread.id} initialMessages={(messagesResult.data ?? []) as SupportMessage[]} initialStatus={thread.status} side="admin" templates={templates} site={siteBase(process.env)} /></section>
   </div>;
 }

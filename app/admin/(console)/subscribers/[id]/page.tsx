@@ -1,9 +1,9 @@
 import { notFound } from "next/navigation";
-import { requestSession } from "../../../../lib/supabase/server";
-import { SubscriberActions } from "../../../../components/admin-forms";
-import { accessLabels, durationLabel, paymentStatusLabels, riyal, statusLabels, type Access } from "../../../../lib/subscriptions";
-import { setupPercent, stepTitle, type SetupRow } from "../../../../lib/onboarding";
-import { BackLink } from "../../../../components/back-link";
+import { requestSession } from "../../../../../lib/supabase/server";
+import { SubscriberActions } from "../../../../../components/admin-forms";
+import { accessLabels, durationLabel, paymentStatusLabels, riyal, statusLabels, type Access } from "../../../../../lib/subscriptions";
+import { setupPercent, stepTitle, type SetupRow } from "../../../../../lib/onboarding";
+import { BackLink } from "../../../../../components/back-link";
 
 export const metadata = { title: "مشترك" };
 type Detail = { organization_id: string; name: string; type: string; created_at: string; access: Access;

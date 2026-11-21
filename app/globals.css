@@ -1090,3 +1090,51 @@ a.stat:hover,a.list-row:hover,a.tile:hover,.org-tile:hover,.sidebar .nav-link:ho
 /* Cloudflare Turnstile: invisible for most people; takes room only when it asks for a click. */
 .turnstile-box:empty{display:none}
 .turnstile-box{min-height:0;display:flex;justify-content:center}
+/* «سِير أدمن»: the same identity; only the sidebar is dark plum with a coral pill and active item. */
+.adm{--adm-side:#2A0E3B;--adm-side-text:#E9DDF2;--adm-side-muted:#B9A6CC;--adm-coral:#FF7A59;--adm-pill:#FFC9B8;
+  display:grid;grid-template-columns:272px minmax(0,1fr);min-height:100vh;background:var(--bg)}
+.adm-side{background:var(--adm-side);color:var(--adm-side-text);padding:24px 14px;position:sticky;top:0;height:100vh;overflow-y:auto;box-sizing:border-box}
+.adm-brand-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 12px 4px}
+.adm-brand{display:flex;align-items:baseline;gap:8px;text-decoration:none}
+.adm-logo{font-size:26px;font-weight:700;color:#fff;display:inline-flex;align-items:baseline}
+.adm-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--adm-coral);margin-inline-start:3px}
+.adm-pill{font-size:12px;font-weight:600;color:var(--adm-side);background:var(--adm-pill);border-radius:999px;padding:1px 9px}
+.adm-sub{margin:0 12px 6px;font-size:12px;color:var(--adm-side-muted)}
+.adm-menu-btn{display:none;align-items:center;gap:6px;min-height:44px;padding:0 14px;border-radius:14px;border:1px solid rgba(255,255,255,.2);background:transparent;color:#fff;font:inherit;font-weight:600;cursor:pointer}
+.adm-nav{display:flex;flex-direction:column;gap:2px}
+.adm-group{display:flex;flex-direction:column;gap:2px}
+.adm-group-title{margin:18px 12px 6px;font-size:12px;font-weight:600;color:var(--adm-side-muted)}
+.adm-link{display:flex;align-items:center;gap:10px;min-height:40px;padding:9px 12px;border-radius:14px;color:var(--adm-side-text);text-decoration:none;font-size:14px;font-weight:500;box-sizing:border-box}
+.adm-link:hover{background:rgba(255,255,255,.08);color:#fff}
+.adm-link:focus-visible{outline:2px solid var(--adm-coral);outline-offset:2px}
+.adm-link[aria-current="page"]{background:var(--adm-coral);color:var(--adm-side);font-weight:700}
+.adm-count{margin-inline-start:auto;background:var(--adm-coral);color:var(--adm-side);font-size:12px;font-weight:700;border-radius:999px;padding:0 8px;line-height:20px}
+.adm-link[aria-current="page"] .adm-count{background:var(--adm-side);color:#fff}
+.adm-body{min-width:0;display:flex;flex-direction:column}
+.adm-top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:16px 36px 0}
+.adm-top-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.adm-mfa{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:#1E7A43;background:#E6F6EC;border-radius:999px;padding:6px 12px;font-weight:600}
+.adm-mfa-dot{width:8px;height:8px;border-radius:50%;background:#1E9E52}
+.adm-main{padding:20px 36px 40px;max-width:none}
+@media (max-width:1100px){.adm{grid-template-columns:240px minmax(0,1fr)}.adm-top{padding:16px 24px 0}.adm-main{padding:18px 24px 36px}}
+@media (max-width:760px){
+  .adm{grid-template-columns:1fr}
+  .adm-side{position:sticky;top:0;z-index:30;height:auto;max-height:100vh;padding:12px 12px}
+  .adm-brand-row{margin:0 4px}
+  .adm-menu-btn{display:inline-flex}
+  .adm-sub{display:none}
+  .adm-nav{display:none;padding-bottom:12px}
+  .adm-side.is-open .adm-nav{display:flex}
+  .adm-side.is-open{overflow-y:auto}
+  .adm-top{padding:12px 16px 0}
+  .adm-main{padding:14px 16px 32px}
+}
+/* The admin sign-in and verification pages. */
+.adm-auth{min-height:100vh;display:grid;place-items:center;padding:24px 16px;background:var(--bg);box-sizing:border-box}
+.adm-auth-card{width:min(440px,100%);display:grid;gap:14px}
+.adm-auth-brand{display:flex;align-items:baseline;gap:8px;justify-content:center;background:#2A0E3B;border-radius:18px;padding:14px}
+.adm-auth-brand .adm-logo{font-size:24px}
+.adm-qr{display:grid;place-items:center;background:#fff;border-radius:16px;padding:12px;border:1px solid var(--border)}
+.adm-qr img{width:200px;height:200px}
+.adm-secret{font-family:ui-monospace,Menlo,monospace;font-size:15px;letter-spacing:.08em;word-break:break-all;background:var(--surface-2);border-radius:12px;padding:10px 12px;user-select:all}
+.adm-code{font-size:24px;letter-spacing:.4em;text-align:center;font-variant-numeric:tabular-nums}

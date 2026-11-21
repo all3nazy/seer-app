@@ -19,7 +19,8 @@ self.addEventListener("notificationclick", event => {
   const url = new URL(event.notification.data?.url || "/dashboard", self.location.origin).href;
   event.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(list => {
     const open = list.find(client => client.url.startsWith(self.location.origin));
-    if (open) { open.focus(); return open.navigate(url); }
+    // A link to the other app («سِير أدمن» or the platform) opens in its own window.
+    if (open && new URL(url).origin === self.location.origin) { open.focus(); return open.navigate(url); }
     return self.clients.openWindow(url);
   }));
 });

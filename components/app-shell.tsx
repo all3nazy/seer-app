@@ -17,19 +17,19 @@ import { arNumber } from "../lib/dates";
 
 type ShellProps = { children: React.ReactNode; stage: Stage; organizations: { id: string; name: string }[]; manager?: boolean; userId?: string;
   sections?: OrgFeatures | null; brand?: { primary: string | null; onPrimary: string | null; accent: string | null } | null;
-  notice?: { text: string; owner: boolean; org: string } | null; platformAdmin?: boolean;
-  /** Open tickets with a new reply from the team; for a platform admin, tickets waiting for the team. */
-  support?: { mine: string[]; team: string[] | null } };
+  notice?: { text: string; owner: boolean; org: string } | null;
+  /** Open tickets with a new reply from the Seer team. */
+  support?: { mine: string[] } };
 
-export function AppShell({ children, stage, organizations, manager = true, userId, sections = null, brand = null, notice = null, platformAdmin = false, support = { mine: [], team: null } }: ShellProps) {
+export function AppShell({ children, stage, organizations, manager = true, userId, sections = null, brand = null, notice = null, support = { mine: [] } }: ShellProps) {
   // The badge starts from the server's unread list and then follows the bell's realtime channel.
-  seedSupportBadge(support.mine, support.team);
+  // The platform team's inbox lives in «سِير أدمن»; here everyone sees their own tickets only.
+  seedSupportBadge(support.mine, null);
   const badge = useSupportBadge();
   useEffect(() => onNotification(supportNotification), []);
-  // «الدعم»: a platform admin goes to the team inbox; everyone else to their tickets.
-  const supportHref = platformAdmin ? "/admin/support" : "/dashboard/support";
-  const supportCount = platformAdmin ? badge.team ?? 0 : badge.mine;
-  const supportLabel = platformAdmin ? `الدعم${supportCount ? `: ${arNumber(supportCount)} بانتظار ردّك` : ""}` : `الدعم${supportCount ? `: ${arNumber(supportCount)} فيها رد جديد` : ""}`;
+  const supportHref = "/dashboard/support";
+  const supportCount = badge.mine;
+  const supportLabel = `الدعم${supportCount ? `: ${arNumber(supportCount)} فيها رد جديد` : ""}`;
   const path = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   useEffect(() => { try { setCollapsed(localStorage.getItem("seer-sidebar") === "rail"); } catch { /* storage unavailable */ } }, []);
@@ -84,7 +84,6 @@ export function AppShell({ children, stage, organizations, manager = true, userI
         })}
       </nav>
       <div className="sidebar-foot">
-        {platformAdmin ? <Link className="nav-link" href="/admin" title="لوحة مسؤول المنصة"><Icon name="shield" /><span className="nav-text">لوحة المسؤول</span></Link> : null}
         <Link className="nav-link support-link" href={supportHref} aria-current={path.startsWith("/dashboard/support") ? "page" : undefined} title={supportLabel} aria-label={supportLabel}>
           <Icon name="help" /><span className="nav-text">الدعم</span>{supportCount ? <span className="nav-badge" aria-hidden="true">{supportCount > 9 ? "9+" : arNumber(supportCount)}</span> : null}
         </Link>
