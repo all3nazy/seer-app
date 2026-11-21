@@ -60,7 +60,6 @@ describe("every detail page has «رجوع» to the right place", () => {
     ["app/dashboard/support/new/page.tsx", 'href="/dashboard/support"'],
     ["app/dashboard/support/[id]/page.tsx", 'href="/dashboard/support"'],
     ["app/admin/(console)/support/[id]/page.tsx", 'href="/admin/support"'],
-    ["app/admin/(console)/subscribers/[id]/page.tsx", 'href="/admin/subscribers"'],
     ["app/dashboard/academics/sections/[id]/page.tsx", "href={`/dashboard/academics?"],
     ["app/dashboard/admissions/[id]/page.tsx", "href={`/dashboard/admissions?"],
     ["app/dashboard/billing/receipt/[id]/page.tsx", "href={`/dashboard/billing?"],
@@ -74,6 +73,9 @@ describe("every detail page has «رجوع» to the right place", () => {
   it.each(expected)("%s", (file, href) => {
     const source = readFileSync(file, "utf8");
     expect(source).toContain(`<BackLink ${href}`);
+  });
+  it("the organization profile goes back through its breadcrumb (approved design)", () => {
+    expect(readFileSync("components/admin-org-profile.tsx", "utf8")).toContain('<Link href="/admin/subscribers">المنشآت</Link>');
   });
   it("the support list goes back to the previous page when there is one", () => {
     expect(readFileSync("app/dashboard/support/page.tsx", "utf8")).toMatch(/<BackLink href="\/dashboard" history \/>/);

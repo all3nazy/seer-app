@@ -59,7 +59,7 @@ export default async function SettingsPage() {
       </> },
       ...(manager ? [{ id: "organization" as const, label: "المنشأة", content: <>
       {owned.map(org => <section key={org.organization_id} aria-labelledby={`sections-${org.organization_id}`} id="sections"><h2 id={`sections-${org.organization_id}`} className="section-label">أقسام وهوية {org.name}</h2>
-        <OrgCustomizer organizationId={org.organization_id} features={pilot ? featureKeys.filter(key => !pilotHides(key)) : org.features ?? []} disabled={org.disabled_features ?? []} primary={org.primary_color} accent={org.accent_color} hidden={pilot ? [...pilotHiddenFeatures] : []} />
+        <OrgCustomizer organizationId={org.organization_id} features={(pilot ? featureKeys.filter(key => !pilotHides(key)) : org.features ?? []).filter(key => !(org.blocked_features ?? []).includes(key))} disabled={org.disabled_features ?? []} primary={org.primary_color} accent={org.accent_color} hidden={pilot ? [...pilotHiddenFeatures] : []} />
       </section>)}
       {owned.length ? null : <p className="info-banner" style={{ margin: 0 }}>الأقسام وألوان الهوية يعدّلها مالك المنشأة.</p>}
       <section aria-labelledby="team-link" id="team"><h2 id="team-link" className="section-label">الفريق</h2>

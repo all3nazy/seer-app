@@ -1,48 +1,27 @@
-import Link from "next/link";
 import { requestSession } from "../../../../lib/supabase/server";
-import { accessLabels, statusLabels, type Access } from "../../../../lib/subscriptions";
-import { setupPercent, type SetupRow } from "../../../../lib/onboarding";
+import { SubscribersView, sortOptions, statusFilters, type SubscriberQuery, type SubscriberRow } from "../../../../components/admin-subscribers";
+import type { SetupRow } from "../../../../lib/onboarding";
 
-export const metadata = { title: "المشتركين" };
-type Row = { organization_id: string; name: string; type: string; plan: string | null; status: string | null; access: Access; ends_on: string | null; days_left: number | null; owner_email: string | null; owner_phone: string | null; students: number; staff: number; pending: number };
-const filters: [string, string][] = [["", "الكل"], ["active", "نشط"], ["trial", "تجربة"], ["grace", "مهلة"], ["locked", "مقفل"]];
+export const metadata = { title: "المنشآت" };
+const uuid = /^[0-9a-f-]{36}$/;
 
-export default async function AdminSubscribers({ searchParams }: { searchParams: Promise<{ q?: string; status?: string }> }) {
+/** المشتركين › المنشآت: search by name, city, owner email or phone; filters; sort; pages. */
+export default async function AdminSubscribers({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const params = await searchParams;
-  const q = (params.q ?? "").trim().slice(0, 60);
-  const status = filters.some(([key]) => key === params.status) ? params.status ?? "" : "";
+  const query: SubscriberQuery = {
+    q: (params.q ?? "").trim().slice(0, 80),
+    status: statusFilters.some(([key]) => key === params.status) ? params.status ?? "" : "",
+    plan: uuid.test(params.plan ?? "") ? params.plan! : "",
+    ending: params.ending === "1",
+    sort: sortOptions.some(([key]) => key === params.sort) ? params.sort! : "ending",
+    page: Math.max(1, Math.min(1000, Number.parseInt(params.page ?? "1", 10) || 1)),
+  };
   const { client } = await requestSession();
-  const [{ data }, setupResult] = await Promise.all([
-    client.rpc("admin_subscribers", { search: q || null, filter: status || null }),
+  const [list, plans, setup] = await Promise.all([
+    client.rpc("admin_subscribers_v2", { p_search: query.q || null, p_status: query.status || null, p_plan: query.plan || null, p_ending: query.ending, p_sort: query.sort, p_page: query.page }),
+    client.from("plans").select("id,name").order("sort_order"),
     client.rpc("admin_onboarding"),
   ]);
-  const setup = new Map(((setupResult.data ?? []) as SetupRow[]).map(row => [row.organization_id, row]));
-  const rows = (data ?? []) as Row[];
-  return <>
-    <header className="page-head"><div><h1>المشتركين</h1><p>{rows.length.toLocaleString("ar-SA")} منشأة</p></div></header>
-    <form className="toolbar" style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "end", marginBottom: 16 }}>
-      <label style={{ flex: "1 1 220px" }}>بحث بالاسم<input type="search" name="q" defaultValue={q} /></label>
-      <label>الحالة<select name="status" defaultValue={status}>{filters.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
-      <button type="submit" className="btn">عرض</button>
-    </form>
-    <div className="table-wrap"><table className="links-table"><thead><tr><th>المنشأة</th><th>الباقة</th><th>الحالة</th><th>النهاية</th><th>التأسيس</th><th>الطلاب</th><th>الفريق</th><th>التواصل</th></tr></thead>
-      <tbody>{rows.map(row => <tr key={row.organization_id}>
-        <td><Link href={`/admin/subscribers/${row.organization_id}`}>{row.name}</Link>{row.pending ? <span className="chip-soft rose"> تحويل معلّق</span> : null}</td>
-        <td>{row.plan ?? "—"}</td>
-        <td><span className={`chip-soft ${row.access === "locked" ? "rose" : row.access === "grace" ? "" : "ok"}`}>{row.status === "trial" && row.access === "active" ? statusLabels.trial : row.status === "suspended" ? statusLabels.suspended : accessLabels[row.access]}</span></td>
-        <td>{row.ends_on ?? "—"}{row.days_left !== null && row.days_left >= 0 ? <span className="hint"> ({row.days_left.toLocaleString("ar-SA")} يوم)</span> : null}</td>
-        <td>{setup.has(row.organization_id) ? <SetupCell row={setup.get(row.organization_id)!} /> : "—"}</td>
-        <td>{Number(row.students).toLocaleString("ar-SA")}</td><td>{Number(row.staff).toLocaleString("ar-SA")}</td>
-        <td dir="ltr" className="hint">{[row.owner_phone, row.owner_email].filter(Boolean).join(" · ") || "—"}</td>
-      </tr>)}</tbody></table></div>
-  </>;
-}
-
-/** «٧٠٪» with the steps done, and «متعثرة» when the setup is stuck. */
-function SetupCell({ row }: { row: SetupRow }) {
-  const percent = setupPercent(row);
-  return <span style={{ display: "inline-flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-    <span className={`chip-soft ${percent === 100 ? "ok" : row.stuck ? "rose" : ""}`} title={`${row.done} من ${row.total}`}>{percent.toLocaleString("ar-SA")}٪</span>
-    {row.stuck ? <span className="chip-soft rose">متعثرة</span> : null}
-  </span>;
+  return <SubscribersView rows={(list.data ?? []) as SubscriberRow[]} plans={(plans.data ?? []) as { id: string; name: string }[]} query={query}
+    setup={new Map(((setup.data ?? []) as SetupRow[]).map(row => [row.organization_id, row]))} />;
 }

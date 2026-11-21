@@ -39,7 +39,7 @@ beforeAll(async () => {
   await db.exec(`
     create role anon nologin; create role authenticated nologin; create role service_role nologin bypassrls;
     create schema auth;
-    create table auth.users(id uuid primary key, email_confirmed_at timestamptz, email text, instance_id uuid, aud text, role text, encrypted_password text,
+    create table auth.users(id uuid primary key, email_confirmed_at timestamptz, email text, last_sign_in_at timestamptz, instance_id uuid, aud text, role text, encrypted_password text,
       raw_app_meta_data jsonb, raw_user_meta_data jsonb, created_at timestamptz, updated_at timestamptz, confirmation_token text, recovery_token text, email_change_token_new text, email_change text);
     create table auth.identities(provider_id text, user_id uuid, identity_data jsonb, provider text, last_sign_in_at timestamptz, created_at timestamptz, updated_at timestamptz);
     -- Stand-ins for pgcrypto's bcrypt helpers, which embedded Postgres lacks.
@@ -172,6 +172,9 @@ beforeAll(async () => {
   const adminAal2 = readdirSync("supabase/migrations").filter(name => name.endsWith("_admin_aal2.sql"));
   if (adminAal2.length !== 1) throw new Error("Expected exactly one admin aal2 migration");
   await db.exec(readFileSync(`supabase/migrations/${adminAal2[0]}`, "utf8"));
+  const stage2 = readdirSync("supabase/migrations").filter(name => name.endsWith("_admin_stage2.sql"));
+  if (stage2.length !== 1) throw new Error("Expected exactly one admin stage 2 migration");
+  await db.exec(readFileSync(`supabase/migrations/${stage2[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -2750,5 +2753,185 @@ describe("platform admin needs two-step verification (aal2)", () => {
     await db.exec("reset role");
     expect(result.answer.text).toBe("قوالب الرد");
     expect(result.answer.text).not.toContain("صلاحية");
+  });
+});
+
+describe("«سِير أدمن» stage 2: organization profile, overview and subscribers list", () => {
+  const platformAdmin = "60000000-0000-0000-0000-0000000000ad";
+  const orgD = "d2000000-0000-0000-0000-0000000000d1";
+  const ownerD = "d1000000-0000-0000-0000-0000000000d1", adminD = "d1000000-0000-0000-0000-0000000000d2", staffD = "d1000000-0000-0000-0000-0000000000d3";
+  const asAdmin = () => as("authenticated", platformAdmin, "aal2");
+  const one = async (sql: string) => { await asAdmin(); const r = (await rows(sql))[0]; await db.exec("reset role"); return r ? Object.values(r)[0] : undefined; };
+  const audits = async (action: string) => (await rows(`select count(*)::int as n from private.platform_audit where organization_id='${orgD}' and action='${action}'`))[0].n as number;
+  const notes = async (user: string) => (await rows(`select title from public.notifications where organization_id='${orgD}' and user_id='${user}' order by created_at desc`)).map(r => r.title as string);
+  beforeAll(async () => {
+    await db.exec("reset role");
+    await db.exec(`insert into auth.users(id,email,email_confirmed_at,last_sign_in_at) values ('${platformAdmin}','admin@seer.test',now(),now()) on conflict do nothing;
+      insert into private.platform_admins(user_id) values ('${platformAdmin}') on conflict do nothing;
+      insert into auth.users(id,email,email_confirmed_at,last_sign_in_at) values ('${ownerD}','noura@yasmeen.test',now(),now()),('${adminD}','sara.a@users.seer.local',now(),null),('${staffD}','huda.d@users.seer.local',now(),now() - interval '3 days');
+      insert into public.organizations(id,name,type) values ('${orgD}','روضة الياسمين','kindergarten');
+      insert into public.organization_profiles(organization_id, city) values ('${orgD}','الرياض');
+      insert into public.memberships(organization_id,user_id,role,display_name) values ('${orgD}','${ownerD}','owner','نورة'),('${orgD}','${adminD}','admin','سارة'),('${orgD}','${staffD}','staff','هدى');
+      insert into public.member_phones(organization_id,user_id,phone) values ('${orgD}','${ownerD}','0551239876');
+      insert into public.subscriptions(organization_id, plan_id, status, starts_on, ends_on) select '${orgD}', id, 'active', current_date - 30, current_date + 5 from public.plans where key='advanced'
+       on conflict (organization_id) do update set status='active', ends_on = current_date + 5;`);
+  });
+
+  it("every new admin function refuses a password-only session (aal1), a subscriber, and anon", async () => {
+    const calls = [
+      "select public.admin_overview_v2()", "select * from public.admin_subscribers_v2()", `select public.admin_org_profile('${orgD}')`,
+      `select public.admin_org_extend('${orgD}', 3, 'days')`, `select public.admin_org_free_month('${orgD}')`,
+      `select public.admin_org_set_plan('${orgD}', (select id from public.plans limit 1))`, `select public.admin_org_set_suspended('${orgD}', true)`,
+      `select public.admin_org_cancel('${orgD}', 'سبب تجربة')`, `select public.admin_unlock_login('${orgD}', '${staffD}')`, `select public.admin_transfer_ownership('${orgD}', '${adminD}')`,
+      `select public.admin_set_entitlements('${orgD}', array['daily'])`, `select public.admin_onboarding_remind('${orgD}')`, `select public.admin_save_org_note('${orgD}', 'x')`,
+    ];
+    for (const [role, user, aal] of [["authenticated", platformAdmin, "aal1"], ["authenticated", ownerD, "aal2"]] as const) {
+      for (const sql of calls) { await as(role, user, aal); await expect(db.exec(sql), `${aal} ${sql}`).rejects.toMatchObject({ code: "42501" }); }
+    }
+    await as("anon");
+    for (const sql of calls) await expect(db.exec(sql), sql).rejects.toBeDefined();
+    await db.exec("reset role");
+    expect(await audits("org_extended")).toBe(0);
+  });
+
+  it("the overview: decisions, numbers (confirmed revenue per month), health and activity", async () => {
+    await db.exec(`insert into storage.objects(bucket_id,name) values ('subscription-receipts','${orgD}/r1.jpg'),('subscription-receipts','${orgD}/r2.jpg');
+      insert into public.subscription_payments(organization_id, plan_id, months, amount, reference, receipt_path, status, decided_at, period_start, period_end)
+        select '${orgD}', id, 12, 2400, 'RJ-55120', '${orgD}/r1.jpg', 'approved', now(), current_date - 30, current_date + 5 from public.plans where key='advanced';
+      insert into public.subscription_payments(organization_id, plan_id, months, amount, reference, receipt_path, created_at)
+        select '${orgD}', id, 1, 350, 'AL-90231', '${orgD}/r2.jpg', now() - interval '2 days' from public.plans where key='advanced';`);
+    const overview = await one("select public.admin_overview_v2() as o") as { decisions: Record<string, unknown>; numbers: Record<string, unknown>; health: Record<string, unknown>; activity: { kind: string; organization: string }[] };
+    expect(overview.decisions.payments).toBeGreaterThanOrEqual(1);
+    expect((overview.decisions.oldest_payment as { organization: string }).organization).toBeTruthy();
+    expect(Number(overview.decisions.ending_7_days)).toBeGreaterThanOrEqual(1);
+    expect(Number(overview.numbers.mrr)).toBeGreaterThanOrEqual(200); // 2400 / 12
+    expect(Number(overview.numbers.signed_in_today)).toBeGreaterThanOrEqual(1);
+    expect(Number(overview.numbers.users)).toBeGreaterThanOrEqual(Number(overview.numbers.signed_in_today));
+    expect(overview.health).toMatchObject({ database: true, cron: [] });
+    expect(overview.activity.some(e => e.kind === "payment" && e.organization === "روضة الياسمين")).toBe(true);
+  });
+
+  it("the subscribers list: search by name, city, owner email or phone; filters; sort; pages of 25 with the total", async () => {
+    const list = async (args: string) => { await asAdmin(); const r = await rows(`select organization_id::text as id, name, city, total from public.admin_subscribers_v2(${args})`); await db.exec("reset role"); return r as { id: string; name: string; city: string; total: number }[]; };
+    for (const search of ["الياسمين", "الرياض", "noura@yasmeen", "0551239876", "551 239"]) expect((await list(`p_search => '${search}'`)).map(r => r.id), search).toContain(orgD);
+    expect(await list("p_search => 'لا يوجد أبدًا'")).toEqual([]);
+    expect((await list("p_status => 'active'")).map(r => r.id)).toContain(orgD);
+    expect((await list("p_status => 'suspended'")).map(r => r.id)).not.toContain(orgD);
+    expect((await list("p_ending => true")).map(r => r.id)).toContain(orgD);
+    expect((await list(`p_plan => (select id from public.plans where key='advanced')`)).map(r => r.id)).toContain(orgD);
+    const byName = await list("p_sort => 'name'");
+    expect(byName.map(r => r.name)).toEqual([...byName.map(r => r.name)].sort((a, b) => a.localeCompare(b, "en")));
+    const all = await list("");
+    expect(Number(all[0].total)).toBe(all.length);
+    expect(await list("p_page => 99")).toEqual([]);
+  });
+
+  it("the profile: header, subscription, payments, members with today's sign-ins, counts, entitlements, onboarding, support, log", async () => {
+    const profile = await one(`select public.admin_org_profile('${orgD}') as p`) as Record<string, any>;
+    expect(profile).toMatchObject({ name: "روضة الياسمين", type: "kindergarten", city: "الرياض", access: "active", payment_method: "bank_transfer", grace_days: 7 });
+    expect(profile.subscription).toMatchObject({ status: "active", days_left: 5 });
+    expect(profile.payments.map((p: { reference: string }) => p.reference)).toEqual(expect.arrayContaining(["RJ-55120", "AL-90231"]));
+    expect(profile.payments.every((p: { receipt_path: string }) => p.receipt_path.startsWith(orgD))).toBe(true);
+    expect(profile.members.map((m: { role: string }) => m.role)).toEqual(["owner", "admin", "staff"]);
+    expect(profile.counts).toMatchObject({ staff: 2, signed_in_today: 1 });
+    expect(profile.entitlements).toEqual({ blocked: [], disabled: [] });
+    expect(profile.onboarding).toMatchObject({ total: expect.any(Number) });
+    expect(Array.isArray(profile.support)).toBe(true);
+    expect(await one(`select public.admin_org_profile('00000000-0000-0000-0000-00000000dead') as p`)).toBeNull();
+  });
+
+  it("extend by days or months, + free month, change plan, suspend and resume: audited and the owner is told", async () => {
+    const before = (await rows(`select ends_on::text as e from public.subscriptions where organization_id='${orgD}'`))[0].e as string;
+    await one(`select public.admin_org_extend('${orgD}', 10, 'days') as d`);
+    await one(`select public.admin_org_extend('${orgD}', 1, 'months') as d`);
+    await asAdmin(); await expect(db.exec(`select public.admin_org_extend('${orgD}', 1, 'years')`)).rejects.toMatchObject({ code: "22023" }); await db.exec("reset role");
+    await one(`select public.admin_org_free_month('${orgD}') as d`);
+    const after = (await rows(`select ends_on::text as e from public.subscriptions where organization_id='${orgD}'`))[0].e as string;
+    expect(after > before).toBe(true);
+    expect(await audits("org_extended")).toBe(2);
+    expect(await audits("org_free_month")).toBe(1);
+    await one(`select public.admin_org_set_plan('${orgD}', (select id from public.plans where key='advanced')) as x`);
+    expect(await audits("org_plan_changed")).toBe(1);
+    await one(`select public.admin_org_set_suspended('${orgD}', true) as x`);
+    expect((await rows(`select private.org_access('${orgD}') as a`))[0].a).toBe("locked");
+    await one(`select public.admin_org_set_suspended('${orgD}', false) as x`);
+    expect((await rows(`select private.org_access('${orgD}') as a`))[0].a).toBe("active");
+    expect(await audits("org_suspended")).toBe(1);
+    expect(await audits("org_resumed")).toBe(1);
+    const told = await notes(ownerD);
+    expect(told).toEqual(expect.arrayContaining(["تم تمديد اشتراكك", "تغيّرت باقة منشأتك", "تم إيقاف اشتراك المنشأة", "تمت إعادة تفعيل الاشتراك ✓"]));
+  });
+
+  it("cancel needs a reason, closes access today without grace, keeps the data; an extension opens it again", async () => {
+    await asAdmin(); await expect(db.exec(`select public.admin_org_cancel('${orgD}', ' ')`)).rejects.toMatchObject({ code: "22023" }); await db.exec("reset role");
+    await one(`select public.admin_org_cancel('${orgD}', 'طلب المالك الإلغاء') as x`);
+    expect((await rows(`select private.org_access('${orgD}') as a, cancel_reason from public.subscriptions where organization_id='${orgD}'`))[0]).toEqual({ a: "locked", cancel_reason: "طلب المالك الإلغاء" });
+    expect(await notes(ownerD)).toContain("تم إلغاء اشتراك المنشأة");
+    expect(await audits("org_cancelled")).toBe(1);
+    await one(`select public.admin_org_extend('${orgD}', 1, 'months') as d`);
+    expect((await rows(`select private.org_access('${orgD}') as a, cancel_reason from public.subscriptions where organization_id='${orgD}'`))[0]).toEqual({ a: "active", cancel_reason: null });
+  });
+
+  it("unlock a member's sign-in: the active lock ends; only for members of that organization", async () => {
+    await db.exec("set role service_role");
+    for (let i = 0; i < 5; i++) await db.exec(`select public.login_record('huda.d@users.seer.local','10.1.1.1',false,null)`);
+    expect(((await rows(`select public.login_check('huda.d@users.seer.local','10.1.1.9') as r`))[0].r as { locked: boolean }).locked).toBe(true);
+    await db.exec("reset role");
+    expect((await one(`select public.admin_org_profile('${orgD}') as p`) as { members: { user_id: string; locked: boolean }[] }).members.find(m => m.user_id === staffD)?.locked).toBe(true);
+    await one(`select public.admin_unlock_login('${orgD}', '${staffD}') as x`);
+    await db.exec("set role service_role");
+    expect(((await rows(`select public.login_check('huda.d@users.seer.local','10.1.1.9') as r`))[0].r as { locked: boolean }).locked).toBe(false);
+    await db.exec("reset role");
+    expect(await audits("login_unlocked")).toBe(1);
+    await asAdmin(); await expect(db.exec(`select public.admin_unlock_login('${orgD}', '${owner}')`)).rejects.toMatchObject({ code: "P0002" }); await db.exec("reset role");
+  });
+
+  it("transfer ownership to another member: roles swap, both are told, audited", async () => {
+    await asAdmin();
+    await expect(db.exec(`select public.admin_transfer_ownership('${orgD}', '${owner}')`)).rejects.toMatchObject({ code: "P0002" });
+    await expect(db.exec(`select public.admin_transfer_ownership('${orgD}', '${ownerD}')`)).rejects.toMatchObject({ code: "22023" });
+    await db.exec(`select public.admin_transfer_ownership('${orgD}', '${adminD}')`);
+    await db.exec("reset role");
+    expect(await rows(`select user_id::text as u, role from public.memberships where organization_id='${orgD}' and user_id in ('${ownerD}','${adminD}') order by role`)).toEqual([{ u: ownerD, role: "admin" }, { u: adminD, role: "owner" }]);
+    expect(await notes(adminD)).toContain("صرت مالك روضة الياسمين");
+    expect(await notes(ownerD)).toContain("انتقلت ملكية روضة الياسمين");
+    expect(await audits("ownership_transferred")).toBe(1);
+    await one(`select public.admin_transfer_ownership('${orgD}', '${ownerD}') as x`);
+  });
+
+  it("entitlements: a blocked section is refused by the database and hidden from the organization (also in pilot/trial)", async () => {
+    await asAdmin(); await expect(db.exec(`select public.admin_set_entitlements('${orgD}', array['nope'])`)).rejects.toMatchObject({ code: "22023" }); await db.exec("reset role");
+    expect((await rows(`select private.org_has_feature('${orgD}','daily') as f`))[0].f).toBe(true);
+    await one(`select public.admin_set_entitlements('${orgD}', array['daily','payroll']) as x`);
+    expect((await rows(`select private.org_has_feature('${orgD}','daily') as f, private.org_has_feature('${orgD}','tasks') as t`))[0]).toEqual({ f: false, t: true });
+    await as("authenticated", ownerD, "aal1");
+    const [mine] = await rows(`select features, blocked_features from public.my_organizations() where organization_id='${orgD}'`) as { features: string[]; blocked_features: string[] }[];
+    await db.exec("reset role");
+    expect(mine.blocked_features).toEqual(["daily", "payroll"]);
+    expect(mine.features).not.toContain("daily");
+    expect(mine.features).toContain("tasks");
+    // A trial (pilot) organization: everything open except what is blocked.
+    await db.exec(`update public.subscriptions set status='trial' where organization_id='${orgD}'`);
+    expect((await rows(`select private.org_has_feature('${orgD}','daily') as f, private.org_has_feature('${orgD}','finance') as g`))[0]).toEqual({ f: false, g: true });
+    await db.exec(`update public.subscriptions set status='active' where organization_id='${orgD}'`);
+    expect(await audits("entitlements_updated")).toBe(1);
+    await one(`select public.admin_set_entitlements('${orgD}', '{}') as x`);
+    expect((await rows(`select private.org_has_feature('${orgD}','daily') as f`))[0].f).toBe(true);
+  });
+
+  it("«ذكّرهم»: an in-app notification to the owners and an email only to real addresses; notes are private and their text is not logged", async () => {
+    await db.exec("delete from private.email_outbox");
+    expect(await one(`select public.admin_onboarding_remind('${orgD}') as n`)).toBe(1);
+    expect(await notes(ownerD)).toContain("كمّل تجهيز منشأتك");
+    expect((await rows("select to_email from private.email_outbox")).map(r => r.to_email)).toEqual(["noura@yasmeen.test"]);
+    expect(await audits("onboarding_reminded")).toBe(1);
+    await one(`select public.admin_save_org_note('${orgD}', 'تواصلنا معهم في معرض الرياض') as x`);
+    expect((await one(`select public.admin_org_profile('${orgD}') as p`) as { note: { body: string } }).note.body).toBe("تواصلنا معهم في معرض الرياض");
+    expect(JSON.stringify(await rows(`select detail from private.platform_audit where organization_id='${orgD}' and action='note_saved'`))).not.toContain("معرض");
+    await as("authenticated", ownerD, "aal2");
+    await expect(db.exec("select * from private.org_admin_notes")).rejects.toBeDefined();
+    await db.exec("reset role");
+    const log = (await one(`select public.admin_org_profile('${orgD}') as p`) as { log: { action: string }[] }).log.map(entry => entry.action);
+    expect(log).toEqual(expect.arrayContaining(["org_extended", "org_cancelled", "login_unlocked", "ownership_transferred", "entitlements_updated", "note_saved"]));
   });
 });

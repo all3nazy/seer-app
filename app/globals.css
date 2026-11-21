@@ -1138,3 +1138,53 @@ a.stat:hover,a.list-row:hover,a.tile:hover,.org-tile:hover,.sidebar .nav-link:ho
 .adm-qr img{width:200px;height:200px}
 .adm-secret{font-family:ui-monospace,Menlo,monospace;font-size:15px;letter-spacing:.08em;word-break:break-all;background:var(--surface-2);border-radius:12px;padding:10px 12px;user-select:all}
 .adm-code{font-size:24px;letter-spacing:.4em;text-align:center;font-variant-numeric:tabular-nums}
+/* «سِير أدمن» stage 2: profile, overview, list */
+.chip-soft.plum{background:var(--tint-lilac);color:var(--primary)}.chip-soft.sun{background:#FEF4E1;color:#8A5A00}
+:root[data-theme="dark"] .chip-soft.sun{background:#3A2E14;color:#F5C46B}
+.adm-page{display:grid;gap:18px}
+.adm-crumbs{font-size:13px;color:var(--text-3)}.adm-crumbs a{color:var(--text-2);text-decoration:none}.adm-crumbs a:hover{text-decoration:underline}
+.adm-org-head{display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start;padding:22px}
+.adm-avatar{width:60px;height:60px;border-radius:18px;background:var(--tint-lilac);color:var(--primary);display:grid;place-items:center;font-size:24px;font-weight:700;flex-shrink:0}
+.adm-org-title{flex:1 1 280px;min-width:0}
+.adm-org-title h1{margin:0;font-size:26px}
+.adm-org-title p{margin:2px 0 8px;color:var(--text-2);font-size:14px}
+.adm-pills{display:flex;flex-wrap:wrap;gap:8px}
+.adm-org-actions{display:grid;gap:10px;flex:1 1 320px}
+.adm-btn-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.adm-tablist{display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid var(--border);overflow-x:auto}
+.adm-tab{font:inherit;font-size:14px;font-weight:600;min-height:44px;padding:10px 14px;border:0;background:transparent;color:var(--text-2);border-bottom:3px solid transparent;cursor:pointer;white-space:nowrap}
+.adm-tab.is-active{color:var(--primary);border-bottom-color:#FF7A59}
+.adm-tab:focus-visible{outline:2px solid var(--primary);outline-offset:-2px}
+.adm-panel{padding-top:16px}
+.adm-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.adm-card{padding:20px 22px}.adm-card h2{margin:0 0 8px;font-size:17px}
+.adm-row{display:flex;justify-content:space-between;gap:10px;font-size:14px;padding:8px 0;border-bottom:1px solid var(--surface-2)}
+.adm-row:last-of-type{border-bottom:0}.adm-row>span:first-child{color:var(--text-2)}
+.adm-list{list-style:none;margin:0;padding:0;display:grid}
+.adm-list li{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--surface-2);font-size:14px}
+.adm-list li:last-child{border-bottom:0}
+.adm-progress-row{display:flex;align-items:center;gap:12px}
+.adm-progress{flex:1;height:10px;border-radius:999px;background:var(--surface-3);overflow:hidden}.adm-progress>div{height:100%;background:#FF7A59}
+.adm-warn{color:var(--danger)}
+.adm-switches{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+.adm-switch-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--surface-2);cursor:pointer}
+.adm-switch-row input{width:40px;height:22px;accent-color:var(--primary);flex-shrink:0}
+.adm-decisions{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}
+.adm-decision{padding:18px;text-decoration:none;color:var(--text);display:flex;flex-direction:column;gap:6px;border-top:4px solid var(--tone,#7C5CFF)}
+.adm-decision:hover{box-shadow:var(--shadow-lg)}
+.adm-decision .label{font-size:13px;color:var(--text-2)}.adm-decision .figure{font-size:32px;font-weight:700}.adm-decision .note{font-size:12px;color:var(--text-3)}
+.adm-numbers{padding:20px 22px;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:18px}
+.adm-numbers p{margin:0}.adm-numbers .label{font-size:13px;color:var(--text-2)}.adm-numbers .figure{margin-top:2px;font-size:26px;font-weight:700}.adm-numbers .sub{font-size:12px;color:var(--text-3)}
+.adm-split{display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start}
+.adm-split>.wide{flex:2 1 520px;min-width:0}.adm-split>.narrow{flex:1 1 300px;min-width:0}
+.adm-health{display:grid;gap:12px}
+.adm-health li{display:flex;align-items:center;gap:10px;font-size:14px}
+.adm-dot-state{width:10px;height:10px;border-radius:50%;flex-shrink:0;background:var(--ok)}
+.adm-dot-state.warn{background:#F5A524}.adm-dot-state.bad{background:var(--danger)}.adm-dot-state.soon{background:var(--text-3)}
+.adm-card-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}.adm-card-head h2{margin:0;flex:1}
+.adm-pager{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:14px}
+.adm-pager a,.adm-pager span{min-width:40px;min-height:40px;display:inline-grid;place-items:center;border-radius:12px;border:1px solid var(--border);text-decoration:none;color:var(--text)}
+.adm-pager [aria-current="page"]{background:var(--primary);color:var(--on-primary);border-color:var(--primary)}
+.adm-filters{display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin-bottom:16px}
+.adm-filters label{flex:1 1 160px}.adm-filters .grow{flex:2 1 260px}
+@media (max-width:760px){.adm-org-head{padding:16px}.adm-org-title h1{font-size:22px}}
