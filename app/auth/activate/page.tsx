@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getSupabaseBrowserClient } from "../../../lib/supabase";
 import { ActivationError, requestActivationEmail, verifyActivationInput } from "../../../lib/activation";
+import { captchaMissing, useTurnstile } from "../../../components/turnstile";
 import { Logo } from "../../../components/icons";
 import { arNumber } from "../../../lib/dates";
 
@@ -14,6 +15,7 @@ export default function ActivateAccount() {
   const [error, setError] = useState("");
   const notice = useRef<HTMLParagraphElement>(null);
   const inFlight = useRef(false);
+  const captcha = useTurnstile("activate");
 
   useEffect(() => {
     if (!cooldown) return;
@@ -28,11 +30,15 @@ export default function ActivateAccount() {
     inFlight.current = true;
     setBusy("request"); setError(""); setMessage(""); setCooldown(60);
     try {
-      await requestActivationEmail(getSupabaseBrowserClient, email, window.location.origin);
+      // The email request (Supabase /otp) needs the Turnstile token once CAPTCHA is on; verifying the
+      // link (/verify) does not.
+      const token = await captcha.getToken();
+      if (captcha.enabled && !token) { setError(captchaMissing); setCooldown(0); return; }
+      await requestActivationEmail(getSupabaseBrowserClient, email, window.location.origin, token);
       setMessage("إذا أمكن إرسال رسالة لهذا البريد، ستصلك رسالة تفعيل. تحقق من صندوق الوارد والبريد غير المرغوب فيه، ثم انسخ رابط التفعيل من الرسالة دون فتحه وألصقه أدناه.");
     } catch {
       setError("تعذر طلب رسالة التفعيل حاليًا. تحقق من البريد، وانتظر قبل المحاولة مجددًا.");
-    } finally { inFlight.current = false; setBusy(null); }
+    } finally { captcha.reset(); inFlight.current = false; setBusy(null); }
   }
   async function verifyLink(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -63,6 +69,8 @@ export default function ActivateAccount() {
       <form method="post" onSubmit={requestEmail} className="login-form" aria-busy={busy === "request"}>
         <label htmlFor="activation-email">البريد الإلكتروني</label>
         <input id="activation-email" name="email" type="email" dir="ltr" inputMode="email" required autoComplete="email" autoCapitalize="none" spellCheck={false} maxLength={254} value={email} onChange={event => setEmail(event.target.value)} readOnly={busy !== null} />
+        {captcha.widget}
+        {captcha.message ? <p className="hint" role="status" style={{ margin: 0 }}>{captcha.message}</p> : null}
         <button className="primary-button" disabled={busy !== null || cooldown > 0}>{busy === "request" ? "جارٍ طلب الرسالة…" : cooldown > 0 ? `يمكن إعادة الطلب بعد ${arNumber(cooldown)} ثانية` : "إرسال رسالة التفعيل"}</button>
       </form>
       {message ? <p role="status">{message}</p> : null}

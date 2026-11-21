@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requestSession } from "../../lib/supabase/server";
 import { riyal } from "../../lib/subscriptions";
+import { LoginSecurityCard } from "../../components/login-security";
 
 export const metadata = { title: "نظرة عامة" };
 type Overview = { mrr: number; active: number; trial: number; grace: number; locked: number; expiring: number; pending: number };
@@ -26,5 +27,6 @@ export default async function AdminHome() {
       {expiring.length ? <ul className="records">{expiring.map(row => <li key={row.organization_id}><Link href={`/admin/subscribers/${row.organization_id}`}>{row.name}</Link>
         <span className="hint">{row.plan} · باقي {n(row.days_left ?? 0)} يوم{row.owner_phone ? ` · ${row.owner_phone}` : ""}</span></li>)}</ul> : <p className="empty">ما فيه اشتراكات تنتهي قريبًا.</p>}
     </section>
+    <LoginSecurityCard />
   </>;
 }

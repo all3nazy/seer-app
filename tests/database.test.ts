@@ -159,6 +159,9 @@ beforeAll(async () => {
   const guided = readdirSync("supabase/migrations").filter(name => name.endsWith("_onboarding.sql") && !name.endsWith("_org_onboarding.sql"));
   if (guided.length !== 1) throw new Error("Expected exactly one guided onboarding migration");
   await db.exec(readFileSync(`supabase/migrations/${guided[0]}`, "utf8"));
+  const loginGuard = readdirSync("supabase/migrations").filter(name => name.endsWith("_login_guard.sql"));
+  if (loginGuard.length !== 1) throw new Error("Expected exactly one login guard migration");
+  await db.exec(readFileSync(`supabase/migrations/${loginGuard[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -2387,13 +2390,13 @@ describe("support reply templates", () => {
   });
 
   it("every function the service-role routes call is executable by service_role (public and private)", async () => {
-    const files = ["app/api/telegram/webhook/route.ts", "app/api/telegram/dispatch/route.ts", "app/api/messages/dispatch/route.ts", "app/api/payments/webhook/[provider]/route.ts"];
+    const files = ["app/api/telegram/webhook/route.ts", "app/api/telegram/dispatch/route.ts", "app/api/messages/dispatch/route.ts", "app/api/payments/webhook/[provider]/route.ts", "app/login/actions.ts", "components/login-security.tsx"];
     for (const file of readdirSync("app/api", { recursive: true }).map(String).filter(name => name.endsWith(".ts")).map(name => `app/api/${name}`)) {
       if (/serviceClient\(|SUPABASE_SERVICE_ROLE_KEY/.test(readFileSync(file, "utf8"))) expect(files).toContain(file);
     }
     const names = new Set<string>();
     for (const file of files) for (const match of readFileSync(file, "utf8").matchAll(/\.rpc\("([a-z_]+)"/g)) names.add(match[1]);
-    expect([...names]).toEqual(expect.arrayContaining(["telegram_handle", "telegram_claim_kick", "telegram_claim", "telegram_report", "telegram_track"]));
+    expect([...names]).toEqual(expect.arrayContaining(["telegram_handle", "telegram_claim_kick", "telegram_claim", "telegram_report", "telegram_track", "login_check", "login_record", "login_security_summary"]));
     await db.exec("reset role");
     const missing: string[] = [];
     for (const name of names) {
@@ -2543,5 +2546,130 @@ describe("guided setup (onboarding)", () => {
     const stuck = (await rows("select body from private.telegram_outbox")).map(r => r.body as string).find(b => b.includes("متعثرة في التأسيس"));
     expect(stuck).toContain((await rows(`select name from public.organizations where id='${orgA}'`))[0].name as string);
     expect(stuck).not.toContain("روضة التأسيس");
+  });
+});
+
+describe("login guard (brute-force protection)", () => {
+  const platformAdmin = "60000000-0000-0000-0000-0000000000ad";
+  const member = "c9000000-0000-0000-0000-0000000000a1";
+  const check = async (login: string, ip: string) => { await db.exec("set role service_role"); const r = (await rows(`select public.login_check('${login}','${ip}') as r`))[0].r; await db.exec("reset role"); return r as { locked: boolean; scope: string | null; retry_after_seconds: number }; };
+  const record = async (login: string, ip: string, ok: boolean) => { await db.exec("set role service_role"); await db.exec(`select public.login_record('${login}','${ip}',${ok},'Mozilla/5.0 test')`); await db.exec("reset role"); };
+  const fail = async (login: string, ip: string, times: number) => { for (let i = 0; i < times; i++) await record(login, ip, false); };
+  const alerts = async () => (await rows("select body from private.telegram_outbox order by id")).map(row => row.body as string);
+  beforeAll(async () => {
+    await db.exec("reset role");
+    await db.exec(`insert into auth.users(id,email,email_confirmed_at) values ('${platformAdmin}','admin@seer.test',now()),('${member}','huda.t@users.seer.local',now()) on conflict do nothing;
+      insert into private.platform_admins(user_id) values ('${platformAdmin}') on conflict do nothing;
+      delete from private.telegram_links; insert into private.telegram_links(user_id, chat_id) values ('${platformAdmin}', 780001);
+      insert into public.memberships(organization_id,user_id,role) values ('${orgA}','${member}','staff') on conflict do nothing;`);
+  });
+  beforeEach(async () => { await db.exec("reset role"); await db.exec("delete from private.login_attempts; delete from private.login_locks; delete from private.telegram_outbox; delete from private.telegram_alerts"); });
+
+  it("locks an account after 5 failures in 15 minutes, until 15 minutes after the latest, and alerts once with the masked account and organization", async () => {
+    await fail("huda.t@users.seer.local", "10.0.0.1", 4);
+    expect(await check("Huda.T@users.seer.local", "10.0.0.9")).toEqual({ locked: false, scope: null, retry_after_seconds: 0 });
+    expect(await alerts()).toEqual([]);
+    await fail("huda.t@users.seer.local", "10.0.0.2", 1);
+    const locked = await check(" HUDA.T@users.seer.local ", "10.0.0.9");
+    expect(locked).toMatchObject({ locked: true, scope: "account" });
+    expect(locked.retry_after_seconds).toBeGreaterThan(14 * 60);
+    expect(locked.retry_after_seconds).toBeLessThanOrEqual(15 * 60);
+    const [alert] = await alerts();
+    expect(alert).toContain("🔒 قفل حساب مؤقت");
+    expect(alert).toContain("الحساب: hu***@users.seer.local");
+    expect(alert).not.toContain("huda.t");
+    expect(alert).toContain("المنشأة: ");
+    expect(alert).toContain("IP: 10.0.0.2");
+    expect(alert).toContain("المحاولات الفاشلة: 5");
+    expect(alert).toContain("يفك القفل: ");
+    // A sixth failure (a request that slipped in) does not alert again.
+    await fail("huda.t@users.seer.local", "10.0.0.3", 1);
+    expect(await alerts()).toHaveLength(1);
+    expect((await rows("select scope, failures from private.login_locks"))).toEqual([{ scope: "account", failures: 5 }]);
+  });
+
+  it("a success resets the account count; old failures expire; the lock ends 15 minutes after the latest failure", async () => {
+    await fail("a@b.test", "10.0.1.1", 4);
+    await record("a@b.test", "10.0.1.1", true);
+    await fail("a@b.test", "10.0.1.1", 4);
+    expect((await check("a@b.test", "10.0.1.9")).locked).toBe(false);
+    await db.exec("delete from private.login_attempts");
+    // Failures spread over more than 15 minutes do not lock.
+    await db.exec(`insert into private.login_attempts(login, ip, ok, created_at) select 'a@b.test', '10.0.1.1', false, now() - (n * interval '4 minutes') from generate_series(0,4) n`);
+    expect((await check("a@b.test", "10.0.1.9")).locked).toBe(false);
+    // Five within 15 minutes, the latest 14 minutes ago: locked for about one more minute; 16 minutes ago: free.
+    await db.exec("delete from private.login_attempts");
+    await db.exec(`insert into private.login_attempts(login, ip, ok, created_at) select 'a@b.test', '10.0.1.1', false, now() - interval '14 minutes' - (n * interval '1 minute') from generate_series(0,4) n`);
+    const soon = await check("a@b.test", "10.0.1.9");
+    expect(soon).toMatchObject({ locked: true, scope: "account" });
+    expect(soon.retry_after_seconds).toBeLessThanOrEqual(60);
+    await db.exec("update private.login_attempts set created_at = created_at - interval '2 minutes'");
+    expect((await check("a@b.test", "10.0.1.9")).locked).toBe(false);
+  });
+
+  it("locks an IP after 15 failures in 15 minutes for 30 minutes after the latest, and alerts credential stuffing once", async () => {
+    for (let i = 0; i < 14; i++) await record(`user${i % 7}@school.test`, "203.0.113.7", false);
+    expect((await check("someone@school.test", "203.0.113.7")).locked).toBe(false);
+    expect((await alerts()).filter(body => body.includes("حشو"))).toHaveLength(1);
+    await record("user9@school.test", "203.0.113.7", false);
+    const locked = await check("new.user@school.test", "203.0.113.7");
+    expect(locked).toMatchObject({ locked: true, scope: "ip" });
+    expect(locked.retry_after_seconds).toBeGreaterThan(29 * 60);
+    expect((await check("new.user@school.test", "203.0.113.8")).locked).toBe(false);
+    const ipAlerts = (await alerts()).filter(body => body.includes("قفل IP"));
+    expect(ipAlerts).toHaveLength(1);
+    expect(ipAlerts[0]).toContain("IP: 203.0.113.7");
+    expect(ipAlerts[0]).toContain("المحاولات الفاشلة: 15");
+    // Still locked 29 minutes later, free after 31.
+    await db.exec("update private.login_attempts set created_at = created_at - interval '29 minutes'");
+    expect((await check("x@school.test", "203.0.113.7")).locked).toBe(true);
+    await db.exec("update private.login_attempts set created_at = created_at - interval '2 minutes'");
+    expect((await check("x@school.test", "203.0.113.7")).locked).toBe(false);
+  });
+
+  it("a shared school IP with many successful sign-ins and a few typos is not locked", async () => {
+    for (let i = 0; i < 40; i++) await record(`teacher${i}@users.seer.local`, "198.51.100.20", true);
+    for (let i = 0; i < 10; i++) await record(`teacher${i}@users.seer.local`, "198.51.100.20", false);
+    expect((await check("teacher0@users.seer.local", "198.51.100.20")).locked).toBe(false);
+  });
+
+  it("wide guessing: 40 failures from one IP in an hour alerts once an hour", async () => {
+    await db.exec(`insert into private.login_attempts(login, ip, ok, created_at) select 'victim' || (n % 3) || '@x.test', '192.0.2.50', false, now() - interval '50 minutes' + n * interval '1 minute' from generate_series(0,38) n`);
+    await record("victim0@x.test", "192.0.2.50", false);
+    await record("victim1@x.test", "192.0.2.50", false);
+    expect((await alerts()).filter(body => body.includes("تخمين واسع"))).toEqual([expect.stringContaining("المحاولات الفاشلة: 40")]);
+  });
+
+  it("only the server (service role) can check, record and read; the tables are closed", async () => {
+    for (const role of ["anon", "authenticated"] as const) {
+      await as(role, role === "authenticated" ? owner : "");
+      await expect(db.exec("select public.login_check('a@b.test','1.1.1.1')")).rejects.toBeDefined();
+      await expect(db.exec("select public.login_record('a@b.test','1.1.1.1',false,null)")).rejects.toBeDefined();
+      await expect(db.exec("select public.login_security_summary()")).rejects.toBeDefined();
+      await expect(db.exec("select * from private.login_attempts")).rejects.toBeDefined();
+    }
+    await as("authenticated", platformAdmin);
+    await expect(db.exec("select public.login_security_summary()")).rejects.toBeDefined();
+    await db.exec("reset role");
+    expect(await rows("select has_function_privilege('service_role','private.login_record(text,text,boolean,text)','execute') as a, has_function_privilege('service_role','public.login_check(text,text)','execute') as b, has_function_privilege('authenticated','private.login_check(text,text)','execute') as c")).toEqual([{ a: true, b: true, c: false }]);
+  });
+
+  it("the admin summary lists the last day's locks (masked) and the IPs failing most", async () => {
+    await fail("huda.t@users.seer.local", "10.9.9.9", 5);
+    await fail("x@y.test", "10.9.9.8", 2);
+    await db.exec("set role service_role");
+    const summary = (await rows("select public.login_security_summary() as s"))[0].s as { locks: { scope: string; subject: string; active: boolean }[]; top_ips: { ip: string; failures: number }[]; failures_24h: number };
+    await db.exec("reset role");
+    expect(summary.locks).toEqual([expect.objectContaining({ scope: "account", subject: "hu***@users.seer.local", active: true })]);
+    expect(summary.top_ips.map(row => [row.ip, row.failures])).toEqual([["10.9.9.9", 5], ["10.9.9.8", 2]]);
+    expect(summary.failures_24h).toBe(7);
+  });
+
+  it("the daily job deletes attempts and locks older than 30 days", async () => {
+    await db.exec(`insert into private.login_attempts(login, ip, ok, created_at) values ('old@x.test','1.2.3.4',false, now() - interval '31 days'), ('new@x.test','1.2.3.4',false, now() - interval '29 days');
+      insert into private.login_locks(scope, subject, failures, locked_until, created_at) values ('ip','1.2.3.4',15, now() - interval '31 days', now() - interval '31 days');`);
+    await db.exec("select private.subscription_daily()");
+    expect((await rows("select login from private.login_attempts")).map(row => row.login)).toEqual(["new@x.test"]);
+    expect(await rows("select * from private.login_locks")).toEqual([]);
   });
 });
