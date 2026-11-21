@@ -87,3 +87,28 @@ export const sampleTeam: TeamRow[] = [
   { user_id: "60000000-0000-0000-0000-0000000000ad", email: "admin@seer.test", role: "owner", created_at: "2026-10-01T00:00:00Z", last_sign_in_at: "2026-11-21T11:30:00Z", mfa: true, invited_by: null, is_me: true },
   { user_id: "60000000-0000-0000-0000-0000000003b5", email: "help@seer.test", role: "support", created_at: "2026-11-01T00:00:00Z", last_sign_in_at: null, mfa: false, invited_by: "admin@seer.test", is_me: false },
 ];
+
+// Stage 4 ---------------------------------------------------------------------------------------------
+export const sampleBackups = [
+  { id: 3, kind: "manual" as const, status: "failed" as const, folder: "2026-11-22", started_at: "2026-11-22T08:00:00Z", finished_at: "2026-11-22T08:00:20Z", duration_ms: 20000, bytes: 0, tables: 0, rows: 0, manifest: { files: [] }, error: "upload public.children.json.gz: timeout", triggered_by: "admin@seer.test", purged_at: null },
+  { id: 2, kind: "daily" as const, status: "ok" as const, folder: "2026-11-22", started_at: "2026-11-21T21:30:00Z", finished_at: "2026-11-21T21:31:05Z", duration_ms: 65000, bytes: 2_400_000, tables: 112, rows: 48210,
+    manifest: { files: [{ name: "public.children.json.gz", rows: 320, bytes: 21000 }, { name: "auth.users.json.gz", rows: 540, bytes: 30000 }] }, error: null, triggered_by: null, purged_at: null },
+];
+export const sampleHealth = {
+  database: true, checked_at: "2026-11-22T09:00:00Z",
+  cron: [{ name: "seer-subscriptions-daily", schedule: "0 3 * * *", active: true, status: "succeeded", message: "1 row", started_at: "2026-11-22T03:00:00Z", duration_ms: 420, failed_24h: 0 },
+    { name: "seer-telegram-kick", schedule: "* * * * *", active: true, status: "failed", message: "connection refused", started_at: "2026-11-22T08:59:00Z", duration_ms: 30, failed_24h: 4 }],
+  queues: [{ key: "email", waiting: 3, failed: 0, oldest: "2026-11-22T08:40:00Z" }, { key: "messages", waiting: 0, failed: 0, oldest: null }, { key: "telegram", waiting: 2, failed: 1, oldest: "2026-11-22T08:00:00Z" }, { key: "push", waiting: 0, failed: 0, oldest: null }],
+  backup: { status: "failed", kind: "manual", started_at: "2026-11-22T08:00:00Z", finished_at: "2026-11-22T08:00:20Z", bytes: 0, error: "timeout" },
+  last_ok_backup: "2026-11-21T21:31:05Z",
+  errors: [{ fingerprint: "a".repeat(32), kind: "server", message: "تعذر حفظ الحضور", route: "/dashboard/attendance", count: 7, last_seen: "2026-11-22T08:30:00Z", status: "new", organization: "روضة الياسمين" }],
+};
+export const sampleOrgView = (section: string) => ({
+  organization_id: orgId, name: "روضة الياسمين", type: "kindergarten", section, today: "2026-11-22", access: "active", plan: "المتقدمة",
+  counts: { children: 2, staff: 3, guardians: 4, sections: 2 }, attendance_today: { present: 1, absent: 1, late: 0, excused: 0 },
+  students: [{ name: "جود", gender: "female", section: "روضة ١", created_at: "2026-10-01T00:00:00Z" }, { name: "ريان", gender: "male", section: null, created_at: "2026-10-02T00:00:00Z" }],
+  days: [{ day: "2026-11-22", present: 1, absent: 1, late: 0, excused: 0 }],
+  finance: { invoiced: 12000, invoices: 4, collected: 9000, collected_month: 3000, drafts: 1, recent: [{ paid_on: "2026-11-20", amount: 3000, method: "bank_transfer" }] },
+  staff: [{ name: "نورة", role: "owner", job_title: "المديرة" }, { name: "سارة", role: "admin", job_title: null }],
+  settings: { disabled: ["transport"], blocked: [], colors: { primary: "#7C5CFF", accent: null }, message_channel: "whatsapp", message_provider: "manual", city: "الرياض" },
+});

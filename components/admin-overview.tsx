@@ -12,7 +12,7 @@ export type OverviewData = {
   activity: { kind: string; action: string; organization: string | null; organization_id?: string | null; detail?: string | null; thread?: string; at: string }[];
 };
 export type PendingTransfer = { id: string; organization_id: string; organization: string; plan: string; months: number; amount: number; reference: string; created_at: string };
-export type HealthExtra = { locks24h: number | null; activeLocks: number | null; telegram: "ok" | "error" | "unlinked" | "off" };
+export type HealthExtra = { locks24h: number | null; activeLocks: number | null; telegram: "ok" | "error" | "unlinked" | "off"; lastBackup?: { at: string | null; failed: boolean } | null };
 
 const tones = { sun: "#F5A524", plum: "#7C5CFF", rose: "#EF5A6F", sky: "#3B82F6" } as const;
 
@@ -36,7 +36,8 @@ export function OverviewView({ data, pending, extra, now = Date.now(), role = "o
     { label: "حماية الدخول", value: extra.locks24h === null ? "ما فيه بيانات" : extra.locks24h ? `${arNumber(extra.locks24h)} قفل آخر ٢٤ ساعة${extra.activeLocks ? ` · ${arNumber(extra.activeLocks)} نشط الحين` : ""}` : "ما فيه أقفال اليوم", state: extra.activeLocks ? "warn" : extra.locks24h === null ? "soon" : "" },
     { label: "بوت التليقرام", value: extra.telegram === "ok" ? (data.health.telegram_failed_today ? `متصل · ${arNumber(data.health.telegram_failed_today)} رسالة فشلت اليوم` : "متصل") : extra.telegram === "error" ? "الربط فيه خطأ" : extra.telegram === "unlinked" ? "ما فيه محادثة مربوطة" : "غير مفعّل",
       state: extra.telegram === "ok" ? (data.health.telegram_failed_today ? "warn" : "") : extra.telegram === "error" ? "bad" : "warn" },
-    { label: "آخر نسخة احتياطية", value: "قريبًا", state: "soon" },
+    { label: "آخر نسخة احتياطية", value: !extra.lastBackup ? "ما فيه بيانات" : extra.lastBackup.at ? `${timeAgo(extra.lastBackup.at, now)}${extra.lastBackup.failed ? " · آخر محاولة فشلت" : ""}` : "ما فيه نسخة ناجحة بعد",
+      state: !extra.lastBackup ? "soon" : extra.lastBackup.at && now - Date.parse(extra.lastBackup.at) <= 26 * 3600_000 ? (extra.lastBackup.failed ? "warn" : "") : "bad" },
   ];
   return <div className="adm-page">
     <header className="page-head"><div><h1>نظرة عامة</h1><p>{formatDate(new Date(now).toISOString(), { weekday: true })}</p></div></header>
@@ -70,7 +71,7 @@ export function OverviewView({ data, pending, extra, now = Date.now(), role = "o
       <section className="card adm-card narrow" aria-labelledby="hl">
         <h2 id="hl">صحة المنصة</h2>
         <ul className="adm-list adm-health">{healthRows.map(item => <li key={item.label}><span className={`adm-dot-state${item.state ? ` ${item.state}` : ""}`} aria-hidden="true" /><span style={{ flex: 1 }}>{item.label}</span><span className="hint">{item.value}</span></li>)}</ul>
-        {role === "owner" ? <span className="adm-btn-row" style={{ marginTop: 10 }}><Link className="btn btn-sm" href="/admin/security">أمان الدخول</Link><Link className="btn btn-sm" href="/admin/settings#telegram">تيليقرام</Link></span> : null}
+        {role === "owner" ? <span className="adm-btn-row" style={{ marginTop: 10 }}><Link className="btn btn-sm" href="/admin/health">صحة النظام</Link><Link className="btn btn-sm" href="/admin/security">أمان الدخول</Link><Link className="btn btn-sm" href="/admin/settings#telegram">تيليقرام</Link></span> : null}
       </section>
     </div>
 

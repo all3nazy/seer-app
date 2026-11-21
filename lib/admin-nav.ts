@@ -30,6 +30,8 @@ export const adminNav: AdminNavGroup[] = [
     { href: "/admin/team", label: "فريق الإدارة" },
   ] },
   { title: "الحماية والتشغيل", items: [
+    { href: "/admin/health", label: "صحة النظام" },
+    { href: "/admin/backups", label: "النسخ الاحتياطي" },
     { href: "/admin/security", label: "أمان الدخول" },
     { href: "/admin/audit", label: "سجل العمليات" },
   ] },

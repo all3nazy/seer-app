@@ -1222,3 +1222,13 @@ a.stat:hover,a.list-row:hover,a.tile:hover,.org-tile:hover,.sidebar .nav-link:ho
 .adm-invoice-parties p{margin:2px 0}
 .adm-invoice-lines tfoot th,.adm-invoice-lines tfoot td{border-top:2px solid var(--border-strong);padding-top:10px;text-align:start}
 @media print{.adm-side,.adm-top{display:none!important}.adm-body{margin:0!important}.adm-invoice{box-shadow:none;border:0;max-width:none}}
+
+/* «سِير أدمن» stage 4: backups, health, read-only view */
+.adm-backup-state{display:grid;gap:8px}
+.adm-backup-state.is-late{border-color:var(--danger,#be123c)}
+.adm-mirror-banner{margin:0;padding:12px 14px;border-radius:14px;background:#FFF4E5;color:#7A4A00;border:1px solid #F5A524;position:sticky;top:8px;z-index:5}
+@media (prefers-color-scheme:dark){.adm-mirror-banner{background:#3a2a10;color:#FFD9A0}}
+.adm-swatch{display:inline-block;width:16px;height:16px;border-radius:4px;vertical-align:middle;border:1px solid var(--border)}
+/* Wide tables scroll inside their card, never the page (iPad widths). */
+.adm-page>*,.adm-card{min-width:0}
+.adm-card .table-wrap{max-width:100%;overflow-x:auto;position:relative}

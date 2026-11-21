@@ -24,11 +24,14 @@ export default async function AdminHome() {
     service ? service.rpc("login_security_summary") : Promise.resolve({ data: null, error: true }),
     botInfo().catch(() => null),
   ]);
+  const backups = role === "owner" ? await client.rpc("admin_backups") : { data: null, error: true };
+  const runs = (backups.error ? null : backups.data ?? []) as { status: string; finished_at: string | null }[] | null;
   const data = (overview.data ?? empty) as OverviewData;
   const locks = (security.data as { locks?: { active: boolean }[] } | null)?.locks;
   const extra: HealthExtra = {
     locks24h: locks ? locks.length : null,
     activeLocks: locks ? locks.filter(lock => lock.active).length : null,
+    lastBackup: runs ? { at: runs.find(run => run.status === "ok")?.finished_at ?? null, failed: runs[0]?.status === "failed" } : null,
     telegram: !bot?.configured ? "off" : bot.webhook?.lastError ? "error" : !bot.webhook ? "error" : data.health.telegram_links ? "ok" : "unlinked",
   };
   return <>

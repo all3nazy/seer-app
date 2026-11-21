@@ -178,6 +178,9 @@ beforeAll(async () => {
   const stage3 = readdirSync("supabase/migrations").filter(name => name.endsWith("_admin_stage3.sql"));
   if (stage3.length !== 1) throw new Error("Expected exactly one admin stage 3 migration");
   await db.exec(readFileSync(`supabase/migrations/${stage3[0]}`, "utf8"));
+  const stage4 = readdirSync("supabase/migrations").filter(name => name.endsWith("_admin_stage4.sql"));
+  if (stage4.length !== 1) throw new Error("Expected exactly one admin stage 4 migration");
+  await db.exec(readFileSync(`supabase/migrations/${stage4[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -3248,5 +3251,156 @@ describe("«سِير أدمن» stage 3: roles, coupons, receipts, broadcasts, l
     const reached = (await rows(`select user_id::text as u from public.notifications where kind='support' and title like 'تذكرة دعم جديدة%' and organization_id='${orgF}'`)).map(r => r.u);
     expect(reached).toEqual(expect.arrayContaining([platformAdmin, supportAdmin, newcomer]));
     expect(reached).not.toContain(financeAdmin);
+  });
+});
+
+describe("«سِير أدمن» stage 4: backups, system health, read-only view", () => {
+  const platformAdmin = "60000000-0000-0000-0000-0000000000ad";
+  const supportAdmin = "60000000-0000-0000-0000-0000000004b5", financeAdmin = "60000000-0000-0000-0000-0000000004bf";
+  const orgG = "e3000000-0000-0000-0000-0000000000a1", ownerG = "e3100000-0000-0000-0000-0000000000a1";
+  const run = async (user: string, sql: string) => { await as("authenticated", user, "aal2"); try { return await rows(sql); } finally { await db.exec("reset role"); } };
+  const one = async (user: string, sql: string) => { const r = (await run(user, sql))[0]; return r ? Object.values(r)[0] : undefined; };
+  const service = async (sql: string) => { await db.exec("reset role"); await db.exec("set role service_role"); try { return await rows(sql); } finally { await db.exec("reset role"); } };
+  const refused = async (user: string, sql: string, aal: "aal1" | "aal2" = "aal2") => { await as("authenticated", user, aal); try { await expect(db.exec(sql), `${user} ${aal} ${sql}`).rejects.toMatchObject({ code: "42501" }); } finally { await db.exec("reset role"); } };
+  const audits = async (action: string) => (await rows(`select count(*)::int as n from private.platform_audit where action='${action}'`))[0].n as number;
+  beforeAll(async () => {
+    await db.exec("reset role");
+    await db.exec(`insert into auth.users(id,email,email_confirmed_at) values ('${platformAdmin}','admin@seer.test',now()),('${supportAdmin}','help4@seer.test',now()),('${financeAdmin}','money4@seer.test',now()),('${ownerG}','salma@ghad.test',now()) on conflict do nothing;
+      insert into private.platform_admins(user_id, role) values ('${platformAdmin}','owner') on conflict (user_id) do update set role='owner';
+      insert into private.platform_admins(user_id, role) values ('${supportAdmin}','support'),('${financeAdmin}','finance') on conflict (user_id) do update set role = excluded.role;
+      insert into public.organizations(id,name,type) values ('${orgG}','مدارس الغد','school');
+      insert into public.memberships(organization_id,user_id,role,display_name) values ('${orgG}','${ownerG}','owner','سلمى');
+      insert into public.children(organization_id, full_name, gender) values ('${orgG}','ريان','male'),('${orgG}','جود','female');
+      insert into public.system_errors(fingerprint, kind, message, route) values (repeat('a',32),'server','تعذر الحفظ','/dashboard') on conflict do nothing;`);
+  });
+
+  it("every admin function refuses aal1, a subscriber, anon and the wrong role; server functions refuse signed-in users", async () => {
+    const ownerOnly = ["select * from public.admin_backups()", "select public.admin_backup_authorize()", "select public.admin_backup_download(1,'manifest.json')", `select public.admin_org_export('${orgG}')`,
+      "select public.admin_system_health()", `select public.admin_error_handled('${"a".repeat(32)}','resolved')`];
+    const view = `select public.admin_org_view('${orgG}')`;
+    for (const sql of [...ownerOnly, view]) {
+      await refused(platformAdmin, sql, "aal1");
+      await refused(ownerG, sql);
+      await refused(financeAdmin, sql);
+      await as("anon"); await expect(db.exec(sql)).rejects.toBeDefined(); await db.exec("reset role");
+    }
+    for (const sql of ownerOnly) await refused(supportAdmin, sql);
+    for (const sql of ["select * from public.backup_tables()", "select public.backup_table_page('public','children',0,10)", "select public.backup_begin('daily')", "select * from public.backup_org_tables()"]) {
+      await as("authenticated", platformAdmin, "aal2"); await expect(db.exec(sql), sql).rejects.toBeDefined(); await db.exec("reset role");
+    }
+    expect(await audits("backup_started")).toBe(0);
+  });
+
+  it("the server lists every table with counts and primary keys, and pages through one in order", async () => {
+    const tables = await service("select * from public.backup_tables()");
+    const children = tables.find(t => t.schema_name === "public" && t.table_name === "children")!;
+    expect(Number(children.row_count)).toBeGreaterThanOrEqual(2);
+    expect(children.pk).toEqual(["id"]);
+    expect(tables.some(t => t.schema_name === "private" && t.table_name === "platform_audit")).toBe(true);
+    expect(tables.some(t => t.schema_name === "private" && t.table_name === "backup_runs")).toBe(true);
+    const total = Number(children.row_count);
+    const first = (await service("select public.backup_table_page('public','children',0,1) as p"))[0].p as unknown[];
+    const all = (await service(`select public.backup_table_page('public','children',0,${total}) as p`))[0].p as { id: string }[];
+    expect(first).toHaveLength(1);
+    expect(all).toHaveLength(total);
+    expect(all.map(r => r.id)).toEqual([...all.map(r => r.id)].sort());
+    await db.exec("set role service_role");
+    await expect(db.exec("select public.backup_table_page('auth','users',0,10)")).rejects.toMatchObject({ code: "22023" });
+    await expect(db.exec("select public.backup_table_page('public','nope; drop table x',0,10)")).rejects.toMatchObject({ code: "P0002" });
+    await db.exec("reset role");
+    const orgTables = (await service("select table_name from public.backup_org_tables()")).map(r => r.table_name);
+    expect(orgTables).toEqual(expect.arrayContaining(["children", "memberships", "attendance", "invoices"]));
+    expect(orgTables).not.toContain("plans");
+    const mine = (await service(`select public.backup_org_page('children','${orgG}',0,100) as p`))[0].p as { organization_id: string }[];
+    expect(mine).toHaveLength(2);
+    expect(mine.every(r => r.organization_id === orgG)).toBe(true);
+  });
+
+  it("runs: once a day for daily, rate-limited manual runs from the owner, failure alerts on Telegram, stale runs give up", async () => {
+    const daily = (await service("select public.backup_begin('daily') as id"))[0].id as number;
+    await db.exec("set role service_role");
+    await expect(db.exec("select public.backup_begin('daily')")).rejects.toMatchObject({ code: "54000" }); // one is running
+    await db.exec(`select public.backup_finish(${daily}, true, 1234, 80, 500, '{"files":[{"name":"public.children.json.gz","rows":2,"sha256":"x"}]}'::jsonb, null)`);
+    expect((await rows("select public.backup_begin('daily') as id"))[0].id).toBeNull(); // already done today
+    await db.exec("reset role");
+    // Manual from the owner: authorized, logged, then at most one every 10 minutes.
+    const manual = await one(platformAdmin, "select public.admin_backup_authorize() as id") as number;
+    expect(manual).toBeGreaterThan(daily);
+    expect(await audits("backup_started")).toBe(1);
+    await db.exec("delete from private.telegram_outbox");
+    await service(`select public.backup_finish(${manual}, false, 0, 0, 0, null, 'storage unavailable')`);
+    await as("authenticated", platformAdmin, "aal2"); await expect(db.exec("select public.admin_backup_authorize()")).rejects.toMatchObject({ code: "54000" }); await db.exec("reset role");
+    // A run stuck for more than 30 minutes is marked failed by the next start.
+    await db.exec("update private.backup_runs set started_at = now() - interval '2 hours' where kind='manual'");
+    const stuck = (await service("select public.backup_begin('manual') as id"))[0].id as number;
+    await db.exec(`update private.backup_runs set started_at = now() - interval '40 minutes' where id=${stuck}`);
+    const next = (await service("select public.backup_begin('manual') as id"))[0];
+    expect((await rows(`select status from private.backup_runs where id=${stuck}`))[0].status).toBe("failed");
+    expect(next).toBeDefined();
+    await service(`select public.backup_finish(${(next as { id: number }).id}, true, 10, 1, 1, '{"files":[]}'::jsonb, null)`);
+    const list = await run(platformAdmin, "select id, status, kind, triggered_by from public.admin_backups()");
+    expect(list.map(r => r.status)).toEqual(expect.arrayContaining(["ok", "failed"]));
+    expect(list.find(r => r.id === manual)).toMatchObject({ kind: "manual", triggered_by: "admin@seer.test" });
+  });
+
+  it("downloads: only files in the manifest of a good run, logged; org export logged in that org's log", async () => {
+    const daily = (await rows("select id from private.backup_runs where kind='daily' and status='ok' limit 1"))[0].id as number;
+    expect(await one(platformAdmin, `select public.admin_backup_download(${daily}, 'public.children.json.gz') as p`)).toMatch(/^\d{4}-\d{2}-\d{2}\/public\.children\.json\.gz$/);
+    expect(await one(platformAdmin, `select public.admin_backup_download(${daily}, 'manifest.json') as p`)).toMatch(/manifest\.json$/);
+    await as("authenticated", platformAdmin, "aal2");
+    await expect(db.exec(`select public.admin_backup_download(${daily}, '../other/secret')`)).rejects.toMatchObject({ code: "P0002" });
+    await expect(db.exec(`select public.admin_backup_download(${daily}, 'public.nothing.json.gz')`)).rejects.toMatchObject({ code: "P0002" });
+    await db.exec("reset role");
+    expect(await audits("backup_downloaded")).toBe(2);
+    expect(await one(platformAdmin, `select public.admin_org_export('${orgG}') as n`)).toBe("مدارس الغد");
+    expect((await rows(`select count(*)::int as n from private.platform_audit where action='org_exported' and organization_id='${orgG}'`))[0].n).toBe(1);
+    await db.exec("update private.backup_runs set purged_at = now() where id = " + daily);
+    await as("authenticated", platformAdmin, "aal2"); await expect(db.exec(`select public.admin_backup_download(${daily}, 'manifest.json')`)).rejects.toMatchObject({ code: "P0002" }); await db.exec("reset role");
+  });
+
+  it("the watch alerts when the last good backup is older than 26 hours, at most every 12 hours", async () => {
+    await db.exec("reset role");
+    expect((await rows("select private.backup_watch() as a"))[0].a).toBe(false);
+    await db.exec("update private.backup_runs set finished_at = now() - interval '30 hours' where status='ok'");
+    await db.exec("delete from private.telegram_alerts where key='backup-missing'");
+    expect((await rows("select private.backup_watch() as a"))[0].a).toBe(true);
+    expect((await rows("select private.backup_watch() as a"))[0].a).toBe(false);
+  });
+
+  it("the bucket is private and has no storage policy for anon or authenticated", async () => {
+    expect((await rows("select public from storage.buckets where id='platform-backups'"))[0]).toEqual({ public: false });
+    expect((await rows("select count(*)::int as n from pg_policies where schemaname='storage' and (qual like '%platform-backups%' or with_check like '%platform-backups%')"))[0].n).toBe(0);
+    await as("authenticated", platformAdmin, "aal2");
+    expect(await rows("select name from storage.objects where bucket_id='platform-backups'")).toEqual([]);
+    await db.exec("reset role");
+  });
+
+  it("system health: jobs (when pg_cron exists), queues with the oldest item, last backup, errors; mark an error handled", async () => {
+    await db.exec("insert into private.email_outbox(to_email, subject, body, created_at) values ('x@y.test','s','b', now() - interval '3 hours')");
+    const health = await one(platformAdmin, "select public.admin_system_health() as h") as { database: boolean; cron: unknown[]; queues: { key: string; waiting: number; oldest: string | null }[]; backup: { status: string }; errors: { fingerprint: string }[] };
+    expect(health.database).toBe(true);
+    expect(Array.isArray(health.cron)).toBe(true);
+    expect(health.queues.map(q => q.key)).toEqual(["email", "messages", "telegram", "push"]);
+    expect(health.queues[0].waiting).toBeGreaterThanOrEqual(1);
+    expect(health.queues[0].oldest).toBeTruthy();
+    expect(health.backup).toHaveProperty("status");
+    expect(health.errors.map(e => e.fingerprint)).toContain("a".repeat(32));
+    await one(platformAdmin, `select public.admin_error_handled('${"a".repeat(32)}','resolved') as x`);
+    expect((await rows(`select status from public.system_errors where fingerprint='${"a".repeat(32)}'`))[0].status).toBe("resolved");
+    await as("authenticated", platformAdmin, "aal2"); await expect(db.exec(`select public.admin_error_handled('${"a".repeat(32)}','deleted')`)).rejects.toMatchObject({ code: "22023" }); await db.exec("reset role");
+    expect(await audits("error_handled")).toBe(1);
+  });
+
+  it("read-only view: owner and support see each section; every view is logged in the organization's log", async () => {
+    const dash = await one(supportAdmin, `select public.admin_org_view('${orgG}') as v`) as Record<string, any>;
+    expect(dash).toMatchObject({ name: "مدارس الغد", section: "dashboard", counts: { children: 2, staff: 1 } });
+    const students = await one(platformAdmin, `select public.admin_org_view('${orgG}','students') as v`) as { students: { name: string }[] };
+    expect(students.students.map(s => s.name)).toEqual(["جود", "ريان"]);
+    for (const section of ["attendance", "finance", "staff", "settings"]) expect(await one(supportAdmin, `select public.admin_org_view('${orgG}','${section}') as v`)).toHaveProperty(section === "attendance" ? "days" : section);
+    await as("authenticated", platformAdmin, "aal2"); await expect(db.exec(`select public.admin_org_view('${orgG}','payroll')`)).rejects.toMatchObject({ code: "22023" }); await db.exec("reset role");
+    expect(await one(platformAdmin, "select public.admin_org_view('00000000-0000-0000-0000-00000000dead') as v")).toBeNull();
+    expect((await rows(`select count(*)::int as n from private.platform_audit where action='org_viewed' and organization_id='${orgG}'`))[0].n).toBe(6);
+    const log = (await one(platformAdmin, `select public.admin_org_profile('${orgG}') as p`) as { log: { action: string }[] }).log.map(entry => entry.action);
+    expect(log).toContain("org_viewed");
   });
 });
