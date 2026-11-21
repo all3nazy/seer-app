@@ -25,7 +25,8 @@ for (const device of devices) {
       await expect(transfers.getByPlaceholder("سبب الرفض (يوصل للمشترك)")).toBeVisible();
       const health = page.getByRole("region", { name: "صحة المنصة" });
       await expect(health).toContainText("٢ من ٢ شغالة");
-      await expect(health).toContainText("قريبًا");
+      await expect(health).toContainText("آخر نسخة احتياطية");
+      await expect(health).not.toContainText("قريبًا");
       await expect(page.getByRole("region", { name: "آخر ما صار في المنصة" }).getByRole("listitem")).toHaveCount(3);
       await noSideScroll(page);
     });

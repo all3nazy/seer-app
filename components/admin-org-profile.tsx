@@ -129,6 +129,10 @@ export function OrgProfileView({ profile: p, plans, receipts, now = Date.now(), 
           {s?.cancelled_at ? <span className="chip-soft rose">ملغي</span> : null}
         </div>
       </div>
+      {roleAllows(role, ["support"]) ? <span className="adm-btn-row">
+        <Link className="btn" href={`/admin/subscribers/${p.organization_id}/view`}>مشاهدة المنصة كأنك هم</Link>
+        {acts ? <a className="btn" href={`/admin/subscribers/${p.organization_id}/export`} download>تصدير بياناتها</a> : null}
+      </span> : null}
       {acts ? <OrgHeaderActions org={p.organization_id} plans={plans} currentPlan={s?.plan_id ?? null} suspended={s?.status === "suspended"} cancelled={Boolean(s?.cancelled_at)} /> : null}
     </header>
     <OrgTabs tabs={tabs} />

@@ -14,6 +14,8 @@ export const auditLabels: Record<string, string> = {
   coupon_created: "إضافة كوبون", coupon_updated: "تعديل كوبون", coupon_disabled: "إيقاف كوبون", invoice_issued: "إصدار فاتورة", broadcast_sent: "رسالة للمشتركين",
   ip_blocked: "حظر عنوان IP", ip_unblocked: "رفع حظر عنوان IP", login_lock_released: "فك قفل دخول (صفحة الأمان)", audit_exported: "تصدير السجل",
   admin_invited: "إضافة عضو لفريق الإدارة", admin_role_changed: "تغيير دور في الفريق", admin_removed: "إزالة من فريق الإدارة",
+  backup_started: "نسخة احتياطية يدوية", backup_downloaded: "تحميل ملف نسخة احتياطية", org_exported: "تصدير بيانات المنشأة", error_handled: "معالجة خطأ في النظام",
+  org_viewed: "مشاهدة المنصة كأنك هم",
   payment_pending: "تحويل جديد بانتظار التأكيد", payment_approved: "اعتماد تحويل", payment_rejected: "رفض تحويل", join_request: "طلب انضمام جديد", support_thread: "تذكرة دعم جديدة",
 };
 export const auditLabel = (action: string) => auditLabels[action] ?? action;
