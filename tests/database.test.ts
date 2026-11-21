@@ -175,6 +175,9 @@ beforeAll(async () => {
   const stage2 = readdirSync("supabase/migrations").filter(name => name.endsWith("_admin_stage2.sql"));
   if (stage2.length !== 1) throw new Error("Expected exactly one admin stage 2 migration");
   await db.exec(readFileSync(`supabase/migrations/${stage2[0]}`, "utf8"));
+  const stage3 = readdirSync("supabase/migrations").filter(name => name.endsWith("_admin_stage3.sql"));
+  if (stage3.length !== 1) throw new Error("Expected exactly one admin stage 3 migration");
+  await db.exec(readFileSync(`supabase/migrations/${stage3[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -2933,5 +2936,317 @@ describe("«سِير أدمن» stage 2: organization profile, overview and subs
     await db.exec("reset role");
     const log = (await one(`select public.admin_org_profile('${orgD}') as p`) as { log: { action: string }[] }).log.map(entry => entry.action);
     expect(log).toEqual(expect.arrayContaining(["org_extended", "org_cancelled", "login_unlocked", "ownership_transferred", "entitlements_updated", "note_saved"]));
+  });
+});
+
+describe("«سِير أدمن» stage 3: roles, coupons, receipts, broadcasts, login security, audit, team", () => {
+  const platformAdmin = "60000000-0000-0000-0000-0000000000ad";
+  const supportAdmin = "60000000-0000-0000-0000-0000000003b5";
+  const financeAdmin = "60000000-0000-0000-0000-0000000003bf";
+  const newcomer = "60000000-0000-0000-0000-0000000003b7";
+  const orgE = "e2000000-0000-0000-0000-0000000000e1", orgF = "e2000000-0000-0000-0000-0000000000f1";
+  const ownerE = "e1000000-0000-0000-0000-0000000000e1", adminE = "e1000000-0000-0000-0000-0000000000e2", ownerF = "e1000000-0000-0000-0000-0000000000f1";
+  const asRole = (user: string, aal: "aal1" | "aal2" = "aal2") => as("authenticated", user, aal);
+  const run = async (user: string, sql: string) => { await asRole(user); try { return await rows(sql); } finally { await db.exec("reset role"); } };
+  const one = async (user: string, sql: string) => { const r = (await run(user, sql))[0]; return r ? Object.values(r)[0] : undefined; };
+  const refused = async (user: string, sql: string, aal: "aal1" | "aal2" = "aal2") => { await asRole(user, aal); try { await expect(db.exec(sql), `${user} ${aal} ${sql}`).rejects.toMatchObject({ code: "42501" }); } finally { await db.exec("reset role"); } };
+  const audits = async (action: string) => (await rows(`select count(*)::int as n from private.platform_audit where action='${action}'`))[0].n as number;
+  const advanced = "(select id from public.plans where key='advanced')";
+  const basic = "(select id from public.plans where key='basic')";
+  beforeAll(async () => {
+    await db.exec("reset role");
+    await db.exec(`insert into auth.users(id,email,email_confirmed_at) values ('${platformAdmin}','admin@seer.test',now()) on conflict do nothing;
+      insert into private.platform_admins(user_id) values ('${platformAdmin}') on conflict do nothing;
+      insert into auth.users(id,email,email_confirmed_at) values ('${supportAdmin}','help@seer.test',now()),('${financeAdmin}','money@seer.test',now()),('${newcomer}','new.admin@seer.test',now()),
+       ('${ownerE}','reem@nakheel.test',now()),('${adminE}','lama@nakheel.test',now()),('${ownerF}','fahad.f@users.seer.local',now()) on conflict do nothing;
+      insert into private.platform_admins(user_id, role) values ('${supportAdmin}','support'),('${financeAdmin}','finance') on conflict (user_id) do update set role = excluded.role;
+      insert into public.organizations(id,name,type) values ('${orgE}','مدارس النخيل','school'),('${orgF}','حضانة الفجر','nursery');
+      insert into public.memberships(organization_id,user_id,role,display_name) values ('${orgE}','${ownerE}','owner','ريم'),('${orgE}','${adminE}','admin','لمى'),('${orgF}','${ownerF}','owner','فهد');
+      insert into public.subscriptions(organization_id, plan_id, status, starts_on, ends_on) select '${orgE}', id, 'active', current_date - 10, current_date + 40 from public.plans where key='advanced'
+       on conflict (organization_id) do update set plan_id = excluded.plan_id, status = 'active', starts_on = excluded.starts_on, ends_on = excluded.ends_on;
+      insert into public.subscriptions(organization_id, plan_id, status, starts_on, ends_on) select '${orgF}', id, 'trial', current_date - 3, current_date + 11 from public.plans where key='basic'
+       on conflict (organization_id) do update set plan_id = excluded.plan_id, status = 'trial', starts_on = excluded.starts_on, ends_on = excluded.ends_on;
+      insert into storage.objects(bucket_id,name) values ('subscription-receipts','${orgE}/c1.jpg'),('subscription-receipts','${orgE}/c2.jpg'),('subscription-receipts','${orgE}/c3.jpg'),('subscription-receipts','${orgF}/c4.jpg');`);
+  });
+
+  it("every new admin function refuses aal1, a subscriber and anon; role functions refuse the wrong role", async () => {
+    const ownerOnly = [
+      "select * from public.admin_team()", `select public.admin_team_invite('new.admin@seer.test','support')`, `select public.admin_team_set_role('${supportAdmin}','finance')`,
+      `select public.admin_team_remove('${supportAdmin}')`, "select public.admin_broadcast_preview()",
+      `select public.admin_broadcast_send(gen_random_uuid(),'عنوان','نص الرسالة',null,'all',null,null,false,true,null)`, "select * from public.admin_broadcasts()",
+      "select public.admin_login_security('24h')", "select public.admin_release_lock(1)", `select public.admin_block_ip('10.9.9.9','تجربة حظر',null)`, "select public.admin_unblock_ip(1)",
+      "select * from public.admin_audit_log()", "select public.admin_audit_filters()", "select public.admin_audit_exported(1)",
+    ];
+    const finance = [
+      "select * from public.admin_coupons()", `select * from public.admin_coupon_uses(gen_random_uuid())`,
+      `select public.admin_save_coupon(null,'NOPE10','percent',10,null,null,null,null,null,null,false,null,true)`,
+      `select public.admin_issue_invoice('${orgE}','تسوية',100,null)`, "select * from public.admin_invoices()", "select * from public.admin_pending_payments_v2()",
+    ];
+    for (const sql of [...ownerOnly, ...finance]) {
+      await refused(platformAdmin, sql, "aal1");
+      await refused(ownerE, sql);
+      await refused(supportAdmin, sql);
+      await as("anon"); await expect(db.exec(sql), sql).rejects.toBeDefined(); await db.exec("reset role");
+    }
+    for (const sql of ownerOnly) await refused(financeAdmin, sql);
+    expect(await audits("coupon_created")).toBe(0);
+    expect(await audits("admin_invited")).toBe(0);
+  });
+
+  it("existing admin functions follow the roles: support reads profiles and handles tickets, finance handles transfers, only the owner changes subscriptions", async () => {
+    // Everyone on the team reads the overview, the list and a profile.
+    for (const user of [platformAdmin, supportAdmin, financeAdmin]) {
+      expect(await one(user, `select public.admin_org_profile('${orgE}') as p`)).toMatchObject({ name: "مدارس النخيل" });
+      expect(await one(user, "select public.admin_overview_v2() as o")).toHaveProperty("decisions");
+      expect(await one(user, "select public.my_platform_role() as r")).toBe(user === platformAdmin ? "owner" : user === supportAdmin ? "support" : "finance");
+    }
+    expect(await one(platformAdmin, "select private.my_platform_role() as r")).toBe("owner");
+    await asRole(platformAdmin, "aal1"); expect((await rows("select public.my_platform_role() as r"))[0].r).toBeNull(); await db.exec("reset role");
+    // Owner-only actions.
+    for (const user of [supportAdmin, financeAdmin]) {
+      await refused(user, `select public.admin_org_extend('${orgE}', 3, 'days')`);
+      await refused(user, `select public.admin_org_cancel('${orgE}', 'سبب تجربة')`);
+      await refused(user, `select public.admin_save_org_note('${orgE}', 'x')`);
+      await refused(user, "select * from public.admin_join_requests()");
+      await refused(user, "select * from public.admin_audit()");
+    }
+    // Support: tickets and templates; finance cannot.
+    expect(Array.isArray(await run(supportAdmin, "select * from public.admin_support_threads()"))).toBe(true);
+    expect(Array.isArray(await run(supportAdmin, "select * from public.admin_support_templates()"))).toBe(true);
+    await refused(financeAdmin, "select * from public.admin_support_threads()");
+    await refused(financeAdmin, "select * from public.admin_support_templates()");
+    // Finance: transfers; support cannot.
+    expect(Array.isArray(await run(financeAdmin, "select * from public.admin_pending_payments()"))).toBe(true);
+    await refused(supportAdmin, "select * from public.admin_pending_payments()");
+    await refused(supportAdmin, "select * from public.admin_pending_payments_v2()");
+  });
+
+  it("support replies need the owner or support role; finance is refused", async () => {
+    await asRole(ownerE);
+    const thread = (await rows(`select public.open_support_thread('${orgE}', 'سؤال عن الاشتراك', 'كيف أجدد؟') as t`))[0].t as string;
+    await db.exec("reset role");
+    await refused(financeAdmin, `select public.reply_support('${thread}', 'أهلًا')`);
+    await refused(financeAdmin, `select public.close_support_thread('${thread}')`);
+    expect(await one(supportAdmin, `select public.reply_support('${thread}', 'أهلًا، من صفحة الاشتراك') as m`)).toBeTruthy();
+    await one(supportAdmin, `select public.close_support_thread('${thread}') as x`);
+    expect((await rows(`select status from public.support_threads where id='${thread}'`))[0].status).toBe("closed");
+  });
+
+  it("coupons: unique code ignoring case, rules by plan, duration, dates, total and per-organization uses, first payment only", async () => {
+    const save = (code: string, extra = "'percent',20,null,null,null,null,null,null,false,null,true") => one(financeAdmin, `select public.admin_save_coupon(null,'${code}',${extra}) as id`);
+    const spring = await save("spring20") as string;
+    expect((await rows(`select code from private.coupons where id='${spring}'`))[0].code).toBe("SPRING20");
+    await asRole(financeAdmin); await expect(db.exec(`select public.admin_save_coupon(null,'Spring20','fixed',50,null,null,null,null,null,null,false,null,true)`)).rejects.toMatchObject({ code: "23505" }); await db.exec("reset role");
+    await asRole(financeAdmin); await expect(db.exec(`select public.admin_save_coupon(null,'BAD',  'percent',150,null,null,null,null,null,null,false,null,true)`)).rejects.toMatchObject({ code: "22023" }); await db.exec("reset role");
+    await asRole(financeAdmin); await expect(db.exec(`select public.admin_save_coupon(null,'x y','percent',10,null,null,null,null,null,null,false,null,true)`)).rejects.toMatchObject({ code: "22023" }); await db.exec("reset role");
+    await save("ANNUAL100", `'fixed',100,array[${advanced}],array[12],null,null,1,null,false,'للسنوي فقط',true`);
+    await save("LATER", `'percent',10,null,null,current_date + 5,null,null,null,false,null,true`);
+    await save("OLD", `'percent',10,null,null,current_date - 30,current_date - 1,null,null,false,null,true`);
+    await save("FIRST", `'percent',50,null,null,null,null,null,null,true,null,true`);
+    const quote = (org: string, plan: string, months: number, code: string) => one(org === orgE ? ownerE : ownerF, `select public.quote_subscription_coupon('${org}', ${plan}, ${months}, '${code}') as q`) as Promise<Record<string, unknown>>;
+    const price = async (plan: string, months: number) => Number((await rows(`select public.quote_subscription(${plan}, ${months}) as q`))[0].q);
+    const a12 = await price(advanced, 12), a1 = await price(advanced, 1), b1 = await price(basic, 1);
+    const cut = Math.round(a12 * 20) / 100;
+    expect(await quote(orgE, advanced, 12, "spring20")).toMatchObject({ ok: true, code: "SPRING20", base: a12, discount: cut, amount: Math.round((a12 - cut) * 100) / 100 });
+    expect(await quote(orgE, advanced, 12, "spring20")).not.toHaveProperty("coupon_id");
+    expect(await quote(orgE, advanced, 12, "annual100")).toMatchObject({ ok: true, discount: 100, amount: Math.round((a12 - 100) * 100) / 100 });
+    expect(await quote(orgE, advanced, 1, "annual100")).toMatchObject({ ok: false, reason: "period", amount: a1 });
+    expect(await quote(orgE, basic, 12, "annual100")).toMatchObject({ ok: false, reason: "plan" });
+    expect(await quote(orgE, advanced, 1, "later")).toMatchObject({ ok: false, reason: "not_started" });
+    expect(await quote(orgE, advanced, 1, "old")).toMatchObject({ ok: false, reason: "expired" });
+    expect(await quote(orgE, advanced, 1, "nothing")).toMatchObject({ ok: false, reason: "not_found" });
+    // Only the owner can ask.
+    await refused(adminE, `select public.quote_subscription_coupon('${orgE}', ${advanced}, 1, 'spring20')`);
+    // Submit with a coupon: the payment keeps code, base and discount; the admin sees them.
+    await asRole(ownerE);
+    const paid = (await rows(`select public.submit_subscription_payment('${orgE}', ${advanced}, 12, 'TR-1001', '${orgE}/c1.jpg', 'annual100') as id`))[0].id as string;
+    await expect(db.exec(`select public.submit_subscription_payment('${orgE}', ${advanced}, 12, 'TR-1002', '${orgE}/c2.jpg', 'annual100')`)).rejects.toMatchObject({ code: "22023" }); // used up (1 total)
+    await expect(db.exec(`select public.submit_subscription_payment('${orgE}', ${advanced}, 1, 'TR-1003', '${orgE}/c2.jpg', 'later')`)).rejects.toMatchObject({ code: "22023" });
+    // The first payment exists now (pending), so FIRST is refused for this organization.
+    expect((await rows(`select public.quote_subscription_coupon('${orgE}', ${advanced}, 1, 'first') as q`))[0].q).toMatchObject({ ok: false, reason: "first_only" });
+    // The 5-argument form still works without a coupon.
+    const plain = (await rows(`select public.submit_subscription_payment('${orgE}', ${basic}, 1, 'TR-1004', '${orgE}/c3.jpg') as id`))[0].id as string;
+    await db.exec("reset role");
+    expect((await rows(`select amount, base_amount, discount, coupon_code from public.subscription_payments where id='${paid}'`))[0]).toEqual({ amount: (a12 - 100).toFixed(2), base_amount: a12.toFixed(2), discount: "100.00", coupon_code: "ANNUAL100" });
+    expect((await rows(`select amount, base_amount, discount, coupon_code from public.subscription_payments where id='${plain}'`))[0]).toEqual({ amount: b1.toFixed(2), base_amount: b1.toFixed(2), discount: "0.00", coupon_code: null });
+    const pending = await run(financeAdmin, "select * from public.admin_pending_payments_v2()");
+    expect(pending.find(row => row.id === paid)).toMatchObject({ coupon_code: "ANNUAL100", discount: "100.00", amount: (a12 - 100).toFixed(2), base_amount: a12.toFixed(2), expected: a12.toFixed(2) });
+    expect(await one(ownerF, `select public.quote_subscription_coupon('${orgF}', ${basic}, 1, 'first') as q`)).toMatchObject({ ok: true, amount: Math.round(b1 * 50) / 100 });
+    // Per organization: SPRING20 once per organization.
+    await one(financeAdmin, `select public.admin_save_coupon('${spring}','SPRING20','percent',20,null,null,null,null,null,1,false,null,true) as id`);
+    await asRole(ownerF);
+    await db.exec(`select public.submit_subscription_payment('${orgF}', ${basic}, 1, 'TR-2001', '${orgF}/c4.jpg', 'spring20')`);
+    expect((await rows(`select public.quote_subscription_coupon('${orgF}', ${basic}, 3, 'spring20') as q`))[0].q).toMatchObject({ ok: false, reason: "org_limit" });
+    await db.exec("reset role");
+    expect(await quote(orgE, basic, 3, "spring20")).toMatchObject({ ok: true });
+    // Disabling.
+    await one(financeAdmin, `select public.admin_save_coupon('${spring}','SPRING20','percent',20,null,null,null,null,null,1,false,null,false) as id`);
+    expect(await quote(orgE, basic, 3, "spring20")).toMatchObject({ ok: false, reason: "inactive" });
+    const list = await run(financeAdmin, "select code, used, pending from public.admin_coupons()");
+    expect(list.find(row => row.code === "ANNUAL100")).toMatchObject({ used: 0, pending: 1 });
+    expect(await audits("coupon_created")).toBe(5);
+    expect(await audits("coupon_disabled")).toBe(1);
+    // Approving issues a numbered receipt with the coupon; the use list shows it.
+    await one(financeAdmin, `select public.admin_approve_payment('${paid}') as d`);
+    const coupon = (await rows("select id from private.coupons where code='ANNUAL100'"))[0].id as string;
+    const uses = await run(financeAdmin, `select * from public.admin_coupon_uses('${coupon}')`);
+    expect(uses[0]).toMatchObject({ organization: "مدارس النخيل", status: "approved", discount: "100.00", receipt: expect.stringMatching(/^SEER-\d{4}-\d{5}$/) });
+  });
+
+  it("receipts: one per approved transfer, numbered in order; owners read their own; manual invoices by finance", async () => {
+    await refused(supportAdmin, `select public.admin_approve_payment((select id from public.subscription_payments where reference='TR-1004'))`);
+    await one(financeAdmin, "select public.admin_approve_payment((select id from public.subscription_payments where reference='TR-1004')) as d");
+    const receipts = await rows(`select number, kind, amount::text, coupon_code, plan_name from public.platform_invoices where organization_id='${orgE}' order by number`);
+    expect(receipts).toHaveLength(2);
+    expect(receipts.map(r => r.kind)).toEqual(["receipt", "receipt"]);
+    const [first, second] = receipts.map(r => Number(String(r.number).slice(-5)));
+    expect(second).toBe(first + 1);
+    expect(receipts[0]).toMatchObject({ coupon_code: "ANNUAL100", plan_name: expect.any(String) });
+    // Approving again does not issue a second receipt (status is no longer pending anyway).
+    await db.exec(`update public.subscription_payments set status='approved' where reference='TR-1004'`);
+    expect((await rows(`select count(*)::int as n from public.platform_invoices where organization_id='${orgE}'`))[0].n).toBe(2);
+    // Manual adjustment.
+    await asRole(financeAdmin);
+    await expect(db.exec(`select public.admin_issue_invoice('${orgE}','x',100,null)`)).rejects.toMatchObject({ code: "22023" });
+    await expect(db.exec(`select public.admin_issue_invoice('${orgE}','تسوية',0,null)`)).rejects.toMatchObject({ code: "22023" });
+    await expect(db.exec(`select public.admin_issue_invoice('00000000-0000-0000-0000-00000000dead','تسوية',10,null)`)).rejects.toMatchObject({ code: "P0002" });
+    const manual = (await rows(`select public.admin_issue_invoice('${orgE}','تسوية فرق السعر',150.5,'بعد مكالمة') as id`))[0].id as string;
+    expect((await rows(`select * from public.admin_invoices(p_org => '${orgE}')`)).map(r => r.kind)).toEqual(["adjustment", "receipt", "receipt"]);
+    expect((await rows(`select * from public.admin_invoices(p_search => 'النخيل', p_kind => 'adjustment')`))).toHaveLength(1);
+    await db.exec("reset role");
+    expect(await audits("invoice_issued")).toBe(1);
+    expect((await rows(`select title from public.notifications where user_id='${ownerE}' order by created_at desc limit 1`))[0].title).toBe("فاتورة جديدة من سِير");
+    // RLS: the owner reads theirs, the manager and other owners do not; support does not.
+    await asRole(ownerE); expect((await rows("select id from public.platform_invoices")).map(r => r.id)).toContain(manual); await db.exec("reset role");
+    await asRole(adminE); expect(await rows("select id from public.platform_invoices")).toEqual([]); await db.exec("reset role");
+    await asRole(ownerF); expect(await rows(`select id from public.platform_invoices where organization_id='${orgE}'`)).toEqual([]); await db.exec("reset role");
+    await asRole(supportAdmin); expect(await rows(`select id from public.platform_invoices where organization_id='${orgE}'`)).toEqual([]); await db.exec("reset role");
+    await asRole(financeAdmin); expect((await rows(`select id from public.platform_invoices where organization_id='${orgE}'`))).toHaveLength(3); await db.exec("reset role");
+    await asRole(ownerE); await expect(db.exec(`insert into public.platform_invoices(number,kind,organization_id,organization_name,description,amount) values ('X','adjustment','${orgE}','x','xx',1)`)).rejects.toBeDefined(); await db.exec("reset role");
+  });
+
+  it("broadcasts: preview counts by audience, one send per key, notifications to owners (and managers), email to real owner addresses only", async () => {
+    const preview = (args: string) => one(platformAdmin, `select public.admin_broadcast_preview(${args}) as p`) as Promise<Record<string, number>>;
+    expect(await preview(`p_orgs => array['${orgE}','${orgF}']::uuid[]`)).toEqual({ organizations: 2, recipients: 2, emails: 1 });
+    expect(await preview(`p_orgs => array['${orgE}','${orgF}']::uuid[], p_managers => true`)).toEqual({ organizations: 2, recipients: 3, emails: 1 });
+    expect(await preview(`p_status => 'trial', p_orgs => array['${orgE}','${orgF}']::uuid[]`)).toMatchObject({ organizations: 1, recipients: 1, emails: 0 });
+    expect(await preview(`p_status => 'active', p_plan => ${basic}, p_orgs => array['${orgE}','${orgF}']::uuid[]`)).toMatchObject({ organizations: 1 });
+    await asRole(platformAdmin); await expect(db.exec("select public.admin_broadcast_preview('nope')")).rejects.toMatchObject({ code: "22023" }); await db.exec("reset role");
+    await db.exec("delete from private.email_outbox");
+    const key = "b0000000-0000-0000-0000-0000000000b1";
+    const send = () => one(platformAdmin, `select public.admin_broadcast_send('${key}', 'صيانة مجدولة', 'المنصة تتوقف ١٠ دقائق الساعة ٢ فجرًا.', '/dashboard/billing', 'all', null, array['${orgE}','${orgF}']::uuid[], true, true, 'https://seersa.vercel.app') as r`) as Promise<Record<string, unknown>>;
+    expect(await send()).toMatchObject({ organizations: 2, notified: 3, emailed: 1, repeated: false });
+    expect(await send()).toMatchObject({ notified: 3, repeated: true }); // double click
+    const told = await rows(`select user_id::text as u, url from public.notifications where title='صيانة مجدولة' order by user_id`);
+    expect(told.map(r => r.u).sort()).toEqual([adminE, ownerE, ownerF].sort());
+    expect(told.every(r => r.url === "/dashboard/billing")).toBe(true);
+    const mails = await rows("select to_email, body from private.email_outbox");
+    expect(mails.map(r => r.to_email)).toEqual(["reem@nakheel.test"]);
+    expect(mails[0].body).toContain("https://seersa.vercel.app/dashboard/billing");
+    const history = await run(platformAdmin, "select title, notified, emailed, created_by from public.admin_broadcasts()");
+    expect(history[0]).toMatchObject({ title: "صيانة مجدولة", notified: 3, emailed: 1, created_by: "admin@seer.test" });
+    expect(await audits("broadcast_sent")).toBe(1);
+    await asRole(platformAdmin);
+    await expect(db.exec(`select public.admin_broadcast_send(gen_random_uuid(), 'ع', 'نص', null, 'all', null, null, false, false, null)`)).rejects.toMatchObject({ code: "22023" });
+    await expect(db.exec(`select public.admin_broadcast_send(gen_random_uuid(), 'عنوان', 'نص', 'javascript:alert(1)', 'all', null, null, false, false, null)`)).rejects.toMatchObject({ code: "22023" });
+    await db.exec("reset role");
+  });
+
+  it("IP block list: enforced by the login check (single address and range, expiry), listed with reason, unblock; release a lock", async () => {
+    const check = async (ip: string) => { await db.exec("set role service_role"); const r = (await rows(`select public.login_check('reem@nakheel.test','${ip}') as r`))[0].r; await db.exec("reset role"); return r as { locked: boolean; scope: string | null; retry_after_seconds: number }; };
+    expect((await check("203.0.113.7")).locked).toBe(false);
+    await asRole(platformAdmin);
+    await expect(db.exec("select public.admin_block_ip('not-an-ip','سبب واضح',null)")).rejects.toMatchObject({ code: "22023" });
+    await expect(db.exec("select public.admin_block_ip('10.0.0.0/8','واسع جدًا',null)")).rejects.toMatchObject({ code: "22023" });
+    await expect(db.exec("select public.admin_block_ip('203.0.113.7','x',null)")).rejects.toMatchObject({ code: "22023" });
+    const single = (await rows("select public.admin_block_ip('203.0.113.7','تخمين كلمات مرور',null) as id"))[0].id as number;
+    await db.exec("select public.admin_block_ip('198.51.100.20/24','شبكة مزعجة',7)");
+    await db.exec("reset role");
+    expect(await check("203.0.113.7")).toMatchObject({ locked: true, scope: "blocked", retry_after_seconds: 86400 });
+    expect(await check("198.51.100.99")).toMatchObject({ locked: true, scope: "blocked" });
+    expect((await check("198.51.101.1")).locked).toBe(false);
+    const page = await one(platformAdmin, "select public.admin_login_security('7d') as s") as { blocks: { ip: string; reason: string; active: boolean; by: string }[] };
+    expect(page.blocks.map(b => b.ip).sort()).toEqual(["198.51.100.0/24", "203.0.113.7"]);
+    expect(page.blocks.find(b => b.ip === "203.0.113.7")).toMatchObject({ reason: "تخمين كلمات مرور", active: true, by: "admin@seer.test" });
+    // Expired blocks stop applying.
+    await db.exec("update private.ip_blocks set expires_at = now() - interval '1 minute' where host(ip) = '198.51.100.0'");
+    expect((await check("198.51.100.99")).locked).toBe(false);
+    await one(platformAdmin, `select public.admin_unblock_ip(${single}) as x`);
+    expect((await check("203.0.113.7")).locked).toBe(false);
+    await asRole(platformAdmin); await expect(db.exec(`select public.admin_unblock_ip(${single})`)).rejects.toMatchObject({ code: "P0002" }); await db.exec("reset role");
+    expect(await audits("ip_blocked")).toBe(2);
+    expect(await audits("ip_unblocked")).toBe(1);
+    // A lock, then release it from the page.
+    await db.exec("set role service_role");
+    for (let i = 0; i < 5; i++) await db.exec(`select public.login_record('lama@nakheel.test','10.7.7.7',false,null)`);
+    await db.exec("reset role");
+    const security = await one(platformAdmin, "select public.admin_login_security() as s") as { window: string; locks: { id: number; subject: string; active: boolean }[]; failures: number };
+    expect(security.window).toBe("24h");
+    const lock = security.locks.find(l => l.subject === "la***@nakheel.test" && l.active)!;
+    expect(lock).toBeDefined();
+    await one(platformAdmin, `select public.admin_release_lock(${lock.id}) as x`);
+    await db.exec("set role service_role");
+    expect(((await rows(`select public.login_check('lama@nakheel.test','10.7.7.8') as r`))[0].r as { locked: boolean }).locked).toBe(false);
+    await db.exec("reset role");
+    expect(await audits("login_lock_released")).toBe(1);
+    await asRole(platformAdmin); await expect(db.exec("select public.admin_login_security('1y')")).rejects.toMatchObject({ code: "22023" }); await db.exec("reset role");
+  });
+
+  it("the full log: filters by actor, action, organization and dates, pages, filter lists; exporting is recorded", async () => {
+    const page = (args: string) => run(platformAdmin, `select * from public.admin_audit_log(${args})`);
+    const all = await page("");
+    expect(all.length).toBeGreaterThan(5);
+    expect(Number(all[0].total)).toBeGreaterThanOrEqual(all.length);
+    expect((await page(`p_actor => '${financeAdmin}'`)).every(r => r.actor === "money@seer.test")).toBe(true);
+    expect((await page("p_action => 'ip_blocked'"))).toHaveLength(2);
+    const byOrg = await page(`p_org => '${orgE}'`);
+    expect(byOrg.length).toBeGreaterThan(0);
+    expect(byOrg.every(r => r.organization === "مدارس النخيل")).toBe(true);
+    expect(await page("p_from => current_date + 2")).toEqual([]);
+    expect((await page("p_to => current_date - 2"))).toEqual([]);
+    expect((await page("p_page => 1, p_per => 2"))).toHaveLength(2);
+    const filters = await one(platformAdmin, "select public.admin_audit_filters() as f") as { actors: { email: string }[]; actions: string[] };
+    expect(filters.actors.map(a => a.email)).toEqual(expect.arrayContaining(["admin@seer.test", "money@seer.test"]));
+    expect(filters.actions).toEqual(expect.arrayContaining(["coupon_created", "broadcast_sent", "ip_blocked"]));
+    await one(platformAdmin, "select public.admin_audit_exported(42) as x");
+    expect(await audits("audit_exported")).toBe(1);
+  });
+
+  it("the team: invite an existing account by email, change roles, remove; one owner always remains; nobody changes themselves", async () => {
+    const team = await run(platformAdmin, "select email, role, is_me from public.admin_team()");
+    expect(team.find(r => r.email === "admin@seer.test")).toMatchObject({ role: "owner", is_me: true });
+    await asRole(platformAdmin);
+    await expect(db.exec("select public.admin_team_invite('nobody@seer.test','support')")).rejects.toMatchObject({ code: "P0002" });
+    await expect(db.exec("select public.admin_team_invite('help@seer.test','support')")).rejects.toMatchObject({ code: "23505" });
+    await expect(db.exec("select public.admin_team_invite('new.admin@seer.test','boss')")).rejects.toMatchObject({ code: "22023" });
+    await db.exec("reset role"); await db.exec("delete from private.email_outbox"); await asRole(platformAdmin);
+    await db.exec("select public.admin_team_invite(' New.Admin@seer.test ','finance')");
+    await expect(db.exec(`select public.admin_team_set_role('${platformAdmin}','support')`)).rejects.toMatchObject({ code: "22023" });
+    await expect(db.exec(`select public.admin_team_remove('${platformAdmin}')`)).rejects.toMatchObject({ code: "22023" });
+    await db.exec("reset role");
+    expect((await rows(`select role, invited_by::text as b from private.platform_admins where user_id='${newcomer}'`))[0]).toEqual({ role: "finance", b: platformAdmin });
+    expect((await rows("select to_email from private.email_outbox")).map(r => r.to_email)).toEqual(["new.admin@seer.test"]);
+    // The newcomer has no rights before two-step verification.
+    await refused(newcomer, "select * from public.admin_coupons()", "aal1");
+    expect((await run(newcomer, "select count(*)::int as n from public.admin_coupons()"))[0].n).toBeGreaterThan(0);
+    // Promote the newcomer to owner, then the newcomer can demote the first owner; the last owner cannot go.
+    await one(platformAdmin, `select public.admin_team_set_role('${newcomer}','owner') as x`);
+    await one(newcomer, `select public.admin_team_set_role('${platformAdmin}','support') as x`);
+    await asRole(platformAdmin); await expect(db.exec(`select public.admin_team_set_role('${newcomer}','owner')`)).rejects.toMatchObject({ code: "42501" }); await db.exec("reset role");
+    // A second owner is the only way the last one leaves; the guard holds with one owner.
+    await db.exec(`update private.platform_admins set role='owner' where user_id='${platformAdmin}'`);
+    await one(platformAdmin, `select public.admin_team_remove('${supportAdmin}') as x`);
+    await one(platformAdmin, `select public.admin_team_set_role('${newcomer}','support') as x`);
+    expect((await rows("select count(*)::int as n from private.platform_admins where role='owner'"))[0].n).toBe(1);
+    await refused(newcomer, `select public.admin_team_remove('${platformAdmin}')`);
+    expect(await audits("admin_invited")).toBe(1);
+    expect(await audits("admin_role_changed")).toBe(3);
+    expect(await audits("admin_removed")).toBe(1);
+    // Notifications go by role: a support thread reaches owners and support, not finance.
+    await db.exec(`insert into private.platform_admins(user_id, role) values ('${supportAdmin}','support')`);
+    await asRole(ownerF); await db.exec(`select public.open_support_thread('${orgF}', 'مشكلة في الحضور', 'ما يحفظ')`); await db.exec("reset role");
+    const reached = (await rows(`select user_id::text as u from public.notifications where kind='support' and title like 'تذكرة دعم جديدة%' and organization_id='${orgF}'`)).map(r => r.u);
+    expect(reached).toEqual(expect.arrayContaining([platformAdmin, supportAdmin, newcomer]));
+    expect(reached).not.toContain(financeAdmin);
   });
 });

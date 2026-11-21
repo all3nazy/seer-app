@@ -13,5 +13,7 @@ export const signInMessages = {
   captcha: "تعذر التحقق من أنك لست برنامجًا آليًا. انتظر لحظة وحاول مرة ثانية.",
   busy: "محاولات كثيرة خلال وقت قصير. انتظر قليلًا ثم حاول مرة ثانية.",
   unavailable: "تعذر تسجيل الدخول الآن. حاول بعد قليل.",
+  // An address on the platform's block list (no detail on why or for how long).
+  blocked: "الدخول من هذه الشبكة موقوف. إذا تعتقد أن هذا خطأ تواصل مع فريق سِير.",
 } as const;
 

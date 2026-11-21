@@ -5,7 +5,8 @@ import { usePathname } from "next/navigation";
 import { NotificationBell, onNotification } from "./notifications";
 import SignOutButton from "./sign-out-button";
 import { seedSupportBadge, supportNotification, useSupportBadge } from "./support-badge";
-import { activeAdminItem, adminNav, type AdminNavItem } from "../lib/admin-nav";
+import { activeAdminItem, adminNavFor, type AdminNavItem } from "../lib/admin-nav";
+import { adminRoleLabels, type AdminRole } from "../lib/admin-roles";
 import { arNumber } from "../lib/dates";
 
 type Counts = { payments: number; support: number; requests: number };
@@ -14,7 +15,7 @@ type Counts = { payments: number; support: number; requests: number };
  * «سِير أدمن» (approved design): the Seer identity with a dark plum sidebar, a coral «أدمن» pill and
  * a coral active item. On phones the sidebar folds into a menu button at the top.
  */
-export function AdminShell({ children, userId, appUrl, counts, support }: { children: React.ReactNode; userId: string; appUrl: string; counts: Counts; support: string[] }) {
+export function AdminShell({ children, userId, appUrl, counts, support, role = "owner" }: { children: React.ReactNode; userId: string; appUrl: string; counts: Counts; support: string[]; role?: AdminRole }) {
   const path = usePathname();
   const active = activeAdminItem(path);
   const [open, setOpen] = useState(false);
@@ -38,9 +39,9 @@ export function AdminShell({ children, userId, appUrl, counts, support }: { chil
           {open ? "إغلاق" : "القائمة"}
         </button>
       </div>
-      <p className="adm-sub">لوحة مالك المنصة</p>
+      <p className="adm-sub">{role === "owner" ? "لوحة مالك المنصة" : `فريق الإدارة · ${adminRoleLabels[role]}`}</p>
       <nav id="admin-nav" aria-label="أقسام لوحة المالك" className="adm-nav">
-        {adminNav.map((group, index) => <div key={index} className="adm-group">
+        {adminNavFor(role).map((group, index) => <div key={index} className="adm-group">
           {group.title ? <p className="adm-group-title">{group.title}</p> : null}
           {group.items.map(item => {
             const n = count(item);

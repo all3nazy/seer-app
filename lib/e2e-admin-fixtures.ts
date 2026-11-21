@@ -1,3 +1,5 @@
+import type { AuditRow, BroadcastRow, InvoiceDoc, InvoiceRow, SecurityData, TeamRow, CouponUse } from "../components/admin-stage3-views";
+import type { Coupon } from "./admin-stage3";
 import type { OrgProfile } from "../components/admin-org-profile";
 import type { OverviewData, PendingTransfer } from "../components/admin-overview";
 import type { SubscriberRow } from "../components/admin-subscribers";
@@ -48,3 +50,40 @@ export const sampleRows: SubscriberRow[] = Array.from({ length: 25 }, (_, index)
   plan: "المتقدمة", status: index % 5 === 0 ? "trial" : "active", access: index % 7 === 0 ? "grace" : "active", ends_on: "2026-12-01", days_left: 9,
   owner_email: `owner${index}@school.test`, owner_phone: "0551239876", students: 40 + index, staff: 10, pending: index === 0 ? 1 : 0, total: 60,
 }));
+
+// Stage 3 ---------------------------------------------------------------------------------------------
+export const stagePlans = [{ id: "b1000000-0000-0000-0000-000000000001", name: "المتقدمة" }, { id: "b1000000-0000-0000-0000-000000000002", name: "الأساسية" }];
+export const sampleCoupons: Coupon[] = [
+  { id: "c3000000-0000-0000-0000-000000000001", code: "RAMADAN20", kind: "percent", value: 20, plan_ids: [], months: [12], valid_from: "2026-11-01", valid_until: "2026-12-31", max_uses: 50, max_per_org: 1,
+    first_payment_only: false, note: "عرض رمضان للسنوي", is_active: true, created_at: "2026-11-01T08:00:00Z", used: 3, pending: 1, discount_total: 2874.24 },
+  { id: "c3000000-0000-0000-0000-000000000002", code: "FIRST100", kind: "fixed", value: 100, plan_ids: ["b1000000-0000-0000-0000-000000000001"], months: [], valid_from: null, valid_until: null, max_uses: null, max_per_org: 1,
+    first_payment_only: true, note: null, is_active: false, created_at: "2026-10-01T08:00:00Z", used: 0, pending: 0, discount_total: 0 },
+];
+export const sampleCouponUses: CouponUse[] = [
+  { payment_id: "c4000000-0000-0000-0000-000000000001", organization_id: orgId, organization: "روضة الياسمين", status: "approved", amount: 3832.32, discount: 958.08, created_at: "2026-11-10T08:00:00Z", receipt: "SEER-2026-00012" },
+];
+export const sampleInvoices: InvoiceRow[] = [
+  { id: "c5000000-0000-0000-0000-000000000001", number: "SEER-2026-00013", kind: "adjustment", organization_id: orgId, organization: "روضة الياسمين", description: "تسوية فرق الترقية", amount: 150.5, discount: 0, coupon_code: null, issued_at: "2026-11-18T08:00:00Z", total: 2 },
+  { id: "c5000000-0000-0000-0000-000000000002", number: "SEER-2026-00012", kind: "receipt", organization_id: orgId, organization: "روضة الياسمين", description: "اشتراك منصة سِير — المتقدمة", amount: 3832.32, discount: 958.08, coupon_code: "RAMADAN20", issued_at: "2026-11-10T09:00:00Z", total: 2 },
+];
+export const sampleInvoiceDoc: InvoiceDoc = { id: "c5000000-0000-0000-0000-000000000002", number: "SEER-2026-00012", kind: "receipt", organization_name: "روضة الياسمين", description: "اشتراك منصة سِير — المتقدمة",
+  plan_name: "المتقدمة", months: 12, period_start: "2026-11-10", period_end: "2027-11-10", base_amount: 4790.4, discount: 958.08, coupon_code: "RAMADAN20", amount: 3832.32, reference: "TR-88120", note: null, issued_at: "2026-11-10T09:00:00Z" };
+export const sampleBroadcasts: BroadcastRow[] = [
+  { id: "c6000000-0000-0000-0000-000000000001", title: "صيانة مجدولة", body: "المنصة تتوقف ١٠ دقائق الساعة ٢ فجرًا.", link: null, audience: { status: "all", plan: null, orgs: [] }, managers: true, email: true,
+    organizations: 41, notified: 63, emailed: 38, created_at: "2026-11-20T18:00:00Z", created_by: "admin@seer.test" },
+];
+export const sampleSecurity: SecurityData = {
+  window: "24h", failures: 37, successes: 412,
+  locks: [{ id: 7, scope: "account", subject: "la***@nakheel.test", ip: "10.7.7.7", failures: 5, locked_until: "2026-11-21T12:10:00Z", created_at: "2026-11-21T11:55:00Z", active: true },
+    { id: 6, scope: "ip", subject: "203.0.113.9", ip: "203.0.113.9", failures: 15, locked_until: "2026-11-21T06:00:00Z", created_at: "2026-11-21T05:30:00Z", active: false }],
+  top_ips: [{ ip: "203.0.113.9", failures: 22, accounts: 7, last_at: "2026-11-21T11:40:00Z", blocked: false }, { ip: "198.51.100.20", failures: 9, accounts: 1, last_at: "2026-11-21T10:00:00Z", blocked: true }],
+  blocks: [{ id: 3, ip: "198.51.100.0/24", reason: "شبكة مزعجة", expires_at: "2026-11-28T10:00:00Z", created_at: "2026-11-21T10:00:00Z", by: "admin@seer.test", active: true, removed_at: null }],
+};
+export const sampleAudit: AuditRow[] = [
+  { id: 30, created_at: "2026-11-21T11:00:00Z", actor_id: "60000000-0000-0000-0000-0000000000ad", actor: "admin@seer.test", action: "coupon_created", organization_id: null, organization: null, detail: { code: "RAMADAN20", value: 20 }, total: 2 },
+  { id: 29, created_at: "2026-11-21T10:00:00Z", actor_id: "60000000-0000-0000-0000-0000000000ad", actor: "admin@seer.test", action: "org_extended", organization_id: orgId, organization: "روضة الياسمين", detail: { amount: 1, unit: "months" }, total: 2 },
+];
+export const sampleTeam: TeamRow[] = [
+  { user_id: "60000000-0000-0000-0000-0000000000ad", email: "admin@seer.test", role: "owner", created_at: "2026-10-01T00:00:00Z", last_sign_in_at: "2026-11-21T11:30:00Z", mfa: true, invited_by: null, is_me: true },
+  { user_id: "60000000-0000-0000-0000-0000000003b5", email: "help@seer.test", role: "support", created_at: "2026-11-01T00:00:00Z", last_sign_in_at: null, mfa: false, invited_by: "admin@seer.test", is_me: false },
+];

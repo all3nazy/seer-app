@@ -11,6 +11,9 @@ export const auditLabels: Record<string, string> = {
   join_request_invite: "دعوة من طلب انضمام", join_request_reject: "رفض طلب انضمام", org_invite_created: "إنشاء دعوة منشأة", org_invite_revoked: "إلغاء دعوة منشأة",
   org_invite_reissued: "رابط دعوة جديد", org_invite_used: "تفعيل منشأة بدعوة", plan_created: "إضافة باقة", plan_updated: "تعديل باقة", duration_updated: "تعديل خصم مدة",
   settings_updated: "تعديل إعدادات الدفع", template_created: "إضافة قالب رد", template_updated: "تعديل قالب رد",
+  coupon_created: "إضافة كوبون", coupon_updated: "تعديل كوبون", coupon_disabled: "إيقاف كوبون", invoice_issued: "إصدار فاتورة", broadcast_sent: "رسالة للمشتركين",
+  ip_blocked: "حظر عنوان IP", ip_unblocked: "رفع حظر عنوان IP", login_lock_released: "فك قفل دخول (صفحة الأمان)", audit_exported: "تصدير السجل",
+  admin_invited: "إضافة عضو لفريق الإدارة", admin_role_changed: "تغيير دور في الفريق", admin_removed: "إزالة من فريق الإدارة",
   payment_pending: "تحويل جديد بانتظار التأكيد", payment_approved: "اعتماد تحويل", payment_rejected: "رفض تحويل", join_request: "طلب انضمام جديد", support_thread: "تذكرة دعم جديدة",
 };
 export const auditLabel = (action: string) => auditLabels[action] ?? action;

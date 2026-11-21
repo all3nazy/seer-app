@@ -1,6 +1,8 @@
+import { roleAllows, rolesForPath, type AdminRole } from "./admin-roles";
+
 /**
  * The sidebar of «سِير أدمن» (approved design): groups and their pages. Only pages that exist are
- * listed; the other items of the design come with the next stages.
+ * listed; each role sees only what it may open (lib/admin-roles.ts).
  */
 export type AdminNavItem = { href: string; label: string; count?: "payments" | "support" | "requests"; exact?: boolean };
 export type AdminNavGroup = { title: string | null; items: AdminNavItem[] };
@@ -14,20 +16,29 @@ export const adminNav: AdminNavGroup[] = [
   ] },
   { title: "الإيرادات", items: [
     { href: "/admin/payments", label: "التحويلات البنكية", count: "payments" },
+    { href: "/admin/invoices", label: "الفواتير والإيصالات" },
+    { href: "/admin/coupons", label: "الكوبونات والعروض" },
     { href: "/admin/plans", label: "الباقات والأسعار" },
   ] },
   { title: "الدعم والتواصل", items: [
     { href: "/admin/support", label: "تذاكر الدعم", count: "support" },
     { href: "/admin/support/templates", label: "قوالب الردود" },
+    { href: "/admin/broadcast", label: "رسالة للمشتركين" },
   ] },
   { title: "المنصة", items: [
     { href: "/admin/settings", label: "الدفع والتليقرام", exact: true },
+    { href: "/admin/team", label: "فريق الإدارة" },
   ] },
   { title: "الحماية والتشغيل", items: [
-    { href: "/admin#login-security", label: "أمان الدخول" },
-    { href: "/admin/settings#audit", label: "سجل العمليات" },
+    { href: "/admin/security", label: "أمان الدخول" },
+    { href: "/admin/audit", label: "سجل العمليات" },
   ] },
 ];
+
+/** The sidebar for a role: only what it may open; empty groups disappear. */
+export function adminNavFor(role: AdminRole): AdminNavGroup[] {
+  return adminNav.map(group => ({ ...group, items: group.items.filter(item => roleAllows(role, rolesForPath(item.href.split("#")[0]))) })).filter(group => group.items.length);
+}
 
 /** The item for a path: the longest matching href (so /admin/support/templates is not «تذاكر الدعم»). */
 export function activeAdminItem(path: string): string | null {

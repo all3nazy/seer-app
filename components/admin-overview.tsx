@@ -3,6 +3,7 @@ import { PaymentDecision } from "./admin-forms";
 import { activityPill, auditLabel, timeAgo } from "../lib/admin-format";
 import { arNumber, formatDate, formatTime } from "../lib/dates";
 import { durationLabel, riyal } from "../lib/subscriptions";
+import { roleAllows, rolesForPath, type AdminRole } from "../lib/admin-roles";
 
 export type OverviewData = {
   decisions: { payments: number; oldest_payment: { organization: string; created_at: string } | null; join_requests: number; support_waiting: number; support_over_24h: number; ending_7_days: number };
@@ -16,7 +17,8 @@ export type HealthExtra = { locks24h: number | null; activeLocks: number | null;
 const tones = { sun: "#F5A524", plum: "#7C5CFF", rose: "#EF5A6F", sky: "#3B82F6" } as const;
 
 /** «نظرة عامة» (approved design): what needs a decision, the numbers, pending transfers, health, recent activity. */
-export function OverviewView({ data, pending, extra, now = Date.now() }: { data: OverviewData; pending: PendingTransfer[]; extra: HealthExtra; now?: number }) {
+export function OverviewView({ data, pending, extra, now = Date.now(), role = "owner" }: { data: OverviewData; pending: PendingTransfer[]; extra: HealthExtra; now?: number; role?: AdminRole }) {
+  const may = (href: string) => roleAllows(role, rolesForPath(href.split("?")[0]));
   const d = data.decisions, n = data.numbers;
   const cronOk = data.health.cron.filter(job => job.status === "succeeded").length;
   const cronBad = data.health.cron.filter(job => job.status && job.status !== "succeeded");
@@ -41,7 +43,7 @@ export function OverviewView({ data, pending, extra, now = Date.now() }: { data:
 
     <section aria-labelledby="att" style={{ display: "grid", gap: 12 }}>
       <h2 id="att" style={{ margin: 0, fontSize: 17 }}>يحتاج قرارك الحين</h2>
-      <div className="adm-decisions">{decisions.map(item => <Link key={item.href} className="card adm-decision" href={item.href} style={{ "--tone": tones[item.tone] } as React.CSSProperties}>
+      <div className="adm-decisions">{decisions.filter(item => may(item.href)).map(item => <Link key={item.href} className="card adm-decision" href={item.href} style={{ "--tone": tones[item.tone] } as React.CSSProperties}>
         <span className="label">{item.label}</span><span className="figure">{arNumber(item.value)}</span><span className="note">{item.note}</span>
       </Link>)}</div>
     </section>
@@ -55,7 +57,7 @@ export function OverviewView({ data, pending, extra, now = Date.now() }: { data:
     </section>
 
     <div className="adm-split">
-      <section className="card adm-card wide" aria-labelledby="tr">
+      {may("/admin/payments") ? <section className="card adm-card wide" aria-labelledby="tr">
         <div className="adm-card-head"><h2 id="tr">تحويلات بانتظار التأكيد</h2><Link href="/admin/payments">كل التحويلات</Link></div>
         {pending.length ? <div className="table-wrap"><table className="links-table"><thead><tr><th scope="col">المنشأة</th><th scope="col">الباقة</th><th scope="col">المبلغ</th><th scope="col">المرجع</th><th scope="col">رُفع</th><th scope="col"><span className="sr-only">إجراء</span></th></tr></thead>
           <tbody>{pending.slice(0, 6).map(row => <tr key={row.id}>
@@ -64,16 +66,16 @@ export function OverviewView({ data, pending, extra, now = Date.now() }: { data:
             <td dir="ltr" style={{ textAlign: "end" }}>{row.reference}</td><td>{timeAgo(row.created_at, now)}</td>
             <td><PaymentDecision id={row.id} /></td>
           </tr>)}</tbody></table></div> : <p className="empty">ما فيه تحويلات بانتظار التأكيد.</p>}
-      </section>
+      </section> : null}
       <section className="card adm-card narrow" aria-labelledby="hl">
         <h2 id="hl">صحة المنصة</h2>
         <ul className="adm-list adm-health">{healthRows.map(item => <li key={item.label}><span className={`adm-dot-state${item.state ? ` ${item.state}` : ""}`} aria-hidden="true" /><span style={{ flex: 1 }}>{item.label}</span><span className="hint">{item.value}</span></li>)}</ul>
-        <span className="adm-btn-row" style={{ marginTop: 10 }}><Link className="btn btn-sm" href="/admin#login-security">أمان الدخول</Link><Link className="btn btn-sm" href="/admin/settings#telegram">تيليقرام</Link></span>
+        {role === "owner" ? <span className="adm-btn-row" style={{ marginTop: 10 }}><Link className="btn btn-sm" href="/admin/security">أمان الدخول</Link><Link className="btn btn-sm" href="/admin/settings#telegram">تيليقرام</Link></span> : null}
       </section>
     </div>
 
     <section className="card adm-card" aria-labelledby="ac">
-      <div className="adm-card-head"><h2 id="ac">آخر ما صار في المنصة</h2><Link href="/admin/settings#audit">السجل الكامل</Link></div>
+      <div className="adm-card-head"><h2 id="ac">آخر ما صار في المنصة</h2>{role === "owner" ? <Link href="/admin/audit">السجل الكامل</Link> : null}</div>
       {data.activity.length ? <ul className="adm-list">{data.activity.map((event, index) => {
         const pill = activityPill(event.kind, event.action);
         const text = `${auditLabel(event.action)}${event.organization ? ` — ${event.organization}` : ""}${event.detail ? ` · ${event.detail}` : ""}`;

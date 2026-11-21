@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { loadOrgContext } from "../../../../../lib/org-context";
 import { OrgUnavailable } from "../../../../../components/org-unavailable";
 import { PrintButton } from "../../../../../components/print-button";
@@ -18,6 +18,9 @@ export default async function SubscriptionReceipt({ params, searchParams }: { pa
   const { client, org, orgName } = context;
   const { data } = await client.from("subscription_payments").select("id,months,amount,reference,status,decided_at,period_start,period_end,created_at,plans(name)").eq("id", id).maybeSingle();
   if (!data || data.status !== "approved") notFound();
+  // The numbered receipt (stage 3) when it exists; otherwise the earlier simple receipt below.
+  const numbered = await client.from("platform_invoices").select("id").eq("payment_id", id).maybeSingle();
+  if (!numbered.error && numbered.data) redirect(`/dashboard/billing/invoices/${numbered.data.id}?org=${encodeURIComponent(org)}`);
   const plan = (data.plans as unknown as { name: string } | null)?.name ?? "";
   return <article className="card sub-receipt" style={{ maxWidth: 640, margin: "0 auto", display: "grid", gap: 14 }}>
     <span className="no-print"><BackLink href={`/dashboard/billing?org=${encodeURIComponent(org)}`} label="رجوع إلى الاشتراك" /></span>

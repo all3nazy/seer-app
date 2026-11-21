@@ -5,7 +5,7 @@ export { lockMessage, signInMessages } from "./login-messages";
  * Server-side sign-in guard (with public.login_check / public.login_record in the database).
  * Server only: it reads request headers and is used by app/login/actions.ts.
  */
-export type LoginCheck = { locked: boolean; scope: "account" | "ip" | null; retry_after_seconds: number };
+export type LoginCheck = { locked: boolean; scope: "account" | "ip" | "blocked" | null; retry_after_seconds: number };
 
 /**
  * The client's IP: the first x-forwarded-for value (Vercel sets this header itself and drops what

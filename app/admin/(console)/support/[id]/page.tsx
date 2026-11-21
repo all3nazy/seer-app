@@ -1,3 +1,5 @@
+import { currentAdminRole, mayOpen } from "../../../../../lib/admin-role";
+import { AdminNoAccess } from "../../../../../components/admin-no-access";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requestSession } from "../../../../../lib/supabase/server";
@@ -14,6 +16,7 @@ type Thread = { id: string; subject: string; status: "open" | "closed"; organiza
 
 /** One ticket for the team: who, which organization, the page and the assistant questions, then the live conversation. */
 export default async function AdminTicketPage({ params }: { params: Promise<{ id: string }> }) {
+  if (!(await mayOpen("/admin/support"))) return <AdminNoAccess role={await currentAdminRole()} />;
   const { id } = await params;
   if (!uuid.test(id)) notFound();
   const { client } = await requestSession();

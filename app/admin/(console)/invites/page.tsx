@@ -1,3 +1,5 @@
+import { currentAdminRole, mayOpen } from "../../../../lib/admin-role";
+import { AdminNoAccess } from "../../../../components/admin-no-access";
 import { requestSession } from "../../../../lib/supabase/server";
 import { OrgInvites, type InviteRow } from "../../../../components/org-invites";
 import { appBase } from "../../../../lib/surface";
@@ -6,6 +8,7 @@ export const metadata = { title: "دعوات المنشآت" };
 
 /** المشتركين › دعوات المنشآت: invite links for new organizations, moved here from the subscribers page. */
 export default async function AdminInvites() {
+  if (!(await mayOpen("/admin/invites"))) return <AdminNoAccess role={await currentAdminRole()} />;
   const { client } = await requestSession();
   const [invites, plans] = await Promise.all([client.rpc("admin_org_invites"), client.from("plans").select("id,key,name").order("sort_order")]);
   return <>

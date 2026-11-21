@@ -1,3 +1,5 @@
+import { currentAdminRole, mayOpen } from "../../../../../lib/admin-role";
+import { AdminNoAccess } from "../../../../../components/admin-no-access";
 import { requestSession } from "../../../../../lib/supabase/server";
 import { BackLink } from "../../../../../components/back-link";
 import { SupportTemplatesEditor } from "../../../../../components/support-templates";
@@ -9,6 +11,7 @@ export const metadata = { title: "قوالب الرد" };
 
 /** Ready replies for support: add, edit, order and turn off. Used in tickets here and in Telegram. */
 export default async function SupportTemplatesPage() {
+  if (!(await mayOpen("/admin/support/templates"))) return <AdminNoAccess role={await currentAdminRole()} />;
   const { client } = await requestSession();
   const { data, error } = await client.rpc("admin_support_templates");
   return <div style={{ maxWidth: 860 }}>

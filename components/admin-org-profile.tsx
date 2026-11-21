@@ -2,7 +2,9 @@ import Link from "next/link";
 import { EntitlementsForm, FreeMonthButton, MemberActions, NoteEditor, OrgHeaderActions, OrgTabs, RemindButton, type OrgMember } from "./admin-org";
 import { auditLabel, dayCount, statusPill, timeAgo } from "../lib/admin-format";
 import { arNumber, formatDate } from "../lib/dates";
-import { durationLabel, paymentStatusLabels, riyal } from "../lib/subscriptions";
+import { durationLabel, featureLabels, paymentStatusLabels, riyal } from "../lib/subscriptions";
+import { roleAllows, type AdminRole } from "../lib/admin-roles";
+import { OrgInvoices, type InvoiceRow } from "./admin-stage3-views";
 import { stepTitle } from "../lib/onboarding";
 import { orgTypeLabels } from "../lib/org-invites";
 
@@ -25,7 +27,9 @@ const roleLabels: Record<string, string> = { owner: "المالك", admin: "مد
 const row = (label: string, value: React.ReactNode) => <div className="adm-row"><span>{label}</span><span>{value}</span></div>;
 
 /** «ملف منشأة» (approved design): header with the actions, then the tabs. Data from admin_org_profile(). */
-export function OrgProfileView({ profile: p, plans, receipts, now = Date.now() }: { profile: OrgProfile; plans: { id: string; name: string }[]; receipts: Record<string, string | null>; now?: number }) {
+export function OrgProfileView({ profile: p, plans, receipts, now = Date.now(), role = "owner", invoices = [] }: { profile: OrgProfile; plans: { id: string; name: string }[]; receipts: Record<string, string | null>; now?: number; role?: AdminRole; invoices?: InvoiceRow[] | null }) {
+  // Support and finance read the profile; only the owner acts on the subscription and the organization.
+  const acts = role === "owner";
   const s = p.subscription;
   const pill = statusPill(s?.status, p.access);
   const owner = p.members.find(member => member.role === "owner");
@@ -39,7 +43,7 @@ export function OrgProfileView({ profile: p, plans, receipts, now = Date.now() }
     {p.onboarding.completed_at ? <p style={{ margin: 0 }}>✓ خلّصوا التجهيز كله.</p> : <>
       <p style={{ margin: 0 }}>باقي: {p.onboarding.missing.map(stepTitle).join("، ")}.</p>
       {stuckStep ? <p className={`hint${p.onboarding.stuck ? " adm-warn" : ""}`} style={{ margin: 0 }}>واقف عند «{stepTitle(stuckStep)}» من {dayCount(stuckDays)}{p.onboarding.snooze_count ? ` · أجّلوه ${arNumber(p.onboarding.snooze_count)} مرات` : ""}</p> : null}
-      <span><RemindButton org={p.organization_id} /></span>
+      {acts ? <span><RemindButton org={p.organization_id} /></span> : null}
     </>}
   </div> : <p className="empty">ما فيه بيانات تأسيس بعد.</p>;
   const supportList = p.support.length ? <ul className="adm-list">{p.support.map(thread => <li key={thread.id}>
@@ -54,7 +58,7 @@ export function OrgProfileView({ profile: p, plans, receipts, now = Date.now() }
         {row("طريقة الدفع", p.payment_method === "bank_transfer" ? "تحويل بنكي" : "ما فيه دفعات مؤكدة")}
         {row("التجديد القادم", s ? formatDate(`${s.ends_on}T12:00:00Z`, { year: true }) : "—")}
         {row("مهلة السداد بعد الانتهاء", dayCount(p.grace_days))}
-        <div className="adm-btn-row" style={{ marginTop: 10 }}><FreeMonthButton org={p.organization_id} /></div>
+        {acts ? <div className="adm-btn-row" style={{ marginTop: 10 }}><FreeMonthButton org={p.organization_id} /></div> : null}
       </section>
       <section className="card adm-card" aria-labelledby="sum-setup"><h2 id="sum-setup">التأسيس</h2>{setup}</section>
       <section className="card adm-card" aria-labelledby="sum-users"><h2 id="sum-users">المستخدمين</h2>
@@ -66,7 +70,7 @@ export function OrgProfileView({ profile: p, plans, receipts, now = Date.now() }
       </section>
       <section className="card adm-card" aria-labelledby="sum-support"><h2 id="sum-support">الدعم</h2>
         {openTickets.length ? <p className="hint" style={{ marginTop: 0 }}>{arNumber(openTickets.length)} مفتوحة</p> : null}{supportList}</section>
-      <section className="card adm-card" aria-labelledby="sum-note"><h2 id="sum-note">ملاحظاتك الخاصة</h2><NoteEditor org={p.organization_id} body={p.note?.body ?? ""} /></section>
+      <section className="card adm-card" aria-labelledby="sum-note"><h2 id="sum-note">ملاحظاتك الخاصة</h2>{acts ? <NoteEditor org={p.organization_id} body={p.note?.body ?? ""} /> : <p style={{ margin: 0, whiteSpace: "pre-wrap" }}>{p.note?.body || "ما فيه ملاحظات."}</p>}</section>
     </div> },
     { id: "billing", label: "الاشتراك والفواتير", content: <div style={{ display: "grid", gap: 16 }}>
       <section className="card adm-card" aria-labelledby="bill-sub"><h2 id="bill-sub">الاشتراك</h2>
@@ -76,9 +80,9 @@ export function OrgProfileView({ profile: p, plans, receipts, now = Date.now() }
         {row("ينتهي", s ? `${formatDate(`${s.ends_on}T12:00:00Z`, { year: true })}${s.days_left >= 0 ? ` (باقي ${dayCount(s.days_left)})` : ""}` : "—")}
         {row("مهلة السداد", dayCount(p.grace_days))}
         {s?.cancel_reason ? row("سبب الإلغاء", s.cancel_reason) : null}
-        <div className="adm-btn-row" style={{ marginTop: 10 }}><FreeMonthButton org={p.organization_id} /></div>
-        <p className="hint" style={{ marginBottom: 0 }}>إصدار فواتير الاشتراك يجي في المرحلة الجاية.</p>
+        {acts ? <div className="adm-btn-row" style={{ marginTop: 10 }}><FreeMonthButton org={p.organization_id} /></div> : null}
       </section>
+      <OrgInvoices org={p.organization_id} orgName={p.name} rows={invoices} canIssue={roleAllows(role, ["finance"]) && invoices !== null} />
       <section className="card adm-card" aria-labelledby="bill-pay"><h2 id="bill-pay">سجل المدفوعات</h2>
         {p.payments.length ? <div className="table-wrap"><table className="links-table"><thead><tr><th scope="col">التاريخ</th><th scope="col">الوصف</th><th scope="col">المبلغ</th><th scope="col">الحالة</th><th scope="col">الإيصال</th></tr></thead>
           <tbody>{p.payments.map(payment => <tr key={payment.id}>
@@ -98,11 +102,11 @@ export function OrgProfileView({ profile: p, plans, receipts, now = Date.now() }
           <td>{roleLabels[member.role] ?? member.role}</td>
           <td dir="ltr" style={{ textAlign: "end" }}>{member.login.endsWith("@users.seer.local") ? member.login.split("@")[0] : member.login}</td>
           <td>{member.last_sign_in_at ? timeAgo(member.last_sign_in_at, now) : "ما دخل بعد"}</td>
-          <td><MemberActions org={p.organization_id} member={member} /></td>
+          <td>{acts ? <MemberActions org={p.organization_id} member={member} /> : null}</td>
         </tr>)}</tbody></table></div>
     </section> },
     { id: "sections", label: "الأقسام المفعّلة", content: <section className="card adm-card" aria-labelledby="sections-title"><h2 id="sections-title">الأقسام المتاحة لهم</h2>
-      <EntitlementsForm org={p.organization_id} planFeatures={p.plan?.features ?? []} blocked={p.entitlements.blocked} disabled={p.entitlements.disabled} trial={s?.status === "trial"} />
+      {acts ? <EntitlementsForm org={p.organization_id} planFeatures={p.plan?.features ?? []} blocked={p.entitlements.blocked} disabled={p.entitlements.disabled} trial={s?.status === "trial"} /> : <p className="hint">الأقسام الممنوعة: {p.entitlements.blocked.length ? p.entitlements.blocked.map(key => featureLabels[key as keyof typeof featureLabels] ?? key).join("، ") : "لا شيء"}.</p>}
     </section> },
     { id: "setup", label: "التأسيس", content: <section className="card adm-card" aria-labelledby="setup-tab-title"><h2 id="setup-tab-title">التأسيس</h2>{setup}</section> },
     { id: "support", label: "الدعم", content: <section className="card adm-card" aria-labelledby="support-tab-title"><h2 id="support-tab-title">تذاكر الدعم</h2>{supportList}</section> },
@@ -125,7 +129,7 @@ export function OrgProfileView({ profile: p, plans, receipts, now = Date.now() }
           {s?.cancelled_at ? <span className="chip-soft rose">ملغي</span> : null}
         </div>
       </div>
-      <OrgHeaderActions org={p.organization_id} plans={plans} currentPlan={s?.plan_id ?? null} suspended={s?.status === "suspended"} cancelled={Boolean(s?.cancelled_at)} />
+      {acts ? <OrgHeaderActions org={p.organization_id} plans={plans} currentPlan={s?.plan_id ?? null} suspended={s?.status === "suspended"} cancelled={Boolean(s?.cancelled_at)} /> : null}
     </header>
     <OrgTabs tabs={tabs} />
   </div>;

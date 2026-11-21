@@ -1,3 +1,5 @@
+import { currentAdminRole, mayOpen } from "../../../../lib/admin-role";
+import { AdminNoAccess } from "../../../../components/admin-no-access";
 import Link from "next/link";
 import { requestSession } from "../../../../lib/supabase/server";
 import { AdminSupportLive } from "../../../../components/admin-support-live";
@@ -10,6 +12,7 @@ const when = (iso: string) => new Date(iso).toLocaleString("ar-SA", { timeZone: 
 
 /** Every ticket: open ones first, those waiting for the team at the top. Updates live. */
 export default async function AdminSupportPage() {
+  if (!(await mayOpen("/admin/support"))) return <AdminNoAccess role={await currentAdminRole()} />;
   const { client } = await requestSession();
   const { data, error } = await client.rpc("admin_support_threads");
   const rows = (data ?? []) as Row[];
