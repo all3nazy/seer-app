@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requestPlatformAdmin } from "../lib/supabase/server";
 import { serviceClient } from "../lib/supabase/service";
 import { arNumber, formatDateTime, formatTime } from "../lib/dates";
@@ -18,7 +19,7 @@ export async function LoginSecurityCard() {
   const result = client ? await client.rpc("login_security_summary") : null;
   const summary = (result && !result.error ? result.data : null) as Summary | null;
   return <section className="card" id="login-security" aria-labelledby="login-security-title" style={{ marginTop: 16 }}>
-    <h2 id="login-security-title">أمان الدخول</h2>
+    <div className="adm-card-head"><h2 id="login-security-title">أمان الدخول</h2><Link href="/admin/security">الصفحة الكاملة والحظر</Link></div>
     {!summary ? <p className="hint">ما قدرت أقرأ سجل الدخول الآن (تأكد من تطبيق ترحيل حماية الدخول ومن مفتاح الخدمة).</p> : <>
       <p className="hint" style={{ marginTop: 0 }}>آخر ٢٤ ساعة: {arNumber(summary.successes_24h)} دخول ناجح، و{arNumber(summary.failures_24h)} محاولة فاشلة.</p>
       <h3 style={{ fontSize: 15, margin: "12px 0 8px" }}>الأقفال ({arNumber(summary.locks.length)})</h3>

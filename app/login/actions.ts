@@ -28,7 +28,7 @@ export async function signIn(login: string, password: string, captchaToken?: str
     const { data, error } = await guard.rpc("login_check", { p_login: email, p_ip: ip });
     if (error) console.error("login guard: check unavailable", error.code ?? "");
     const check = data as LoginCheck | null;
-    if (check?.locked) return { ok: false, reason: "locked", error: lockMessage(check.retry_after_seconds) };
+    if (check?.locked) return { ok: false, reason: "locked", error: check.scope === "blocked" ? signInMessages.blocked : lockMessage(check.retry_after_seconds) };
   } else console.error("login guard: service role not configured");
 
   let outcome: ReturnType<typeof classifyAuthError>;

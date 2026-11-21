@@ -3,6 +3,7 @@ import { loadOrgContext } from "../../../lib/org-context";
 import { OrgUnavailable } from "../../../components/org-unavailable";
 import { BillingPanel } from "../../../components/billing-panel";
 import { pilotMode, pilotTexts } from "../../../lib/pilot";
+import { formatDate } from "../../../lib/dates";
 import { supportLink } from "../../../lib/support";
 import { accessLabels, durationLabel, paymentStatusLabels, riyal, statusLabels, type Access, type Duration, type Plan } from "../../../lib/subscriptions";
 
@@ -19,7 +20,10 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const context = await loadOrgContext(params.org);
   if ("error" in context) return <OrgUnavailable reason={context.error} />;
   const { client, org, orgName } = context;
-  const [overview, pricing] = await Promise.all([client.rpc("billing_overview", { org }), client.rpc("pricing")]);
+  const [overview, pricing, invoiceResult] = await Promise.all([client.rpc("billing_overview", { org }), client.rpc("pricing"),
+    client.from("platform_invoices").select("id,number,kind,description,amount,issued_at").eq("organization_id", org).order("issued_at", { ascending: false }).limit(50)]);
+  // Owners only (RLS); empty before the stage 3 migration is applied.
+  const invoices = (invoiceResult.error ? [] : invoiceResult.data ?? []) as { id: string; number: string; kind: string; description: string; amount: number; issued_at: string }[];
   const data = overview.data as Overview | null;
   if (!data) return <section className="card"><h1>الاشتراك</h1><p>تعذر تحميل بيانات الاشتراك. حدّث الصفحة.</p></section>;
   const prices = (pricing.data ?? { plans: [], durations: [] }) as { plans: Plan[]; durations: Duration[] };
@@ -51,6 +55,12 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
           {payment.status === "approved" ? <Link className="btn btn-sm" href={`/dashboard/billing/receipt/${payment.id}?org=${encodeURIComponent(org)}`}>إيصال الاشتراك</Link> : null}
         </span>
       </li>)}</ul> : <p className="empty">ما فيه طلبات بعد.</p>}
+    </section> : null}
+    {data.owner && !pilot && invoices.length ? <section className="card" style={{ marginTop: 16 }} aria-labelledby="billing-invoices"><h2 id="billing-invoices">الإيصالات والفواتير</h2>
+      <ul className="records">{invoices.map(invoice => <li key={invoice.id} style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <span><span dir="ltr">{invoice.number}</span> · {invoice.kind === "receipt" ? "إيصال اشتراك" : "فاتورة"} · {riyal(Number(invoice.amount))}<span className="hint" style={{ display: "block" }}>{invoice.description} · {formatDate(invoice.issued_at, { year: true })}</span></span>
+        <Link className="btn btn-sm" href={`/dashboard/billing/invoices/${invoice.id}?org=${encodeURIComponent(org)}`}>عرض وتحميل<span className="sr-only"> {invoice.number}</span></Link>
+      </li>)}</ul>
     </section> : null}
   </div>;
 }

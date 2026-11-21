@@ -3,6 +3,7 @@ import { serviceClient } from "../../../lib/supabase/service";
 import { LoginSecurityCard } from "../../../components/login-security";
 import { OverviewView, type HealthExtra, type OverviewData, type PendingTransfer } from "../../../components/admin-overview";
 import { botInfo } from "../../../lib/telegram-status";
+import { currentAdminRole } from "../../../lib/admin-role";
 
 export const metadata = { title: "نظرة عامة" };
 
@@ -16,6 +17,7 @@ const empty: OverviewData = {
 export default async function AdminHome() {
   const { client } = await requestSession();
   const service = serviceClient();
+  const role = await currentAdminRole();
   const [overview, pending, security, bot] = await Promise.all([
     client.rpc("admin_overview_v2"),
     client.rpc("admin_pending_payments"),
@@ -30,7 +32,7 @@ export default async function AdminHome() {
     telegram: !bot?.configured ? "off" : bot.webhook?.lastError ? "error" : !bot.webhook ? "error" : data.health.telegram_links ? "ok" : "unlinked",
   };
   return <>
-    <OverviewView data={data} pending={(pending.data ?? []) as PendingTransfer[]} extra={extra} />
-    <LoginSecurityCard />
+    <OverviewView data={data} pending={(pending.data ?? []) as PendingTransfer[]} extra={extra} role={role} />
+    {role === "owner" ? <LoginSecurityCard /> : null}
   </>;
 }

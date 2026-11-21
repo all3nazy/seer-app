@@ -1,3 +1,5 @@
+import { currentAdminRole, mayOpen } from "../../../../lib/admin-role";
+import { AdminNoAccess } from "../../../../components/admin-no-access";
 import { requestSession } from "../../../../lib/supabase/server";
 import { DurationRow, PlanForm } from "../../../../components/admin-forms";
 
@@ -5,6 +7,7 @@ export const metadata = { title: "الباقات والأسعار" };
 type PlanRow = { id: string; key: string; name: string; description: string | null; features: string[]; monthly_price: number; sort_order: number; is_active: boolean };
 
 export default async function AdminPlans() {
+  if (!(await mayOpen("/admin/plans"))) return <AdminNoAccess role={await currentAdminRole()} />;
   const { client } = await requestSession();
   const [plans, durations] = await Promise.all([
     client.from("plans").select("id,key,name,description,features,monthly_price,sort_order,is_active").order("sort_order"),
