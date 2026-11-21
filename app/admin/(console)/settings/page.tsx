@@ -1,17 +1,7 @@
 import { requestSession } from "../../../../lib/supabase/server";
 import { SettingsForm } from "../../../../components/admin-forms";
 import { TelegramSettings, type BotInfo, type TelegramState } from "../../../../components/telegram-settings";
-import { telegramApi } from "../../../../lib/telegram";
-
-/** The bot's name and webhook state, read with the token on the server (the token never leaves it). */
-async function botInfo(): Promise<BotInfo> {
-  const configured = Boolean(process.env.TELEGRAM_BOT_TOKEN), secret = Boolean(process.env.TELEGRAM_WEBHOOK_SECRET);
-  if (!configured) return { configured, secret, username: null, webhook: null };
-  const [me, hook] = await Promise.all([telegramApi("getMe", {}), telegramApi("getWebhookInfo", {})]);
-  const info = hook.result as { url?: string; pending_update_count?: number; last_error_message?: string } | undefined;
-  return { configured, secret, username: (me.result as { username?: string } | undefined)?.username ?? null,
-    webhook: info?.url ? { url: info.url, pending: info.pending_update_count ?? 0, lastError: info.last_error_message ?? null } : null };
-}
+import { botInfo } from "../../../../lib/telegram-status";
 
 export const metadata = { title: "إعدادات الدفع" };
 const actions: Record<string, string> = { telegram_link_code: "رمز ربط تيليقرام", telegram_close_ticket: "تيليقرام: إقفال تذكرة", telegram_reply_ticket: "تيليقرام: رد على تذكرة", telegram_approve_payment: "تيليقرام: اعتماد تحويل", telegram_reject_payment: "تيليقرام: رفض تحويل", telegram_invite_join_request: "تيليقرام: دعوة من طلب انضمام", telegram_reject_join_request: "تيليقرام: رفض طلب انضمام", telegram_linked: "ربط تيليقرام", telegram_unlinked: "فك ربط تيليقرام", join_request_invite: "دعوة من طلب انضمام", join_request_reject: "رفض طلب انضمام", org_invite_created: "إنشاء دعوة منشأة", org_invite_revoked: "إلغاء دعوة منشأة", org_invite_reissued: "رابط دعوة جديد", org_invite_used: "تفعيل منشأة بدعوة", plan_created: "إضافة باقة", plan_updated: "تعديل باقة", duration_updated: "تعديل خصم مدة", settings_updated: "تعديل إعدادات الدفع" };

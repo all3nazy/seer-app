@@ -14,10 +14,12 @@ export const pilotHiddenFeatures = ["online_payments"] as const;
 export const pilotHides = (feature: string) => (pilotHiddenFeatures as readonly string[]).includes(feature);
 
 /** The sections an organization sees: during the pilot every section except the hidden ones. */
-export function effectiveSections(org: OrgFeatures, pilot: boolean): OrgFeatures {
-  if (!pilot) return org;
+export function effectiveSections(org: OrgFeatures, pilot: boolean, blocked: string[] = []): OrgFeatures {
+  // Sections the platform does not allow this organization: kept "in the plan" but switched off, so
+  // they are hidden (not shown with a lock), in the pilot too.
+  if (!pilot) return blocked.length ? { features: [...new Set([...org.features, ...blocked])], disabled: [...new Set([...org.disabled, ...blocked])] } : org;
   // Hidden sections stay "in the plan" but switched off, so they are hidden rather than shown with a lock.
-  return { features: [...featureKeys], disabled: [...org.disabled.filter(key => !pilotHides(key)), ...pilotHiddenFeatures] };
+  return { features: [...featureKeys], disabled: [...new Set([...org.disabled.filter(key => !pilotHides(key)), ...pilotHiddenFeatures, ...blocked])] };
 }
 
 export const pilotTexts = {

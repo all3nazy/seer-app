@@ -41,7 +41,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
     ? ((await client.rpc("onboarding_status", { org: current.organization_id })).data as OnboardingStatus | null) : null;
   // During the pilot there is nothing to renew, so no banner.
   const notice = pilot ? null : renewalNotice(current);
-  const sections = current ? effectiveSections({ features: current.features ?? [], disabled: current.disabled_features ?? [] }, pilot) : null;
+  const blocked = current?.blocked_features ?? [];
+  const sections = current ? effectiveSections({ features: current.features ?? [], disabled: current.disabled_features ?? [] }, pilot, blocked) : null;
   // A page whose section is outside the plan, or turned off by the organization, is not shown.
   const feature = featureOf(path);
   const gate = sections ? featureState(feature, sections) : "on";
@@ -56,6 +57,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       {pilot && pilotHides(feature) ? <p style={{ margin: 0 }}>{pilotTexts.payments}</p>
         : gate === "locked"
         ? <><p style={{ margin: 0 }}>هذا القسم ضمن الباقة المتقدمة. رقّ باقتك عند التجديد لتفعيله، وتبقى بياناتك كما هي.</p><span><Link className="btn btn-primary" href={`/dashboard/billing?upgrade=${feature}`}>رقّ باقتك</Link></span></>
+        : feature && blocked.includes(feature) ? <><p style={{ margin: 0 }}>هذا القسم غير متاح لمنشأتك. إذا تحتاجه تواصل مع فريق سِير.</p><span><Link className="btn" href="/dashboard/support/new">تكلّم مع فريق سِير</Link></span></>
         : <><p style={{ margin: 0 }}>هذا القسم مطفي في منشأتك. يقدر المالك يشغّله من الإعدادات.</p><span><Link className="btn" href="/dashboard/settings#sections">الإعدادات</Link></span></>}
     </section>}
   </AppShell>;

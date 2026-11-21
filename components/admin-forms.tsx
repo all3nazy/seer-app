@@ -1,6 +1,6 @@
 "use client";
 import { useState, useTransition } from "react";
-import { approvePayment, changePlan, extendSubscription, extendSubscriptionMonths, rejectPayment, saveDuration, saveNote, savePlan, saveSettings, setSuspended, type AdminResult } from "../app/admin/actions";
+import { approvePayment, rejectPayment, saveDuration, savePlan, saveSettings, type AdminResult } from "../app/admin/actions";
 import { featureKeys, featureLabels } from "../lib/subscriptions";
 import { notify } from "./feedback";
 import { confirmAction } from "./confirm";
@@ -27,32 +27,6 @@ export function PaymentDecision({ id }: { id: string }) {
     <button type="button" className="btn btn-sm btn-primary" disabled={pending} onClick={async () => { if (await confirmAction("اعتماد التحويل وتفعيل الاشتراك؟")) run(() => approvePayment(id)); }}>اعتماد</button>
     <button type="button" className="btn btn-sm" disabled={pending} onClick={() => setRejecting(true)}>رفض</button>
   </span>;
-}
-
-export function SubscriberActions({ org, plans, currentPlan, suspended, note }: { org: string; plans: { id: string; name: string }[]; currentPlan: string | null; suspended: boolean; note: string | null }) {
-  const { pending, run } = useRun();
-  const [days, setDays] = useState(1);
-  const [unit, setUnit] = useState<"months" | "days">("months");
-  const [plan, setPlan] = useState(currentPlan ?? plans[0]?.id ?? "");
-  const [text, setText] = useState(note ?? "");
-  return <div className="admin-actions">
-    <div className="composer">
-      <label>تمديد<input type="number" min={1} max={unit === "months" ? 24 : 730} value={days} onChange={event => setDays(Number(event.target.value))} /></label>
-      <label>المدة<select value={unit} onChange={event => setUnit(event.target.value as "months" | "days")}><option value="months">أشهر</option><option value="days">أيام</option></select></label>
-      <button type="button" className="btn btn-primary" disabled={pending} onClick={() => run(() => unit === "months" ? extendSubscriptionMonths(org, days) : extendSubscription(org, days))}>تمديد</button>
-    </div>
-    <div className="composer">
-      <label>الباقة<select value={plan} onChange={event => setPlan(event.target.value)}>{plans.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-      <button type="button" className="btn" disabled={pending || plan === currentPlan} onClick={() => run(() => changePlan(org, plan))}>تغيير الباقة</button>
-    </div>
-    <div className="composer">
-      <label style={{ gridColumn: "1/-1" }}>ملاحظة داخلية<textarea rows={2} value={text} onChange={event => setText(event.target.value)} maxLength={2000} /></label>
-      <button type="button" className="btn" disabled={pending} onClick={() => run(() => saveNote(org, text))}>حفظ الملاحظة</button>
-    </div>
-    <span>{suspended
-      ? <button type="button" className="btn btn-primary" disabled={pending} onClick={() => run(() => setSuspended(org, false))}>إعادة التفعيل</button>
-      : <button type="button" className="btn btn-danger" disabled={pending} onClick={async () => { if (await confirmAction("إيقاف اشتراك هذه المنشأة؟ تنقفل المنصة عندهم حتى إعادة التفعيل.")) run(() => setSuspended(org, true)); }}>إيقاف الاشتراك</button>}</span>
-  </div>;
 }
 
 export function PlanForm({ plan }: { plan?: { id: string; key: string; name: string; description: string | null; features: string[]; monthly_price: number; sort_order: number; is_active: boolean } }) {
