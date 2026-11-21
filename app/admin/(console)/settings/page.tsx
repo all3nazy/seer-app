@@ -1,7 +1,7 @@
-import { requestSession } from "../../../lib/supabase/server";
-import { SettingsForm } from "../../../components/admin-forms";
-import { TelegramSettings, type BotInfo, type TelegramState } from "../../../components/telegram-settings";
-import { telegramApi } from "../../../lib/telegram";
+import { requestSession } from "../../../../lib/supabase/server";
+import { SettingsForm } from "../../../../components/admin-forms";
+import { TelegramSettings, type BotInfo, type TelegramState } from "../../../../components/telegram-settings";
+import { telegramApi } from "../../../../lib/telegram";
 
 /** The bot's name and webhook state, read with the token on the server (the token never leaves it). */
 async function botInfo(): Promise<BotInfo> {
@@ -25,7 +25,7 @@ export default async function AdminSettings() {
     <section className="card"><SettingsForm settings={value} /></section>
     <section className="card" style={{ marginTop: 16 }} aria-labelledby="telegram-title" id="telegram"><h2 id="telegram-title">تيليقرام</h2>
       <TelegramSettings state={(telegram.data ?? null) as TelegramState | null} bot={bot} /></section>
-    <section className="card" style={{ marginTop: 16 }}><h2>سجل تعديلات المنصة</h2>
+    <section className="card" style={{ marginTop: 16 }} id="audit" aria-labelledby="audit-title"><h2 id="audit-title">سجل تعديلات المنصة</h2>
       <ul className="records">{((audit.data ?? []) as { action: string; detail: Record<string, unknown>; created_at: string }[]).map((row, index) => <li key={index}><span>{actions[row.action] ?? row.action}{row.detail?.name ? `: ${String(row.detail.name)}` : ""}</span><span className="hint">{new Date(row.created_at).toLocaleString("ar-SA", { timeZone: "Asia/Riyadh" })}</span></li>)}</ul>
     </section>
   </>;

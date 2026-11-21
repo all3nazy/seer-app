@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import webpush from "web-push";
+import { adminBase, isAdminPath } from "../../../lib/surface";
 import { createSupabaseServerClient } from "../../../lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +19,10 @@ export async function POST(request: NextRequest) {
   const job = data as Job | null;
   if (!job?.subscriptions?.length || !job.private_key) return NextResponse.json({ sent: 0 });
   webpush.setVapidDetails("mailto:support@seer.app", job.public_key, job.private_key);
-  const payload = JSON.stringify({ title: job.title, body: job.body ?? "", url: typeof job.url === "string" && job.url.startsWith("/") ? job.url : "/dashboard" });
+  // /admin… notifications (to the platform team) open «سِير أدمن»; the rest stay on the platform.
+  const path = typeof job.url === "string" && job.url.startsWith("/") && !job.url.startsWith("//") ? job.url : "/dashboard";
+  const url = isAdminPath(path) ? `${adminBase() ?? ""}${path}` : path;
+  const payload = JSON.stringify({ title: job.title, body: job.body ?? "", url });
   const results = await Promise.allSettled(job.subscriptions.slice(0, 20).map(item => webpush.sendNotification({ endpoint: item.endpoint, keys: { p256dh: item.p256dh, auth: item.auth } }, payload, { TTL: 60 * 60 * 12 })));
   return NextResponse.json({ sent: results.filter(result => result.status === "fulfilled").length });
 }

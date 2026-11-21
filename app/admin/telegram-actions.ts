@@ -12,6 +12,7 @@ export async function activateTelegramWebhook(): Promise<{ error?: string; succe
   if (!process.env.TELEGRAM_BOT_TOKEN) return { error: "متغير TELEGRAM_BOT_TOKEN غير مضبوط في Vercel." };
   const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
   if (!secret || !/^[A-Za-z0-9_-]{16,256}$/.test(secret)) return { error: "أضف TELEGRAM_WEBHOOK_SECRET في Vercel (حروف إنجليزية وأرقام و_ و-، ١٦ حرفًا على الأقل) ثم أعد النشر." };
+  // The webhook lives on the subscriber platform (SEER_APP_URL), also when this runs on «سِير أدمن».
   const url = `${siteBase()}/api/telegram/webhook`;
   const hook = await telegramApi("setWebhook", { url, secret_token: secret, allowed_updates: ["message", "callback_query"], drop_pending_updates: true });
   if (!hook.ok) return { error: `رفض تيليقرام التفعيل: ${hook.description ?? "خطأ غير معروف"}` };

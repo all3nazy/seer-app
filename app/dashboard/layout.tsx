@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { AppShell } from "../../components/app-shell";
-import { requestMyOrganizations, requestPlatformAdmin, requestSession, requestSupportUnread } from "../../lib/supabase/server";
+import { requestMyOrganizations, requestSession, requestSupportUnread } from "../../lib/supabase/server";
 import { stageOf } from "../../lib/stage";
 import Link from "next/link";
 import { featureLabels, featureOf, featureState, renewalNotice, type MyOrg } from "../../lib/subscriptions";
@@ -19,9 +19,8 @@ import type { OnboardingStatus } from "../../lib/onboarding";
  */
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, client } = await requestSession();
-  const [{ data }, admin, support, head] = await Promise.all([
+  const [{ data }, support, head] = await Promise.all([
     requestMyOrganizations(),
-    requestPlatformAdmin(),
     requestSupportUnread(),
     headers(),
   ]);
@@ -50,7 +49,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return <AppShell stage={stageOf(current?.type ?? organizations[0]?.type)} organizations={organizations.map(org => ({ id: org.organization_id, name: org.name }))}
     manager={organizations.some(org => org.role === "owner" || org.role === "admin")} userId={user?.id}
     sections={sections} brand={brand}
-    notice={notice ? { text: notice, owner: current?.role === "owner", org: current!.organization_id } : null} platformAdmin={admin} support={support}>
+    notice={notice ? { text: notice, owner: current?.role === "owner", org: current!.organization_id } : null} support={{ mine: support.mine }}>
     {current && current.access !== "locked" ? <OnboardingGuide organizationId={current.organization_id} stage={stageOf(current.type)} initial={onboarding} /> : null}
     {gate === "on" || !feature ? children : <section className="card" style={{ maxWidth: 560, display: "grid", gap: 12 }}>
       <h1 style={{ fontSize: 20, margin: 0 }}>🔒 {featureLabels[feature]}</h1>

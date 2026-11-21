@@ -4,6 +4,7 @@ import Link from "next/link";
 import { getSupabaseBrowserClient } from "../lib/supabase";
 import { Icon } from "./icons";
 import { notify } from "./feedback";
+import { isAdminPath } from "../lib/surface";
 import { arNumber, formatDate } from "../lib/dates";
 
 type Item = { id: string; kind: string; title: string; body: string | null; url: string | null; read_at: string | null; created_at: string };
@@ -19,24 +20,31 @@ const ago = (iso: string) => {
  * One store for the person's notifications, shared by every bell on the page (the sidebar and the
  * phone top bar): one load and one realtime channel, and marking as read updates both bells.
  */
-type Store = { userId: string; items: Item[]; listeners: Set<() => void>; stop: () => void };
+type Store = { userId: string; scope: BellScope; items: Item[]; listeners: Set<() => void>; stop: () => void };
+/**
+ * «app»: the person's own notifications. «admin» («سِير أدمن»): the platform team's, whose links
+ * point to /admin. Each side shows only its own, so nothing of the console appears in the platform.
+ */
+export type BellScope = "app" | "admin";
+const inScope = (scope: BellScope, item: Pick<Item, "url">) => isAdminPath(item.url ?? "") === (scope === "admin");
 let store: Store | null = null;
 const notificationListeners = new Set<(item: Item) => void>();
 /** Other parts of the page (the support badge) follow the same realtime channel; no extra connection. */
 export function onNotification(listener: (item: Item) => void) { notificationListeners.add(listener); return () => { notificationListeners.delete(listener); }; }
 const emit = () => store?.listeners.forEach(listener => listener());
 const setItems = (update: (items: Item[]) => Item[]) => { if (store) { store.items = update(store.items); emit(); } };
-function subscribe(userId: string, listener: () => void) {
-  if (!store || store.userId !== userId) {
+function subscribe(userId: string, scope: BellScope, listener: () => void) {
+  if (!store || store.userId !== userId || store.scope !== scope) {
     store?.stop();
     const client = getSupabaseBrowserClient();
-    const current: Store = { userId, items: [], listeners: new Set(), stop: () => {} };
+    const current: Store = { userId, scope, items: [], listeners: new Set(), stop: () => {} };
     store = current;
-    void client.from("notifications").select("id,kind,title,body,url,read_at,created_at").order("created_at", { ascending: false }).limit(20)
-      .then(({ data }: { data: Item[] | null }) => { if (store === current) { current.items = data ?? []; emit(); } });
+    void client.from("notifications").select("id,kind,title,body,url,read_at,created_at").order("created_at", { ascending: false }).limit(60)
+      .then(({ data }: { data: Item[] | null }) => { if (store === current) { current.items = (data ?? []).filter(item => inScope(scope, item)).slice(0, 20); emit(); } });
     const channel = client.channel(`notifications-${userId}-${Math.random().toString(36).slice(2, 8)}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` }, (payload: { new: unknown }) => {
         const item = payload.new as Item;
+        if (!inScope(scope, item)) return;
         setItems(items => [item, ...items.filter(row => row.id !== item.id)].slice(0, 20));
         notify(item.title, "info");
         notificationListeners.forEach(listener => listener(item));
@@ -53,13 +61,13 @@ function subscribe(userId: string, listener: () => void) {
   };
 }
 const noItems: Item[] = [];
-function useNotifications(userId: string) {
-  return useSyncExternalStore(useCallback(listener => subscribe(userId, listener), [userId]), () => store?.userId === userId ? store.items : noItems, () => noItems);
+function useNotifications(userId: string, scope: BellScope) {
+  return useSyncExternalStore(useCallback(listener => subscribe(userId, scope, listener), [userId, scope]), () => store?.userId === userId && store.scope === scope ? store.items : noItems, () => noItems);
 }
 
 /** The bell: the person's latest notifications, live, with an unread count. */
-export function NotificationBell({ userId }: { userId: string }) {
-  const items = useNotifications(userId);
+export function NotificationBell({ userId, scope = "app" }: { userId: string; scope?: BellScope }) {
+  const items = useNotifications(userId, scope);
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {

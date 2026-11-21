@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { requestSession } from "../../lib/supabase/server";
-import { riyal } from "../../lib/subscriptions";
-import { LoginSecurityCard } from "../../components/login-security";
+import { requestSession } from "../../../lib/supabase/server";
+import { riyal } from "../../../lib/subscriptions";
+import { LoginSecurityCard } from "../../../components/login-security";
 
 export const metadata = { title: "نظرة عامة" };
 type Overview = { mrr: number; active: number; trial: number; grace: number; locked: number; expiring: number; pending: number };

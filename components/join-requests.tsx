@@ -13,7 +13,7 @@ const statusLabels: Record<string, string> = { new: "جديد", invited: "أُر
 const date = (iso: string) => formatDate(iso);
 
 /** Requests from the home page: «أرسل دعوة» (3 free months, link shown once) or «رفض». */
-export function JoinRequests({ requests }: { requests: JoinRow[] }) {
+export function JoinRequests({ requests, appUrl }: { requests: JoinRow[]; appUrl: string }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [fresh, setFresh] = useState<{ token: string; orgName: string; phone: string } | null>(null);
@@ -30,7 +30,7 @@ export function JoinRequests({ requests }: { requests: JoinRow[] }) {
   const waiting = requests.filter(row => row.status === "new").length;
   return <section className="card" aria-labelledby="join-requests-title" style={{ marginBottom: 16 }}>
     <h2 id="join-requests-title" style={{ margin: 0, fontSize: 18 }}>طلبات الانضمام{waiting ? <span className="chip-soft coral" style={{ marginInlineStart: 8 }}>{arNumber(waiting)} جديد</span> : null}</h2>
-    {fresh ? <FreshLink token={fresh.token} orgName={fresh.orgName} months={3} phone={fresh.phone} onDone={() => setFresh(null)} /> : null}
+    {fresh ? <FreshLink token={fresh.token} orgName={fresh.orgName} months={3} phone={fresh.phone} appUrl={appUrl} onDone={() => setFresh(null)} /> : null}
     {requests.length ? <ul className="records" style={{ marginTop: 12 }}>{requests.map(row => <li key={row.id} className="invite-row">
       <span><strong>{row.org_name}</strong> <span className="hint">{orgTypeLabels[row.org_type] ?? row.org_type} · {row.city}{row.students ? ` · ${arNumber(row.students)} طالب تقريبًا` : ""}</span>
         <span className="hint" style={{ display: "block" }}>{row.contact_name} · <span dir="ltr">{row.phone}</span> · {date(row.created_at)}{row.invite_status === "used" ? " · تفعّلت ✓" : ""}</span></span>

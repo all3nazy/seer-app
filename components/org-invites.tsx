@@ -15,8 +15,9 @@ const errorText = (code?: string) => code === "42501" ? "لمسؤول المنص
 const date = (iso: string) => formatDate(iso);
 
 /** A new link, shown once: copy it or send it on WhatsApp. Only its hash is stored. */
-export function FreshLink({ token, orgName, months, phone = null, onDone }: { token: string; orgName: string; months: number; phone?: string | null; onDone: () => void }) {
-  const link = inviteLink(window.location.origin, token);
+/** `appUrl`: the subscriber platform (the invite opens there, not on «سِير أدمن»). */
+export function FreshLink({ token, orgName, months, phone = null, onDone, appUrl }: { token: string; orgName: string; months: number; phone?: string | null; onDone: () => void; appUrl: string }) {
+  const link = inviteLink(appUrl, token);
   const copy = async () => {
     try { await navigator.clipboard.writeText(link); notify("نُسخ الرابط.", "info", "done"); } catch { notify("ما قدرت أنسخ. حدّد الرابط وانسخه يدويًا.", "error"); }
   };
@@ -32,7 +33,7 @@ export function FreshLink({ token, orgName, months, phone = null, onDone }: { to
 }
 
 /** «ادعُ مدرسة» and the list of invites (pending, used, expired, revoked) with revoke and reissue. */
-export function OrgInvites({ invites, plans }: { invites: InviteRow[]; plans: Plan[] }) {
+export function OrgInvites({ invites, plans, appUrl }: { invites: InviteRow[]; plans: Plan[]; appUrl: string }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
@@ -73,7 +74,7 @@ export function OrgInvites({ invites, plans }: { invites: InviteRow[]; plans: Pl
       <h2 id="invites-title" style={{ margin: 0, fontSize: 18 }}>دعوات المنشآت</h2>
       <button type="button" className="btn btn-primary" aria-expanded={open} onClick={() => setOpen(value => !value)}>ادعُ مدرسة</button>
     </div>
-    {fresh ? <FreshLink token={fresh.token} orgName={fresh.orgName} months={fresh.months} onDone={() => setFresh(null)} /> : null}
+    {fresh ? <FreshLink token={fresh.token} orgName={fresh.orgName} months={fresh.months} onDone={() => setFresh(null)} appUrl={appUrl} /> : null}
     {open ? <form className="composer invite-form" onSubmit={create}>
       <label>اسم المنشأة<input value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} required minLength={2} maxLength={120} placeholder="مثال: مدرسة النخبة الأهلية" /></label>
       <label>النوع<select value={form.type} onChange={event => setForm({ ...form, type: event.target.value })}>

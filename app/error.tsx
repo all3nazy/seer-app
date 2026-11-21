@@ -1,10 +1,13 @@
 "use client";
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { reportError, selfHealing } from "../lib/error-report";
 
 /** Any page error: logged, healed when possible, and explained with the known fix if one exists. */
 export default function PageError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   const [fix, setFix] = useState<string | null>(null);
+  // On «سِير أدمن» the way back is the console, not the platform's dashboard.
+  const admin = (usePathname() ?? "").startsWith("/admin");
   useEffect(() => {
     if (selfHealing(error) === "reload") {
       try { if (sessionStorage.getItem("seer-healed") !== location.pathname) { sessionStorage.setItem("seer-healed", location.pathname); location.reload(); return; } } catch { /* ignore */ }
@@ -17,7 +20,7 @@ export default function PageError({ error, reset }: { error: Error & { digest?: 
     {fix ? <p className="info-banner" style={{ margin: 0 }}>💡 {fix}</p> : null}
     <span style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
       <button type="button" className="btn btn-primary" onClick={reset}>إعادة المحاولة</button>
-      <a className="btn" href="/dashboard">لوحة التشغيل</a>
+      {admin ? <a className="btn" href="/admin">لوحة المالك</a> : <a className="btn" href="/dashboard">لوحة التشغيل</a>}
     </span>
     {error.digest ? <small className="hint" dir="ltr">ref: {error.digest}</small> : null}
   </section>;

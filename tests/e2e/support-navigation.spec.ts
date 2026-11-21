@@ -18,12 +18,12 @@ test.describe("«الدعم» in the menu", () => {
     await expect(page.locator(".sidebar-foot .support-link")).toBeVisible();
     await expect(page.locator(".sidebar-foot .support-link .nav-badge")).toHaveCount(0);
   });
-  test("platform admin: the link goes to the team inbox with the tickets waiting for a reply", async ({ page }) => {
+  test("the subscriber platform has no owner links: «الدعم» always opens the person's own tickets", async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 850 });
-    await page.goto("/e2e/shell?admin=1&waiting=3");
-    const link = page.locator(".sidebar-foot .support-link");
-    await expect(link).toHaveAttribute("href", "/admin/support");
-    await expect(link).toHaveAccessibleName("الدعم: ٣ بانتظار ردّك");
+    await page.goto("/e2e/shell?replies=1");
+    await expect(page.locator(".sidebar-foot .support-link")).toHaveAttribute("href", "/dashboard/support");
+    await expect(page.locator('a[href^="/admin"]')).toHaveCount(0);
+    await expect(page.getByText("لوحة المسؤول")).toHaveCount(0);
   });
   test("iPad: the support icon shows in the slim rail", async ({ page }) => {
     await page.setViewportSize({ width: 820, height: 1180 });
@@ -60,13 +60,13 @@ test.describe("the support badge follows the bell's live notifications and clear
     await page.getByRole("button", { name: "وصل رد" }).click();
     await expect(badge).toHaveText("١");
   });
-  test("platform admin: a new ticket notification adds to the team badge", async ({ page }) => {
+  test("a notification for the platform team (a new ticket) does not change the badge here", async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 850 });
-    await page.goto("/e2e/shell?admin=1&waiting=1");
+    await page.goto("/e2e/shell?replies=1");
     const badge = page.locator(".sidebar-foot .support-link .nav-badge");
     await expect(badge).toHaveText("١");
     await page.getByRole("button", { name: "وصلت تذكرة" }).click();
-    await expect(badge).toHaveText("٢");
+    await expect(badge).toHaveText("١");
   });
 });
 

@@ -1,5 +1,5 @@
-import { requestSession } from "../../../lib/supabase/server";
-import { DurationRow, PlanForm } from "../../../components/admin-forms";
+import { requestSession } from "../../../../lib/supabase/server";
+import { DurationRow, PlanForm } from "../../../../components/admin-forms";
 
 export const metadata = { title: "الباقات والأسعار" };
 type PlanRow = { id: string; key: string; name: string; description: string | null; features: string[]; monthly_price: number; sort_order: number; is_active: boolean };
