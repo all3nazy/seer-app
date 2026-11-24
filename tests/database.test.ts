@@ -181,6 +181,9 @@ beforeAll(async () => {
   const stage4 = readdirSync("supabase/migrations").filter(name => name.endsWith("_admin_stage4.sql"));
   if (stage4.length !== 1) throw new Error("Expected exactly one admin stage 4 migration");
   await db.exec(readFileSync(`supabase/migrations/${stage4[0]}`, "utf8"));
+  const inbox = readdirSync("supabase/migrations").filter(name => name.endsWith("_admin_inbox.sql"));
+  if (inbox.length !== 1) throw new Error("Expected exactly one admin inbox migration");
+  await db.exec(readFileSync(`supabase/migrations/${inbox[0]}`, "utf8"));
   await db.exec(`
     insert into auth.users(id,email_confirmed_at) values ('${owner}',now()),('${staff}',now()),('${outsider}',now()),('${unverified}',null);
     insert into public.organizations(id,name,type) values ('${orgA}','School A','school'),('${orgB}','School B','school');
@@ -2410,14 +2413,14 @@ describe("support reply templates", () => {
 
   it("every function the service-role routes call is executable by service_role (public and private)", async () => {
     const files = ["app/api/telegram/webhook/route.ts", "app/api/telegram/dispatch/route.ts", "app/api/messages/dispatch/route.ts", "app/api/payments/webhook/[provider]/route.ts", "app/login/actions.ts", "components/login-security.tsx",
-      "app/api/backups/run/route.ts", "lib/backup.ts"];
+      "app/api/backups/run/route.ts", "lib/backup.ts", "app/api/inbox/ingest/route.ts"];
     for (const file of readdirSync("app/api", { recursive: true }).map(String).filter(name => name.endsWith(".ts")).map(name => `app/api/${name}`)) {
       if (/serviceClient\(|SUPABASE_SERVICE_ROLE_KEY/.test(readFileSync(file, "utf8"))) expect(files).toContain(file);
     }
     const names = new Set<string>();
     for (const file of files) for (const match of readFileSync(file, "utf8").matchAll(/\.rpc\("([a-z_]+)"/g)) names.add(match[1]);
     expect([...names]).toEqual(expect.arrayContaining(["telegram_handle", "telegram_claim_kick", "telegram_claim", "telegram_report", "telegram_track", "login_check", "login_record", "login_security_summary",
-      "backup_begin", "backup_tables", "backup_table_page", "backup_finish", "backup_org_page"]));
+      "backup_begin", "backup_tables", "backup_table_page", "backup_finish", "backup_org_page", "inbox_ingest"]));
     await db.exec("reset role");
     const missing: string[] = [];
     for (const name of names) {
@@ -3404,5 +3407,49 @@ describe("«سِير أدمن» stage 4: backups, system health, read-only view"
     expect((await rows(`select count(*)::int as n from private.platform_audit where action='org_viewed' and organization_id='${orgG}'`))[0].n).toBe(6);
     const log = (await one(platformAdmin, `select public.admin_org_profile('${orgG}') as p`) as { log: { action: string }[] }).log.map(entry => entry.action);
     expect(log).toContain("org_viewed");
+  });
+});
+
+describe("admin inbox (database)", () => {
+  const inboxAdmin = "60000000-0000-0000-0000-0000000000ae";
+  beforeAll(async () => {
+    await db.exec("reset role");
+    await db.exec(`insert into auth.users(id,email,email_confirmed_at) values ('${inboxAdmin}','inbox.admin@seer.test',now()) on conflict do nothing;
+      insert into private.platform_admins(user_id) values ('${inboxAdmin}') on conflict do nothing`);
+  });
+  const batch = JSON.stringify([
+    { gmail_id: "18c0001", thread_id: "18c0001", from_name: "مركز تكوين", from_email: "Takween@Example.com", subject: "مهتم", body: "مهتمين نجرب", attachments: [{ name: "الأطفال.xlsx", size: 3000 }], received_at: "2026-11-25T06:00:00Z" },
+    { gmail_id: "bad id", thread_id: "x", from_email: "a@b.c" },
+  ]).replace(/'/g, "''");
+  it("only the service role stores, each Gmail message once, and bad rows are skipped", async () => {
+    await as("authenticated", inboxAdmin);
+    await expect(db.exec(`select public.inbox_ingest('${batch}'::jsonb)`)).rejects.toThrow();
+    await as("anon");
+    await expect(db.exec(`select public.inbox_ingest('${batch}'::jsonb)`)).rejects.toThrow();
+    await as("service_role");
+    expect((await rows(`select public.inbox_ingest('${batch}'::jsonb) as n`))[0].n).toBe(1);
+    expect((await rows(`select public.inbox_ingest('${batch}'::jsonb) as n`))[0].n).toBe(0);
+    await db.exec("reset role");
+  });
+  it("platform admins read, open (marks read), archive; organizations and aal1 sessions cannot", async () => {
+    await as("authenticated", inboxAdmin);
+    const list = await rows("select * from public.admin_inbox('inbox')") as { id: string; from_email: string; read_at: string | null; attachments: number }[];
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ from_email: "takween@example.com", read_at: null, attachments: 1 });
+    expect((await rows("select public.admin_inbox_unread() as n"))[0].n).toBe(1);
+    const opened = (await rows(`select public.admin_inbox_message('${list[0].id}') as m`))[0].m as { body: string; read_at: string | null };
+    expect(opened.body).toBe("مهتمين نجرب");
+    expect(opened.read_at).not.toBeNull();
+    expect((await rows("select public.admin_inbox_unread() as n"))[0].n).toBe(0);
+    await db.exec(`select public.admin_inbox_mark('${list[0].id}', 'archive')`);
+    expect(await rows("select * from public.admin_inbox('inbox')")).toHaveLength(0);
+    expect(await rows("select * from public.admin_inbox('archived')")).toHaveLength(1);
+    await expect(db.exec(`select public.admin_inbox_mark('${list[0].id}', 'delete')`)).rejects.toThrow();
+    await as("authenticated", inboxAdmin, "aal1");
+    await expect(db.exec("select * from public.admin_inbox('inbox')")).rejects.toThrow();
+    await as("authenticated", owner);
+    await expect(db.exec("select * from public.admin_inbox('archived')")).rejects.toThrow();
+    expect((await rows("select public.admin_inbox_unread() as n"))[0].n).toBe(0);
+    await db.exec("reset role");
   });
 });

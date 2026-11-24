@@ -20,16 +20,18 @@ export default async function AdminConsoleLayout({ children }: { children: React
   const gate = adminGate({ signedIn: Boolean(user), aal: claims?.claims?.aal, admin });
   if (gate !== "allow") redirect(gate);
   // Counts for the sidebar (each is optional: the page still works if one fails).
-  const [role, overview, unread, requests] = await Promise.all([
+  const [role, overview, unread, requests, inbox] = await Promise.all([
     currentAdminRole(),
     client.rpc("admin_overview"),
     client.rpc("support_unread"),
     client.rpc("admin_join_requests"),
+    client.rpc("admin_inbox_unread"),
   ]);
   const counts = {
     payments: Number((overview.data as { pending?: number } | null)?.pending ?? 0),
     support: ((unread.data as { team?: string[] | null } | null)?.team ?? []).length,
     requests: ((requests.data ?? []) as { status: string }[]).filter(row => row.status === "new").length,
+    inbox: Number(inbox.data ?? 0),
   };
   return <AdminShell userId={user!.id} appUrl={appBase()} role={role} counts={counts} support={(unread.data as { team?: string[] | null } | null)?.team ?? []}>
     {children}

@@ -4,7 +4,7 @@ import { roleAllows, rolesForPath, type AdminRole } from "./admin-roles";
  * The sidebar of «سِير أدمن» (approved design): groups and their pages. Only pages that exist are
  * listed; each role sees only what it may open (lib/admin-roles.ts).
  */
-export type AdminNavItem = { href: string; label: string; count?: "payments" | "support" | "requests"; exact?: boolean };
+export type AdminNavItem = { href: string; label: string; count?: "payments" | "support" | "requests" | "inbox"; exact?: boolean };
 export type AdminNavGroup = { title: string | null; items: AdminNavItem[] };
 
 export const adminNav: AdminNavGroup[] = [
@@ -21,6 +21,7 @@ export const adminNav: AdminNavGroup[] = [
     { href: "/admin/plans", label: "الباقات والأسعار" },
   ] },
   { title: "الدعم والتواصل", items: [
+    { href: "/admin/inbox", label: "صندوق الوارد", count: "inbox" },
     { href: "/admin/support", label: "تذاكر الدعم", count: "support" },
     { href: "/admin/support/templates", label: "قوالب الردود" },
     { href: "/admin/broadcast", label: "رسالة للمشتركين" },

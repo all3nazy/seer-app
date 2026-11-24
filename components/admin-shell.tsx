@@ -9,7 +9,7 @@ import { activeAdminItem, adminNavFor, type AdminNavItem } from "../lib/admin-na
 import { adminRoleLabels, type AdminRole } from "../lib/admin-roles";
 import { arNumber } from "../lib/dates";
 
-type Counts = { payments: number; support: number; requests: number };
+type Counts = { payments: number; support: number; requests: number; inbox?: number };
 
 /**
  * «سِير أدمن» (approved design): the Seer identity with a dark plum sidebar, a coral «أدمن» pill and
@@ -25,7 +25,7 @@ export function AdminShell({ children, userId, appUrl, counts, support, role = "
   useEffect(() => onNotification(supportNotification), []);
   useEffect(() => { setOpen(false); }, [path]);
   const live: Counts = { ...counts, support: badge.team ?? counts.support };
-  const count = (item: AdminNavItem) => item.count ? live[item.count] : 0;
+  const count = (item: AdminNavItem) => item.count ? live[item.count] ?? 0 : 0;
   return <div className="adm">
     <a className="skip-link" href="#main-content">تجاوز إلى المحتوى</a>
     <aside className={`adm-side${open ? " is-open" : ""}`}>

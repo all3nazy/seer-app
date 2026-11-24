@@ -27,6 +27,7 @@ export const pageRoles: Record<string, AdminRole[]> = {
   "/admin/payments": ["finance"],
   "/admin/coupons": ["finance"],
   "/admin/invoices": ["finance"],
+  "/admin/inbox": ["support"],
   "/admin/support": ["support"],
   "/admin/support/templates": ["support"],
 };
