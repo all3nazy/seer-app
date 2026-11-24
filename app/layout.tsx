@@ -2,7 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import "@fontsource-variable/alexandria/wght.css";
 import "./globals.css";
-import { iconCookie, iconFiles, parseIconChoice } from "../lib/app-icons";
+import { adminIconFiles, iconCookie, iconFiles, parseIconChoice } from "../lib/app-icons";
+import { appSurface } from "../lib/surface";
 import { InstallRegistrar } from "../components/install-app";
 import { ErrorWatch } from "../components/error-watch";
 import { ConfirmLayer } from "../components/confirm";
@@ -10,15 +11,16 @@ import { ConfirmLayer } from "../components/confirm";
 const description = "منصة عربية لإدارة عمليات المدارس الأهلية والحضانات: المهام والسجلات والمساعد في مكان واحد.";
 /** Icons follow the person's choice in Settings (a cookie), so the installed app shows it too. */
 export async function generateMetadata(): Promise<Metadata> {
-  const { choice } = parseIconChoice((await cookies()).get(iconCookie)?.value);
-  const files = iconFiles(choice);
+  const admin = appSurface() === "admin";
+  const files = admin ? adminIconFiles : iconFiles(parseIconChoice((await cookies()).get(iconCookie)?.value).choice);
+  const name = admin ? "سِير أدمن" : "سِير";
   return {
-    title: { default: "سِير", template: "%s | سِير" },
+    title: { default: name, template: "%s | سِير" },
     description,
-    applicationName: "سِير",
+    applicationName: name,
     manifest: "/manifest.webmanifest",
     icons: { icon: [{ url: files.favicon, sizes: "32x32", type: "image/png" }, { url: files.icon192, sizes: "192x192", type: "image/png" }], apple: [{ url: files.apple, sizes: "180x180" }] },
-    appleWebApp: { capable: true, title: "سِير", statusBarStyle: "default" },
+    appleWebApp: { capable: true, title: name, statusBarStyle: "default" },
     formatDetection: { telephone: false },
   };
 }

@@ -2,7 +2,7 @@
 // Run with: npx tsx scripts/generate-icons.ts
 import sharp from "sharp";
 import { mkdirSync } from "node:fs";
-import { iconDesigns, iconSvg, iconTones } from "../lib/app-icons";
+import { adminIconSvg, iconDesigns, iconSvg, iconTones } from "../lib/app-icons";
 
 mkdirSync("public/icons", { recursive: true });
 const png = (svg: string, size: number, file: string) => sharp(Buffer.from(svg)).resize(size, size).png({ compressionLevel: 9 }).toFile(`public/icons/${file}`);
@@ -15,6 +15,11 @@ for (const design of iconDesigns) for (const tone of iconTones) {
   await png(iconSvg(design, tone), 180, `${name}-apple-180.png`);
   await png(iconSvg(design, tone, { rounded: true }), 32, `${name}-32.png`);
 }
+await png(adminIconSvg(), 512, "admin-512.png");
+await png(adminIconSvg(), 192, "admin-192.png");
+await png(adminIconSvg({ maskable: true }), 512, "admin-maskable-512.png");
+await png(adminIconSvg(), 180, "admin-apple-180.png");
+await png(adminIconSvg({ rounded: true }), 32, "admin-32.png");
 console.log("icons written");
 }
 void main();
