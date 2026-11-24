@@ -12,7 +12,7 @@ export const BACKUP_BUCKET = "platform-backups";
 export const BACKUP_KEEP_DAYS = 30;
 export const PAGE_SIZE = 1000;
 /** The last migration in this repository (a unit test keeps it equal to the newest file). */
-export const LATEST_MIGRATION = "20261124090000_admin_stage4";
+export const LATEST_MIGRATION = "20261125090000_admin_inbox";
 
 export type BackupFile = { name: string; rows: number; bytes: number; sha256: string };
 export type BackupManifest = { format: 1; folder: string; created_at: string; app_migration: string; db_version: string | null; tables: number; rows: number; bytes: number; files: BackupFile[] };

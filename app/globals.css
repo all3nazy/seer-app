@@ -1232,3 +1232,16 @@ a.stat:hover,a.list-row:hover,a.tile:hover,.org-tile:hover,.sidebar .nav-link:ho
 /* Wide tables scroll inside their card, never the page (iPad widths). */
 .adm-page>*,.adm-card{min-width:0}
 .adm-card .table-wrap{max-width:100%;overflow-x:auto;position:relative}
+/* «سِير أدمن» › صندوق الوارد */
+.inbox-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}
+.inbox-tabs a{text-decoration:none}
+.inbox-list li.inbox-row{padding:0;display:block}
+.inbox-link{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:12px 14px;color:inherit;text-decoration:none;border-radius:14px}
+.inbox-link:hover,.inbox-link:focus-visible{background:var(--tint-lilac)}
+.inbox-from{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.inbox-date{grid-column:2;grid-row:1;white-space:nowrap}
+.inbox-subject{grid-column:1/-1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.inbox-preview{grid-column:1/-1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.inbox-row.unread .inbox-from,.inbox-row.unread .inbox-subject{font-weight:800;color:var(--primary)}
+.inbox-row.unread .inbox-link{border-inline-start:3px solid #FF7A59}
+.inbox-body{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.9;font-size:15px}

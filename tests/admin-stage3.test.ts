@@ -21,7 +21,7 @@ describe("roles in «سِير أدمن»", () => {
   });
   it("the sidebar hides what a role cannot open (and empty groups)", () => {
     const hrefs = (role: "owner" | "support" | "finance") => adminNavFor(role).flatMap(group => group.items.map(item => item.href));
-    expect(hrefs("support")).toEqual(["/admin", "/admin/subscribers", "/admin/support", "/admin/support/templates"]);
+    expect(hrefs("support")).toEqual(["/admin", "/admin/subscribers", "/admin/inbox", "/admin/support", "/admin/support/templates"]);
     expect(hrefs("finance")).toEqual(["/admin", "/admin/subscribers", "/admin/payments", "/admin/invoices", "/admin/coupons"]);
     expect(hrefs("owner")).toEqual(expect.arrayContaining(["/admin/coupons", "/admin/invoices", "/admin/broadcast", "/admin/security", "/admin/audit", "/admin/team"]));
     expect(adminNavFor("support").map(group => group.title)).toEqual([null, "المشتركين", "الدعم والتواصل"]);
