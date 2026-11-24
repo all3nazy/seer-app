@@ -9,7 +9,7 @@ const errors: Record<string, string> = {
 
 /** «تبي تنضم للتجربة؟»: the request goes to the Seer team; the hidden field catches simple bots. */
 export function JoinRequestForm() {
-  const [form, setForm] = useState({ org_name: "", org_type: "school", city: "", contact_name: "", phone: "", students: "", website: "" });
+  const [form, setForm] = useState({ org_name: "", org_type: "nursery", city: "", contact_name: "", phone: "", students: "", website: "" });
   const [state, setState] = useState<"idle" | "sending" | "sent">("idle");
   const [error, setError] = useState("");
   const set = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm(current => ({ ...current, [key]: event.target.value }));
@@ -28,7 +28,7 @@ export function JoinRequestForm() {
   if (state === "sent") return <p className="lp-join-done" role="status">✓ وصلنا طلبك. بنتواصل معكم على الجوال قريب، ونرسل لكم رابط الدعوة.</p>;
   return <form className="lp-join-form" onSubmit={submit} aria-busy={state === "sending"}>
     <label>اسم المنشأة<input value={form.org_name} onChange={set("org_name")} required minLength={2} maxLength={120} autoComplete="organization" /></label>
-    <label>النوع<select value={form.org_type} onChange={set("org_type")}><option value="school">مدرسة</option><option value="nursery">حضانة</option><option value="kindergarten">روضة</option></select></label>
+    <label>النوع<select value={form.org_type} onChange={set("org_type")}><option value="nursery">حضانة</option><option value="kindergarten">روضة</option><option value="school">مدرسة</option></select></label>
     <label>المدينة<input value={form.city} onChange={set("city")} required minLength={2} maxLength={60} autoComplete="address-level2" /></label>
     <label>اسم المسؤول<input value={form.contact_name} onChange={set("contact_name")} required minLength={2} maxLength={80} autoComplete="name" /></label>
     <label>الجوال<input value={form.phone} onChange={set("phone")} required inputMode="tel" dir="ltr" placeholder="05xxxxxxxx" maxLength={20} autoComplete="tel" /></label>

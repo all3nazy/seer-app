@@ -81,7 +81,7 @@ describe("settings tabs, sidebar groups and legal texts", () => {
   it("has the legal texts with a version", () => {
     expect(LEGAL_VERSION).toMatch(/^[0-9A-Za-z.-]{1,40}$/);
     const text = JSON.stringify([privacy, terms]);
-    for (const needle of ["FL-478894500", "seer-app@smail.sa", "مومباي", "٩٠ يومًا", "٣٠ يومًا", "محاكم مدينة الرياض", "اتفاقية معالجة البيانات", "تقنيات", "واتساب للأعمال"]) expect(text, needle).toContain(needle);
+    for (const needle of ["FL-478894500", "iseer.app@gmail.com", "مومباي", "٩٠ يومًا", "٣٠ يومًا", "محاكم مدينة الرياض", "اتفاقية معالجة البيانات", "تقنيات", "واتساب للأعمال"]) expect(text, needle).toContain(needle);
     expect(processingNotice).toBe("تُعالج بياناتك لصالح المدرسة لتقديم خدماتها، وفق سياسة الخصوصية");
   });
 });

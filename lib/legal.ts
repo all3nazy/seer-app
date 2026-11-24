@@ -10,7 +10,7 @@ export const operator = {
   name: "متعب العنزي",
   status: "مستقل بموجب وثيقة العمل الحر رقم FL-478894500، تخصص «نظم تقنية المعلومات»",
   address: "المملكة العربية السعودية، الرياض، الدرعية، طريق الملك خالد",
-  email: "seer-app@smail.sa",
+  email: "iseer.app@gmail.com",
 };
 
 export type LegalSection = { id: string; title: string; paragraphs?: string[]; items?: string[] };

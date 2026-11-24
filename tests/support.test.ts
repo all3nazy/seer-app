@@ -43,7 +43,7 @@ describe("no WhatsApp support left in the interface", () => {
       expect(readFileSync(file, "utf8"), file).not.toContain("SEER_SUPPORT_WHATSAPP");
     }
     for (const file of ["app/signup/page.tsx", "app/pricing/page.tsx", "app/login/page.tsx"]) expect(readFileSync(file, "utf8"), file).toMatch(/supportEmail|supportMailto/);
-    expect(supportEmail).toBe("seer-app@smail.sa");
+    expect(supportEmail).toBe("iseer.app@gmail.com");
   });
 });
 

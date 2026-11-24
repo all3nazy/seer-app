@@ -22,7 +22,7 @@ for (const [device, viewport] of [["phone", { width: 375, height: 812 }], ["comp
     const footer = page.locator("footer");
     await expect(footer.getByRole("link", { name: "سياسة الخصوصية" })).toHaveAttribute("href", "/privacy");
     await expect(footer.getByRole("link", { name: "شروط الاستخدام" })).toHaveAttribute("href", "/terms");
-    await expect(footer.getByRole("link", { name: "seer-app@smail.sa" })).toHaveAttribute("href", "mailto:seer-app@smail.sa");
+    await expect(footer.getByRole("link", { name: "iseer.app@gmail.com" })).toHaveAttribute("href", "mailto:iseer.app@gmail.com");
     await page.screenshot({ path: test.info().outputPath(`home-${device}.png`), fullPage: true });
   });
 }
@@ -39,7 +39,7 @@ test("the contact section has a ready email, and the page works in dark mode", a
   await page.goto("/#join");
   const mail = page.locator("#join").getByRole("link", { name: "راسلنا على البريد" });
   const href = await mail.getAttribute("href");
-  expect(href).toMatch(/^mailto:seer-app@smail\.sa\?subject=/);
+  expect(href).toMatch(/^mailto:iseer\.app@gmail\.com\?subject=/);
   expect(decodeURIComponent(new URL(href!).searchParams.get("subject") ?? "")).toBe("طلب انضمام لتجربة سِير");
   const background = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   expect(background).not.toBe("rgb(255, 255, 255)");
