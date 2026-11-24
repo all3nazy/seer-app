@@ -20,7 +20,7 @@ for (const device of devices) {
       await expect(nav.getByRole("link", { name: "سجل العمليات" })).toHaveAttribute("href", "/admin/audit");
       await page.goto("/e2e/admin-stage3?role=support");
       nav = await sidebar(page);
-      await expect(nav.getByRole("link")).toHaveText(["نظرة عامة", "المنشآت", "تذاكر الدعم", /قوالب الردود/].map(text => typeof text === "string" ? new RegExp(text) : text));
+      await expect(nav.getByRole("link")).toHaveText(["نظرة عامة", "المنشآت", "صندوق الوارد", "تذاكر الدعم", /قوالب الردود/].map(text => typeof text === "string" ? new RegExp(text) : text));
       await expect(page.locator(".adm-sub")).toHaveText("فريق الإدارة · دعم");
       // The overview hides the transfers for support.
       await expect(page.getByRole("region", { name: "تحويلات بانتظار التأكيد" })).toHaveCount(0);
