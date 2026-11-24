@@ -40,3 +40,16 @@ describe("app icons", () => {
     } finally { vi.unstubAllEnvs(); }
   });
 });
+
+describe("root touch icon", () => {
+  it("is the PNG of this site's icon", async () => {
+    const { touchIcon } = await import("../lib/touch-icon");
+    const { readFileSync } = await import("node:fs");
+    vi.stubEnv("SEER_APP_SURFACE", "admin");
+    try {
+      const body = Buffer.from(await touchIcon().arrayBuffer());
+      expect(body.equals(readFileSync("public/icons/admin-apple-180.png"))).toBe(true);
+    } finally { vi.unstubAllEnvs(); }
+    expect(Buffer.from(await touchIcon().arrayBuffer()).equals(readFileSync("public/icons/path-light-apple-180.png"))).toBe(true);
+  });
+});
