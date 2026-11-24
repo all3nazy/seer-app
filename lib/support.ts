@@ -2,7 +2,7 @@
  * Support happens inside the platform: a signed-in person opens a ticket with the Seer team.
  * Public pages (no account yet) show the support email instead. No WhatsApp number is used.
  */
-export const supportEmail = "seer-app@smail.sa";
+export const supportEmail = "iseer.app@gmail.com";
 export const supportMailto = `mailto:${supportEmail}?subject=${encodeURIComponent("استفسار عن سِير")}`;
 
 /** The in-app place to contact the team: the person's tickets, and a new one. */
