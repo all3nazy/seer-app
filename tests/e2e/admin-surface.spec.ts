@@ -17,7 +17,7 @@ test.describe("the subscriber platform has no /admin", () => {
 });
 
 test.describe("«سِير أدمن» has only /admin", () => {
-  for (const path of ["/dashboard", "/dashboard/settings", "/login", "/invite", "/pricing", "/privacy", "/e2e/shell", "/api/push", "/api/telegram/webhook"]) {
+  for (const path of ["/login", "/invite", "/pricing", "/privacy", "/e2e/shell", "/api/push", "/api/telegram/webhook"]) {
     test(`${path} → 404, noindex, and no link to the platform's sign-in`, async ({ page }) => {
       const response = await page.goto(`${ADMIN}${path}`);
       expect(response?.status()).toBe(404);

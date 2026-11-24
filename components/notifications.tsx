@@ -95,11 +95,13 @@ export function NotificationBell({ userId, scope = "app" }: { userId: string; sc
     {open ? <div className="bell-panel" role="dialog" aria-label="الإشعارات">
       <div className="bell-head"><strong>الإشعارات</strong>{unread ? <button type="button" className="btn btn-sm" onClick={() => void markAll()}>تعليم الكل كمقروء</button> : null}</div>
       {items.length ? <ul>{items.map(item => <li key={item.id} className={item.read_at ? "" : "unread"}>
-        <Link href={item.url ?? "/dashboard"} onClick={() => { markOne(item.id); setOpen(false); }}>
+        <Link href={item.url ?? (scope === "admin" ? "/admin" : "/dashboard")} onClick={() => { markOne(item.id); setOpen(false); }}>
           <strong>{item.title}</strong>{item.body ? <span>{item.body}</span> : null}<small>{ago(item.created_at)}</small>
         </Link>
       </li>)}</ul> : <p className="hint" style={{ padding: "8px 4px" }}>ما فيه إشعارات بعد. يوصلك هنا كل ما يخصك: المهام، والردود، والإجازات.</p>}
-      <Link className="bell-foot" href="/dashboard/settings#notify" onClick={() => setOpen(false)}>إشعارات الجوال والكمبيوتر</Link>
+      {scope === "admin"
+        ? <Link className="bell-foot" href="/admin/settings" onClick={() => setOpen(false)}>تنبيهات التيليقرام</Link>
+        : <Link className="bell-foot" href="/dashboard/settings#notify" onClick={() => setOpen(false)}>إشعارات الجوال والكمبيوتر</Link>}
     </div> : null}
   </div>;
 }
