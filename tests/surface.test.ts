@@ -29,7 +29,8 @@ describe("which side is this", () => {
     expect(routeFor("admin", "/")).toEqual({ kind: "redirect", to: "/admin" });
     expect(routeFor("admin", "/robots.txt")).toEqual({ kind: "robots" });
     for (const path of ["/admin", "/admin/support/x", "/admin/login", "/admin/verify"]) expect(routeFor("admin", path)).toEqual({ kind: "next" });
-    for (const path of ["/dashboard", "/dashboard/settings", "/login", "/join", "/invite", "/j/ABC", "/p/x", "/pricing", "/privacy", "/api/push", "/api/telegram/webhook", "/opengraph-image", "/administrator", "/e2e/shell"]) {
+    for (const path of ["/dashboard", "/dashboard/settings"]) expect(routeFor("admin", path)).toEqual({ kind: "redirect", to: "/admin" });
+    for (const path of ["/dashboard-x", "/login", "/join", "/invite", "/j/ABC", "/p/x", "/pricing", "/privacy", "/api/push", "/api/telegram/webhook", "/opengraph-image", "/administrator", "/e2e/shell"]) {
       expect(routeFor("admin", path), path).toEqual({ kind: "notFound" });
     }
     expect(signInPath("admin")).toBe("/admin/login");
@@ -75,7 +76,7 @@ describe("middleware per side", () => {
   });
   it("«سِير أدمن»: 404 for the platform's pages and API, «/» → /admin, robots disallow all, noindex everywhere", async () => {
     vi.stubEnv("SEER_APP_SURFACE", "admin");
-    for (const path of ["/dashboard", "/login", "/invite", "/api/push", "/pricing"]) {
+    for (const path of ["/login", "/invite", "/api/push", "/pricing"]) {
       const response = await run(`https://seer-admin.vercel.app${path}`);
       expect(response.status, path).toBe(404);
       expect(response.headers.get("x-robots-tag")).toContain("noindex");
@@ -83,6 +84,8 @@ describe("middleware per side", () => {
     const home = await run("https://seer-admin.vercel.app/");
     expect(home.status).toBe(307);
     expect(home.headers.get("location")).toBe("https://seer-admin.vercel.app/admin");
+    const old = await run("https://seer-admin.vercel.app/dashboard?source=app");
+    expect([old.status, old.headers.get("location")]).toEqual([307, "https://seer-admin.vercel.app/admin"]);
     const robots = await run("https://seer-admin.vercel.app/robots.txt");
     expect(await robots.text()).toBe("User-agent: *\nDisallow: /\n");
   });

@@ -60,6 +60,8 @@ export function routeFor(surface: Surface, path: string): SurfaceDecision {
   if (surface === "app") return isAdminPath(path) ? { kind: "notFound" } : { kind: "next" };
   if (path === "/robots.txt") return { kind: "robots" };
   if (path === "/" || path === "") return { kind: "redirect", to: "/admin" };
+  // A home-screen app added before «سِير أدمن» had its own manifest still opens the platform's start page.
+  if (path === "/dashboard" || path.startsWith("/dashboard/")) return { kind: "redirect", to: "/admin" };
   return isAdminPath(path) ? { kind: "next" } : { kind: "notFound" };
 }
 
