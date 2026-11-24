@@ -50,6 +50,20 @@ export function iconSvg(design: IconDesign, tone: IconTone, { maskable = false, 
 </svg>`;
 }
 
+/** «سِير أدمن»: the letter mark in deep purple on coral (the admin badge colour), so the two apps differ on a home screen. */
+export function adminIconSvg({ maskable = false, rounded = false } = {}): string {
+  const c = { bg: "#FF8A6B", bg2: "#FF6A45", ink: "#2A0E3B", accent: "#FFFFFF" };
+  const scale = maskable ? 0.72 : 0.9;
+  const offset = (512 - 512 * scale) / 2;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c.bg}"/><stop offset="1" stop-color="${c.bg2}"/></linearGradient></defs>
+<rect width="512" height="512" rx="${rounded ? 112 : 0}" fill="url(#g)"/>
+<g transform="translate(${offset} ${offset}) scale(${scale})">${marks.letter({ ...palette.dark, ...c })}</g>
+</svg>`;
+}
+/** Files for «سِير أدمن», generated with the others. */
+export const adminIconFiles = { icon192: "/icons/admin-192.png", icon512: "/icons/admin-512.png", maskable: "/icons/admin-maskable-512.png", apple: "/icons/admin-apple-180.png", favicon: "/icons/admin-32.png" };
+
 export function isIconChoice(value: unknown): value is IconChoice {
   if (typeof value !== "string") return false;
   const [design, tone] = value.split("-");

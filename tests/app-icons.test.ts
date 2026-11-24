@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { existsSync } from "node:fs";
-import { defaultIcon, iconDesigns, iconFiles, iconSvg, iconTones, isIconChoice, parseIconChoice } from "../lib/app-icons";
+import { adminIconFiles, adminIconSvg, defaultIcon, iconDesigns, iconFiles, iconSvg, iconTones, isIconChoice, parseIconChoice } from "../lib/app-icons";
 import { GET } from "../app/manifest.webmanifest/route";
 import { vi } from "vitest";
 
@@ -27,5 +27,16 @@ describe("app icons", () => {
     expect(manifest).toMatchObject({ short_name: "سِير", display: "standalone", dir: "rtl", start_url: expect.stringContaining("/dashboard"), background_color: "#0F0D2A" });
     expect(manifest.icons.map((icon: { src: string }) => icon.src)).toEqual(["/icons/growth-dark-192.png", "/icons/growth-dark-512.png", "/icons/growth-dark-maskable-512.png"]);
     expect(manifest.icons.some((icon: { purpose: string }) => icon.purpose === "maskable")).toBe(true);
+  });
+  it("«سِير أدمن» installs as its own app with its own icon and start page", async () => {
+    for (const file of Object.values(adminIconFiles)) expect(existsSync(`public${file}`)).toBe(true);
+    expect(adminIconSvg({ maskable: true })).toContain("scale(0.72)");
+    vi.stubEnv("SEER_APP_SURFACE", "admin");
+    try {
+      const manifest = await (await GET()).json();
+      expect(manifest).toMatchObject({ id: "/admin", short_name: "سِير أدمن", start_url: "/admin?source=app", scope: "/admin", display: "standalone" });
+      expect(manifest.icons.map((icon: { src: string }) => icon.src)).toEqual([adminIconFiles.icon192, adminIconFiles.icon512, adminIconFiles.maskable]);
+      expect(JSON.stringify(manifest)).not.toContain("/dashboard");
+    } finally { vi.unstubAllEnvs(); }
   });
 });
