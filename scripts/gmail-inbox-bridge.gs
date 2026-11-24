@@ -3,10 +3,10 @@
  *
  * Setup (once, signed in as the Seer Gmail account):
  *   1. script.google.com → New project → paste this file.
- *   2. Project Settings → Script properties:
- *        SEER_INBOX_URL     https://<platform address>/api/inbox/ingest
- *        SEER_INBOX_SECRET  the same value as SEER_INBOX_SECRET on the platform's Vercel project
- *   3. Run `install` once and allow access. It adds a trigger that runs `sync` every 5 minutes.
+ *   2. Run `makeSecret` once, open the log, and put the value it prints in SEER_INBOX_SECRET on the
+ *      platform's Vercel project (Sensitive), then redeploy. It is kept in Script properties too.
+ *   3. Project Settings → Script properties: SEER_INBOX_URL = https://<platform address>/api/inbox/ingest
+ *   4. Run `install` once and allow access. It adds a trigger that runs `sync` every 5 minutes.
  *
  * Every run sends the inbox messages of the last 3 days (the first run: 30 days). The platform keeps
  * each Gmail message once, so sending one again changes nothing. Only the plain text and the names
@@ -57,6 +57,14 @@ function send(url, secret, batch) {
 function splitSender(from) {
   var match = /^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/.exec(from || '');
   return match ? { name: match[1].trim() || null, email: match[2].trim().toLowerCase() } : { name: null, email: String(from || '').trim().toLowerCase() };
+}
+
+/** Run once: makes a random 48-character secret, keeps it in Script properties and logs it. */
+function makeSecret() {
+  var bytes = Utilities.getUuid() + Utilities.getUuid();
+  var secret = Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, bytes + Date.now())).replace(/=+$/, '').slice(0, 43) + Utilities.getUuid().slice(0, 5);
+  PropertiesService.getScriptProperties().setProperty('SEER_INBOX_SECRET', secret);
+  Logger.log('Copy this to SEER_INBOX_SECRET on Vercel: ' + secret);
 }
 
 /** Run once: removes old triggers of this project and runs `sync` every 5 minutes. */
