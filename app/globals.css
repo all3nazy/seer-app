@@ -1103,7 +1103,11 @@ a.stat:hover,a.list-row:hover,a.tile:hover,.org-tile:hover,.sidebar .nav-link:ho
 .adm-menu-btn{display:none;align-items:center;gap:6px;min-height:44px;padding:0 14px;border-radius:14px;border:1px solid rgba(255,255,255,.2);background:transparent;color:#fff;font:inherit;font-weight:600;cursor:pointer}
 .adm-nav{display:flex;flex-direction:column;gap:2px}
 .adm-group{display:flex;flex-direction:column;gap:2px}
-.adm-group-title{margin:18px 12px 6px;font-size:12px;font-weight:600;color:var(--adm-side-muted)}
+/* Section titles read as labels, not pages: small coral words after a thin rule, pages indented under them. */
+.adm-group + .adm-group{margin-top:10px;padding-top:12px;border-top:1px solid rgba(255,255,255,.08)}
+.adm-group-title{display:flex;align-items:center;gap:8px;margin:2px 12px 6px;font-size:11.5px;font-weight:700;letter-spacing:.2px;color:var(--adm-coral);opacity:.85}
+.adm-group-title::before{content:"";width:6px;height:6px;border-radius:999px;background:currentColor;flex:none}
+.adm-group-title ~ .adm-link{padding-inline-start:26px}
 .adm-link{display:flex;align-items:center;gap:10px;min-height:40px;padding:9px 12px;border-radius:14px;color:var(--adm-side-text);text-decoration:none;font-size:14px;font-weight:500;box-sizing:border-box}
 .adm-link:hover{background:rgba(255,255,255,.08);color:#fff}
 .adm-link:focus-visible{outline:2px solid var(--adm-coral);outline-offset:2px}
